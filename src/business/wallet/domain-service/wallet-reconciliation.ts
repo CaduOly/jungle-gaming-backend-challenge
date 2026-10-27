@@ -1,16 +1,21 @@
 import { Money } from '../../shared/value-object/money';
 import type { Wallet } from '../entity/wallet';
 import type { WalletLedgerEntry } from '../entity/wallet-ledger-entry';
+import { LedgerDirection } from '../enum/ledger-direction';
+import { LedgerEntryType } from '../enum/ledger-entry-type';
 
 export const DivergenceCode = {
   BALANCE_MISMATCH: 'BALANCE_MISMATCH',
   LEDGER_SUM_OUT_OF_RANGE: 'LEDGER_SUM_OUT_OF_RANGE',
   FOREIGN_ENTRY: 'FOREIGN_ENTRY',
+  UNKNOWN_DIRECTION: 'UNKNOWN_DIRECTION',
+  AMOUNT_NOT_POSITIVE: 'AMOUNT_NOT_POSITIVE',
   ARITHMETIC_BROKEN: 'ARITHMETIC_BROKEN',
   FIRST_BALANCE_NOT_ZERO: 'FIRST_BALANCE_NOT_ZERO',
   CHAIN_BROKEN: 'CHAIN_BROKEN',
   SEQ_NOT_ASCENDING: 'SEQ_NOT_ASCENDING',
   FIRST_VERSION_INVALID: 'FIRST_VERSION_INVALID',
+  OPENING_MISPLACED: 'OPENING_MISPLACED',
   VERSION_GAP: 'VERSION_GAP',
   LAST_VERSION_MISMATCH: 'LAST_VERSION_MISMATCH',
   LAST_BALANCE_MISMATCH: 'LAST_BALANCE_MISMATCH',
@@ -32,6 +37,7 @@ export interface WalletReconciliation {
   /** Absolute difference between stored and calculated balances; null when the latter is null. */
   difference: Money | null;
   consistent: boolean;
+  /** Every entry received, including foreign ones (which are flagged and left out of the checks). */
   checkedEntries: number;
   divergences: Divergence[];
 }
@@ -42,9 +48,13 @@ const FIRST_VERSION_WITHOUT_OPENING = 2;
 const describeEntry = (entry: WalletLedgerEntry, index: number): string =>
   `entry #${index} (seq ${entry.seq ?? 'unassigned'}, tx ${entry.transactionId})`;
 
+const KNOWN_DIRECTIONS: ReadonlySet<string> = new Set(Object.values(LedgerDirection));
+
+/** Entries with an unknown direction are left out, like the NULL a SQL CASE would yield. */
 const sumLedger = (currency: string, entries: readonly WalletLedgerEntry[]): Money | null => {
   let running = Money.zero(currency);
   for (const entry of entries) {
+    if (!KNOWN_DIRECTIONS.has(entry.direction)) continue;
     if (entry.isCredit()) {
       try {
         running = running.add(entry.amount);
@@ -63,7 +73,9 @@ const absoluteDifference = (a: Money, b: Money): Money => (a.isGreaterThan(b) ? 
 
 /**
  * Pure check of a wallet against its full ledger, ordered by seq. Mirrors the rules of
- * tests/support/assert-wallet-consistency.ts, with consecutive versions. Never corrects anything.
+ * tests/support/assert-wallet-consistency.ts (consecutive versions, first version 1 or 2,
+ * positive amounts, known directions) and adds: OPENING <=> first entry <=> walletVersion 1,
+ * ascending seq and foreign entries. Never corrects anything.
  */
 export const reconcileWallet = (wallet: Wallet, entries: readonly WalletLedgerEntry[]): WalletReconciliation => {
   const divergences: Divergence[] = [];
@@ -85,6 +97,16 @@ export const reconcileWallet = (wallet: Wallet, entries: readonly WalletLedgerEn
 
   own.forEach((entry, index) => {
     const label = describeEntry(entry, index);
+    if (!KNOWN_DIRECTIONS.has(entry.direction)) {
+      report(DivergenceCode.UNKNOWN_DIRECTION, `${label}: unknown direction ${entry.direction}`);
+    }
+    if (!entry.amount.isPositive()) {
+      report(DivergenceCode.AMOUNT_NOT_POSITIVE, `${label}: amount ${entry.amount} must be positive`);
+    }
+    const isOpening = entry.entryType === LedgerEntryType.OPENING;
+    if (index > 0 && isOpening) {
+      report(DivergenceCode.OPENING_MISPLACED, `${label}: OPENING must be the first entry`);
+    }
     if (!entry.isBalanced()) {
       report(
         DivergenceCode.ARITHMETIC_BROKEN,
@@ -98,6 +120,11 @@ export const reconcileWallet = (wallet: Wallet, entries: readonly WalletLedgerEn
       }
       if (entry.walletVersion !== FIRST_VERSION_WITH_OPENING && entry.walletVersion !== FIRST_VERSION_WITHOUT_OPENING) {
         report(DivergenceCode.FIRST_VERSION_INVALID, `${label}: first walletVersion ${entry.walletVersion} is not 1 or 2`);
+      } else if (isOpening !== (entry.walletVersion === FIRST_VERSION_WITH_OPENING)) {
+        report(
+          DivergenceCode.OPENING_MISPLACED,
+          `${label}: walletVersion 1 must be the OPENING entry and OPENING must have walletVersion 1`,
+        );
       }
       return;
     }

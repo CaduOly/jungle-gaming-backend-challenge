@@ -70,7 +70,7 @@ describe('InMemoryWalletRepository', () => {
     const wallet = await repository.lockById('wallet-1');
     wallet?.credit({ transactionId: 'win', entryType: LedgerEntryType.WIN, amount: brl('1.00'), at });
     expect((await repository.findById('wallet-1'))?.balance).toEqual(brl('100.00'));
-    repository.releaseLocks();
+    await repository.releaseLocks();
   });
 
   it('returns null without locking for an unknown wallet', async () => {
@@ -100,8 +100,18 @@ describe('InMemoryWalletRepository', () => {
     wallet.credit({ transactionId: 'win', entryType: LedgerEntryType.WIN, amount: brl('1.00'), at });
     await expect(repository.update(wallet, 2)).rejects.toThrow(StaleWalletVersionError);
     await repository.update(wallet, 1);
-    repository.releaseLocks();
+    await repository.releaseLocks();
     expect(store.read('wallet-1')?.version).toBe(2);
+    expect(store.locks.isLocked('wallet-1')).toBe(false);
+  });
+
+  it('is re-entrant for concurrent locks of the same wallet within one scope', async () => {
+    const { store } = await seed();
+    const repository = new InMemoryWalletRepository(store);
+    const [first, second] = await Promise.all([repository.lockById('wallet-1'), repository.lockById('wallet-1')]);
+    expect(first?.id).toBe('wallet-1');
+    expect(second?.id).toBe('wallet-1');
+    await repository.releaseLocks();
     expect(store.locks.isLocked('wallet-1')).toBe(false);
   });
 
@@ -110,7 +120,7 @@ describe('InMemoryWalletRepository', () => {
     const repository = new InMemoryWalletRepository(store);
     await repository.lockById('wallet-1');
     await repository.lockById('wallet-1');
-    repository.releaseLocks();
+    await repository.releaseLocks();
     expect(store.locks.isLocked('wallet-1')).toBe(false);
   });
 
@@ -136,7 +146,7 @@ describe('InMemoryWalletRepository', () => {
         } catch {
           return 'rejected';
         } finally {
-          repository.releaseLocks();
+          await repository.releaseLocks();
         }
       }),
     );
@@ -158,7 +168,7 @@ describe('InMemoryLedger', () => {
         wallet.credit({ transactionId: `win-${index}`, entryType: LedgerEntryType.WIN, amount: brl('1.00'), at }),
       );
     }
-    repository.releaseLocks();
+    await repository.releaseLocks();
 
     const first = await ledger.page({ walletId: 'wallet-1', after: null, limit: 2 });
     expect(first.entries.map((entry) => entry.walletVersion)).toEqual([1, 2]);
@@ -170,6 +180,19 @@ describe('InMemoryLedger', () => {
     expect(third.next).toBeNull();
     expect((await ledger.listAll('wallet-1')).map((entry) => entry.seq)).toEqual([1n, 2n, 3n, 4n, 5n]);
     expect(await ledger.page({ walletId: 'other', after: null, limit: 10 })).toEqual({ entries: [], next: null });
+  });
+
+  it('returns no next cursor when the last page is exactly full', async () => {
+    const { store, ledger } = await seed('10.00');
+    const wallet = store.read('wallet-1')!;
+    await ledger.append(
+      wallet.credit({ transactionId: 'win', entryType: LedgerEntryType.WIN, amount: brl('1.00'), at }),
+    );
+    const page = await ledger.page({ walletId: 'wallet-1', after: null, limit: 2 });
+    expect(page.entries).toHaveLength(2);
+    expect(page.next).toBeNull();
+    const firstOfTwo = await ledger.page({ walletId: 'wallet-1', after: null, limit: 1 });
+    expect(firstOfTwo.next?.seq).toBe(1n);
   });
 
   it('enforces UNIQUE(transaction_id) and UNIQUE(wallet_id, wallet_version)', async () => {

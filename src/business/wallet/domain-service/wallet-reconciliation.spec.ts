@@ -114,6 +114,44 @@ describe('reconcileWallet', () => {
     expect(codes(rehydrateWallet(wallet, { version: 2 }), [])).toEqual(['VERSION_WITHOUT_ENTRIES']);
   });
 
+  it('flags a repeated seq', () => {
+    const { wallet, entries } = history();
+    const repeated = [entries[0]!, entries[1]!.withSeq(2n), entries[2]!.withSeq(2n)];
+    expect(codes(wallet, repeated)).toEqual(['SEQ_NOT_ASCENDING']);
+  });
+
+  it('flags an OPENING that is not the first entry', () => {
+    const { wallet, entries } = history();
+    const moved = tamper(entries[2]!, { entryType: LedgerEntryType.OPENING });
+    expect(codes(wallet, [entries[0]!, entries[1]!, moved])).toEqual(['OPENING_MISPLACED']);
+  });
+
+  it('flags a first entry at version 1 that is not OPENING', () => {
+    const { wallet, entries } = history();
+    const notOpening = tamper(entries[0]!, { entryType: LedgerEntryType.WIN });
+    expect(codes(wallet, [notOpening, ...entries.slice(1)])).toEqual(['OPENING_MISPLACED']);
+  });
+
+  it('flags an OPENING first entry at version 2', () => {
+    const { wallet, entries } = history('0.00');
+    const opening = tamper(entries[0]!, { entryType: LedgerEntryType.OPENING });
+    expect(codes(wallet, [opening, ...entries.slice(1)])).toEqual(['OPENING_MISPLACED']);
+  });
+
+  it('flags a non-positive amount', () => {
+    const { wallet, entries } = history();
+    const zero = tamper(entries[1]!, { amount: brl('0.00'), balanceAfter: entries[1]!.balanceBefore });
+    expect(codes(wallet, [entries[0]!, zero, entries[2]!])).toContain('AMOUNT_NOT_POSITIVE');
+  });
+
+  it('flags an unknown direction and leaves it out of the sum', () => {
+    const { wallet, entries } = history();
+    const unknown = tamper(entries[1]!, { direction: 'SIDEWAYS' as LedgerEntryState['direction'] });
+    const result = reconcileWallet(wallet, [entries[0]!, unknown, entries[2]!]);
+    expect(result.divergences.map((d) => d.code)).toContain('UNKNOWN_DIRECTION');
+    expect(result.calculatedBalance).toEqual(brl('69.75'));
+  });
+
   it('flags entries out of seq order', () => {
     const { wallet, entries } = history();
     const reordered = [entries[0]!, entries[1]!.withSeq(5n), entries[2]!.withSeq(4n)];

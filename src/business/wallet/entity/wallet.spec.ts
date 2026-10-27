@@ -230,6 +230,25 @@ describe('Wallet', () => {
     expect(wallet.version).toBe(4);
   });
 
+  it('rejects OPENING through credit or debit at runtime', () => {
+    const { wallet } = open('10.00');
+    const opening = LedgerEntryType.OPENING as typeof LedgerEntryType.WIN;
+    expect(() => wallet.credit({ transactionId: 'tx', entryType: opening, amount: brl('1.00'), at: later })).toThrow(
+      InvalidLedgerEntryError,
+    );
+    expect(() =>
+      wallet.debit({
+        transactionId: 'tx',
+        entryType: opening as typeof LedgerEntryType.BET,
+        amount: brl('1.00'),
+        at: later,
+        insufficientFundsCode: FailureCode.INSUFFICIENT_FUNDS,
+      }),
+    ).toThrow(InvalidLedgerEntryError);
+    expect(wallet.version).toBe(1);
+    expect(wallet.balance.toString()).toBe('10.00');
+  });
+
   describe('ownership', () => {
     it('accepts the owner', () => {
       const { wallet } = open();

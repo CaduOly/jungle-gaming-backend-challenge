@@ -88,6 +88,21 @@ describe('WalletLedgerEntry', () => {
       expect(() => WalletLedgerEntry.create(props)).toThrow(InvalidLedgerEntryError);
     });
 
+    it('requires OPENING to be walletVersion 1 from a zero balance', () => {
+      const opening = credit({
+        entryType: LedgerEntryType.OPENING,
+        amount: brl('10.00'),
+        balanceBefore: brl('0.00'),
+        balanceAfter: brl('10.00'),
+        walletVersion: 1,
+      });
+      expect(WalletLedgerEntry.create(opening).entryType).toBe('OPENING');
+      expect(() => WalletLedgerEntry.create({ ...opening, walletVersion: 2 })).toThrow(InvalidLedgerEntryError);
+      expect(() =>
+        WalletLedgerEntry.create({ ...opening, balanceBefore: brl('5.00'), balanceAfter: brl('15.00') }),
+      ).toThrow(InvalidLedgerEntryError);
+    });
+
     it('accepts ROLLBACK in both directions', () => {
       expect(WalletLedgerEntry.create(credit({ entryType: LedgerEntryType.ROLLBACK })).direction).toBe('CREDIT');
       expect(WalletLedgerEntry.create(debit({ entryType: LedgerEntryType.ROLLBACK })).direction).toBe('DEBIT');
@@ -115,6 +130,18 @@ describe('WalletLedgerEntry', () => {
       expect(entry.seq).toBeUndefined();
       expect(persisted.toState()).toEqual({ ...entry.toState(), seq: 7n });
     });
+  });
+
+  it.each([
+    ['create', (createdAt: Date) => WalletLedgerEntry.create(credit({ createdAt }))],
+    ['rehydrate', (createdAt: Date) => WalletLedgerEntry.rehydrate({ ...credit({ createdAt }), seq: 1n })],
+  ])('%s copies the caller Date', (_name, build) => {
+    const createdAt = new Date(at);
+    const entry = build(createdAt);
+    createdAt.setFullYear(2000);
+    entry.createdAt.setFullYear(1999);
+    expect(entry.createdAt).toEqual(at);
+    expect(entry.toState().createdAt).toEqual(at);
   });
 
   it('is structurally immutable', () => {

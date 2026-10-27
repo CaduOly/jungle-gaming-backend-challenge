@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { InvalidLedgerCursorError } from '../error/invalid-ledger-cursor-error';
 import { LedgerCursor } from './ledger-cursor';
 
@@ -26,7 +26,31 @@ describe('LedgerCursor', () => {
     expect(() => LedgerCursor.decode(token)).toThrow(InvalidLedgerCursorError);
   });
 
-  it('rejects a negative seq', () => {
+  it('rejects a seq outside 0..2^63-1', () => {
     expect(() => LedgerCursor.afterSeq(-1n)).toThrow(InvalidLedgerCursorError);
+    expect(() => LedgerCursor.afterSeq(9_223_372_036_854_775_808n)).toThrow(InvalidLedgerCursorError);
+  });
+
+  it.each([undefined, null, 42, 1n, {}, ['abc']])('rejects non-string token %p', (token) => {
+    expect(() => LedgerCursor.decode(token)).toThrow(InvalidLedgerCursorError);
+  });
+
+  describe('token length limit', () => {
+    afterEach(() => {
+      atobSpy?.mockRestore();
+    });
+    let atobSpy: ReturnType<typeof spyOn> | undefined;
+
+    it('decodes a token of exactly 64 characters', () => {
+      atobSpy = spyOn(globalThis, 'atob');
+      expect(() => LedgerCursor.decode('A'.repeat(64))).toThrow(InvalidLedgerCursorError);
+      expect(atobSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects a longer token without decoding it', () => {
+      atobSpy = spyOn(globalThis, 'atob');
+      expect(() => LedgerCursor.decode('A'.repeat(65))).toThrow(InvalidLedgerCursorError);
+      expect(atobSpy).not.toHaveBeenCalled();
+    });
   });
 });

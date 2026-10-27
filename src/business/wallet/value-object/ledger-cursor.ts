@@ -17,8 +17,8 @@ export class LedgerCursor {
     return new LedgerCursor(seq);
   }
 
-  static decode(token: string): LedgerCursor {
-    if (token.length > MAX_TOKEN_LENGTH || !TOKEN_PATTERN.test(token)) throw new InvalidLedgerCursorError();
+  static decode(token: unknown): LedgerCursor {
+    if (typeof token !== 'string' || token.length > MAX_TOKEN_LENGTH || !TOKEN_PATTERN.test(token)) throw new InvalidLedgerCursorError();
     const match = PAYLOAD_PATTERN.exec(LedgerCursor.fromBase64Url(token));
     if (match?.[1] === undefined) throw new InvalidLedgerCursorError();
     return LedgerCursor.afterSeq(BigInt(match[1]));

@@ -1,7 +1,7 @@
 import { CurrencyMismatchError } from '../../shared/error/currency-mismatch-error';
 import type { Money } from '../../shared/value-object/money';
 import { LedgerDirection } from '../enum/ledger-direction';
-import { isDirectionAllowedFor, type LedgerEntryType } from '../enum/ledger-entry-type';
+import { isDirectionAllowedFor, LedgerEntryType } from '../enum/ledger-entry-type';
 import { InvalidLedgerEntryError } from '../error/invalid-ledger-entry-error';
 
 export interface CreateLedgerEntryProps {
@@ -31,13 +31,15 @@ export class WalletLedgerEntry {
   }
 
   static create(props: CreateLedgerEntryProps): WalletLedgerEntry {
-    const entry = new WalletLedgerEntry(Object.freeze({ ...props, seq: undefined }));
+    const entry = new WalletLedgerEntry(
+      Object.freeze({ ...props, createdAt: new Date(props.createdAt), seq: undefined }),
+    );
     entry.validate();
     return entry;
   }
 
   static rehydrate(state: LedgerEntryState): WalletLedgerEntry {
-    return new WalletLedgerEntry(Object.freeze({ ...state }));
+    return new WalletLedgerEntry(Object.freeze({ ...state, createdAt: new Date(state.createdAt) }));
   }
 
   get walletId(): string {
@@ -114,6 +116,9 @@ export class WalletLedgerEntry {
     }
     if (!isDirectionAllowedFor(entryType, direction)) {
       throw new InvalidLedgerEntryError(`${entryType} cannot be a ${direction}`);
+    }
+    if (entryType === LedgerEntryType.OPENING && (walletVersion !== 1 || !balanceBefore.isZero())) {
+      throw new InvalidLedgerEntryError('OPENING must be the first entry: walletVersion 1 from a zero balance');
     }
     for (const money of [balanceBefore, balanceAfter]) {
       if (money.currency !== amount.currency) throw new CurrencyMismatchError(amount.currency, money.currency);

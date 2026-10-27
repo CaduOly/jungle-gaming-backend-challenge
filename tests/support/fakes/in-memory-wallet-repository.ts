@@ -46,13 +46,18 @@ export class InMemoryWalletStore {
  * Stricter than Postgres on purpose: `update` requires the wallet to be locked in this scope.
  */
 export class InMemoryWalletRepository implements IWalletRepository {
-  private readonly held = new Map<string, Release>();
+  private readonly held = new Map<string, Promise<Release>>();
 
   constructor(private readonly store: InMemoryWalletStore) {}
 
   async lockById(id: string): Promise<Wallet | null> {
     if (!this.store.has(id)) return null;
-    if (!this.held.has(id)) this.held.set(id, await this.store.locks.acquire(id));
+    let acquisition = this.held.get(id);
+    if (acquisition === undefined) {
+      acquisition = this.store.locks.acquire(id);
+      this.held.set(id, acquisition);
+    }
+    await acquisition;
     return this.store.read(id);
   }
 
@@ -86,8 +91,9 @@ export class InMemoryWalletRepository implements IWalletRepository {
     return this.held.has(id);
   }
 
-  releaseLocks(): void {
-    for (const release of this.held.values()) release();
+  async releaseLocks(): Promise<void> {
+    const acquisitions = [...this.held.values()];
     this.held.clear();
+    for (const release of await Promise.all(acquisitions)) release();
   }
 }

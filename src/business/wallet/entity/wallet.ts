@@ -151,6 +151,9 @@ export class Wallet {
     props: CreditProps | DebitProps,
     balanceAfter: Money,
   ): WalletLedgerEntry {
+    if ((props.entryType as LedgerEntryType) === LedgerEntryType.OPENING) {
+      throw new InvalidLedgerEntryError('OPENING is only written by Wallet.open');
+    }
     const entry = WalletLedgerEntry.create({
       walletId: this.id,
       transactionId: props.transactionId,
