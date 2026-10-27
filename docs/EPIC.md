@@ -38,7 +38,7 @@ Fluxo de cada task:
 | T06 | Use cases com fakes: `ProcessWagerTransaction`, idempotência, hash, `WagerOutcomeEvents`, wallet use cases, `RetryPendingReferences` | Dev B | T04, T05 | 6 |
 | T07a | Schema: migrations, constraints, índices parciais e triggers, testados no PG real | Dev B | T02 | 7 |
 | T07b | Persistência: mappers, repositórios, UoW, contratos, atomicidade, races 2×80 e 50 paralelos | Dev A | T06, T07a | 7 |
-| T08 | HTTP Nest: controllers, filter, status table-driven, cursor, reconciliação, auth no-op | Dev B | T07 | 8 |
+| T08 | HTTP Nest: controllers, filter, status table-driven, cursor, reconciliação, auth no-op, Swagger/OpenAPI em `/docs` | Dev B | T07 | 8 |
 | T09 | SQS consumer: inbox, DLQ explícita, circuit breaker, SIGTERM, crash commit→ack | Dev A | T08 | 9 |
 | T10 | Outbox publisher + worker de pendências | Dev B | T08 | 10 |
 | T11 | Observabilidade: decorators, logs pino+ALS, `/metrics`, Grafana | Dev B | T09, T10 | 11 |
