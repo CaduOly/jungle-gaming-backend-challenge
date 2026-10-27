@@ -14,6 +14,8 @@ export interface PublishOutboxBatchOutput {
   readonly claimed: number;
   readonly published: number;
   readonly failed: number;
+  /** Failures whose retry was fenced off because the lease expired and another publisher took the message. */
+  readonly leaseLost: number;
   /**
    * Subset of `failed` that reached the attempt ceiling in this run (reported once per message).
    * They are never dropped: retries continue at the capped delay.
@@ -35,6 +37,7 @@ export class PublishOutboxBatch implements IUseCase<void, PublishOutboxBatchOutp
     const claimed = await this.outbox.claimBatch(this.config.batchSize, this.config.leaseMs, this.clock.now());
     let published = 0;
     let failed = 0;
+    let leaseLost = 0;
     const exhaustedMessageIds: string[] = [];
 
     for (const message of claimed) {
@@ -46,12 +49,22 @@ export class PublishOutboxBatch implements IUseCase<void, PublishOutboxBatchOutp
       }
       const wasExhausted = this.backoff.isExhausted(message.attempts);
       message.scheduleRetry(this.clock.now(), this.backoff.nextDelayMs(message.attempts + 1));
-      await this.outbox.scheduleRetry(message);
       failed += 1;
+      if (!(await this.outbox.scheduleRetry(message))) {
+        leaseLost += 1;
+        continue;
+      }
       if (!wasExhausted && this.backoff.isExhausted(message.attempts)) exhaustedMessageIds.push(message.id);
     }
 
-    return { claimed: claimed.length, published, failed, exhausted: exhaustedMessageIds.length, exhaustedMessageIds };
+    return {
+      claimed: claimed.length,
+      published,
+      failed,
+      leaseLost,
+      exhausted: exhaustedMessageIds.length,
+      exhaustedMessageIds,
+    };
   }
 
   private async tryPublish(message: OutboxMessage): Promise<boolean> {

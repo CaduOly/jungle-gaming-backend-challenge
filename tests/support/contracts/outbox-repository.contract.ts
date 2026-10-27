@@ -42,7 +42,10 @@ export const describeOutboxRepositoryContract = (
       const claimed = await repository.claimBatch(2, LEASE_MS, at(10));
 
       expect(ids(claimed)).toEqual([first!.id, second!.id]);
-      for (const message of claimed) expect(message.lockedUntil).toEqual(at(10 + LEASE_MS));
+      for (const message of claimed) {
+        expect(message.lockedUntil).toEqual(at(10 + LEASE_MS));
+        expect(message.leaseToken).toBeDefined();
+      }
     });
 
     it('does not claim a message before its nextAttemptAt', async () => {
@@ -84,20 +87,80 @@ export const describeOutboxRepositoryContract = (
       expect(await repository.claimBatch(10, LEASE_MS, at(LEASE_MS * 10))).toEqual([]);
     });
 
-    it('ignores late updates from a publisher whose lease expired after another one published', async () => {
-      await repository.add([aMessage()]);
+    it('fences off the retry of a publisher whose lease was reclaimed by another one', async () => {
+      const message = aMessage();
+      await repository.add([message]);
+      const [stale] = await repository.claimBatch(1, LEASE_MS, at(0));
+      const [owner] = await repository.claimBatch(1, LEASE_MS, at(LEASE_MS));
+      expect(owner!.leaseToken).toBeDefined();
+      expect(owner!.leaseToken).not.toBe(stale!.leaseToken);
+
+      stale!.scheduleRetry(at(LEASE_MS + 1), 0);
+      expect(await repository.scheduleRetry(stale!)).toBe(false);
+
+      const stored = (await repository.findById(message.id))!;
+      expect(stored.attempts).toBe(0);
+      expect(stored.nextAttemptAt).toEqual(message.nextAttemptAt);
+      expect(stored.lockedUntil).toEqual(at(LEASE_MS * 2));
+      expect(await repository.claimBatch(10, LEASE_MS, at(LEASE_MS + 2))).toEqual([]);
+    });
+
+    it('never lets a stale retry regress attempts written by the current owner', async () => {
+      const message = aMessage();
+      await repository.add([message]);
+      const [stale] = await repository.claimBatch(1, LEASE_MS, at(0));
+      const [first] = await repository.claimBatch(1, LEASE_MS, at(LEASE_MS));
+      first!.scheduleRetry(at(LEASE_MS), 0);
+      expect(await repository.scheduleRetry(first!)).toBe(true);
+      const [second] = await repository.claimBatch(1, LEASE_MS, at(LEASE_MS));
+      second!.scheduleRetry(at(LEASE_MS), 5_000);
+      expect(await repository.scheduleRetry(second!)).toBe(true);
+
+      stale!.scheduleRetry(at(LEASE_MS + 1), 0);
+      expect(await repository.scheduleRetry(stale!)).toBe(false);
+
+      const stored = (await repository.findById(message.id))!;
+      expect(stored.attempts).toBe(2);
+      expect(stored.nextAttemptAt).toEqual(at(LEASE_MS + 5_000));
+      expect(stored.lockedUntil).toBeUndefined();
+    });
+
+    it('keeps a published message intact against stale retries and duplicate publications', async () => {
+      const message = aMessage();
+      await repository.add([message]);
       const [stale] = await repository.claimBatch(1, LEASE_MS, at(0));
       const [winner] = await repository.claimBatch(1, LEASE_MS, at(LEASE_MS));
 
       winner!.markPublished(at(LEASE_MS + 1));
       await repository.markPublished(winner!);
 
-      stale!.scheduleRetry(at(LEASE_MS + 2), 0);
-      await repository.scheduleRetry(stale!);
-      const lateDuplicate = OutboxMessage.rehydrate(winner!.toState());
-      await repository.markPublished(lateDuplicate);
+      const retry = OutboxMessage.rehydrate(stale!.toState());
+      retry.scheduleRetry(at(LEASE_MS + 2), 0);
+      expect(await repository.scheduleRetry(retry)).toBe(false);
+      stale!.markPublished(at(LEASE_MS + 3));
+      await repository.markPublished(stale!);
 
+      const stored = (await repository.findById(message.id))!;
+      expect(stored.publishedAt).toEqual(at(LEASE_MS + 1));
+      expect(stored.attempts).toBe(0);
+      expect(stored.nextAttemptAt).toEqual(message.nextAttemptAt);
+      expect(stored.lockedUntil).toBeUndefined();
       expect(await repository.claimBatch(10, LEASE_MS, at(LEASE_MS * 10))).toEqual([]);
+    });
+
+    it('refuses a retry for a message that was never claimed', async () => {
+      const message = aMessage();
+      await repository.add([message]);
+      message.scheduleRetry(at(1), 0);
+      expect(await repository.scheduleRetry(message)).toBe(false);
+      expect((await repository.findById(message.id))!.attempts).toBe(0);
+    });
+
+    it('finds a message by id and returns undefined for an unknown one', async () => {
+      const message = aMessage();
+      await repository.add([message]);
+      expect((await repository.findById(message.id))!.payload).toEqual(message.payload);
+      expect(await repository.findById(uuidv7())).toBeUndefined();
     });
 
     it('persists a scheduled retry and releases the lease', async () => {
@@ -106,7 +169,7 @@ export const describeOutboxRepositoryContract = (
       const [claimed] = await repository.claimBatch(1, LEASE_MS, at(0));
 
       claimed!.scheduleRetry(at(10), 2_000);
-      await repository.scheduleRetry(claimed!);
+      expect(await repository.scheduleRetry(claimed!)).toBe(true);
 
       expect(await repository.claimBatch(10, LEASE_MS, at(2_009))).toEqual([]);
       const [again] = await repository.claimBatch(10, LEASE_MS, at(2_010));

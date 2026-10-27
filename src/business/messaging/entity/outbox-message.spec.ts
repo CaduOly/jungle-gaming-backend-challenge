@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { aFakeEvent } from '../../../../tests/support/fakes/fake-integration-event';
-import { InvalidOutboxRetryError } from '../error/invalid-outbox-retry.error';
-import { OutboxMessageAlreadyPublishedError } from '../error/outbox-message-already-published.error';
+import { InvalidOutboxRetryError } from '../error/invalid-outbox-retry-error';
+import { OutboxMessageAlreadyPublishedError } from '../error/outbox-message-already-published-error';
 import { OutboxMessage } from './outbox-message';
 
 const occurredAt = new Date('2026-07-29T15:00:00.000Z');
@@ -78,6 +78,18 @@ describe('OutboxMessage', () => {
     const message = aMessage();
     message.markPublished(later(10));
     expect(() => message.scheduleRetry(later(20), 1_000)).toThrow(OutboxMessageAlreadyPublishedError);
+  });
+
+  it('keeps the lease token of its claim across transitions so the repository can fence writes', () => {
+    const message = OutboxMessage.rehydrate({ ...aMessage().toState(), lockedUntil: later(30_000), leaseToken: 'lease-a' });
+    message.scheduleRetry(later(1), 1_000);
+
+    expect(message.leaseToken).toBe('lease-a');
+    expect(message.lockedUntil).toBeUndefined();
+  });
+
+  it('rejects a retry whose next attempt would be an invalid date', () => {
+    expect(() => aMessage().scheduleRetry(later(1), 8_640_000_000_000_000)).toThrow(InvalidOutboxRetryError);
   });
 
   it.each([-1, 1.5, Number.NaN])('rejects a retry delay of %p', (delay) => {

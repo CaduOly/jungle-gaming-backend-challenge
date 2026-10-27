@@ -5,6 +5,7 @@ import { FakeMessagePublisher } from '../../../../../tests/support/fakes/fake-me
 import { InMemoryOutboxRepository } from '../../../../../tests/support/fakes/in-memory-outbox.repository';
 import { ExponentialBackoff } from '../../../shared/policy/exponential-backoff';
 import { OutboxMessage } from '../../entity/outbox-message';
+import type { IMessagePublisher } from '../../port/message-publisher.port';
 import { PublishOutboxBatch } from './publish-outbox-batch';
 
 const LEASE_MS = 30_000;
@@ -40,6 +41,7 @@ describe('PublishOutboxBatch', () => {
       claimed: 0,
       published: 0,
       failed: 0,
+      leaseLost: 0,
       exhausted: 0,
       exhaustedMessageIds: [],
     });
@@ -53,7 +55,7 @@ describe('PublishOutboxBatch', () => {
     expect(output).toMatchObject({ claimed: 3, published: 3, failed: 0, exhausted: 0 });
     expect(publisher.publishedIds()).toEqual(['evt-0', 'evt-1', 'evt-2']);
     expect(outbox.pending()).toEqual([]);
-    expect((await outbox.find('evt-0'))!.publishedAt).toEqual(clock.now());
+    expect((await outbox.findById('evt-0'))!.publishedAt).toEqual(clock.now());
   });
 
   it('claims at most batchSize messages per run', async () => {
@@ -70,7 +72,7 @@ describe('PublishOutboxBatch', () => {
     const output = await useCase().execute();
 
     expect(output).toMatchObject({ claimed: 3, published: 2, failed: 1, exhausted: 0 });
-    const retried = (await outbox.find('evt-1'))!;
+    const retried = (await outbox.findById('evt-1'))!;
     expect(retried.attempts).toBe(1);
     expect(retried.nextAttemptAt).toEqual(new Date(clock.now().getTime() + 1_000));
     expect(retried.lockedUntil).toBeUndefined();
@@ -97,7 +99,7 @@ describe('PublishOutboxBatch', () => {
     for (let run = 0; run < 4; run += 1) {
       const before = clock.now().getTime();
       await useCase().execute();
-      const next = (await outbox.find('evt-0'))!.nextAttemptAt.getTime();
+      const next = (await outbox.findById('evt-0'))!.nextAttemptAt.getTime();
       delays.push(next - before);
       clock.set(new Date(next));
     }
@@ -114,7 +116,7 @@ describe('PublishOutboxBatch', () => {
     const output = await useCase().execute();
 
     expect(output).toMatchObject({ claimed: 2, published: 0, failed: 2, exhausted: 1, exhaustedMessageIds: ['evt-tired'] });
-    const tired = (await outbox.find('evt-tired'))!;
+    const tired = (await outbox.findById('evt-tired'))!;
     expect(tired.attempts).toBe(8);
     expect(tired.isPending()).toBe(true);
     expect(tired.nextAttemptAt).toEqual(new Date(clock.now().getTime() + 30_000));
@@ -126,7 +128,7 @@ describe('PublishOutboxBatch', () => {
     publisher.failWhen(() => true);
 
     expect(await useCase().execute()).toMatchObject({ failed: 2, exhausted: 0, exhaustedMessageIds: [] });
-    expect((await outbox.find('evt-dead'))!.attempts).toBe(9);
+    expect((await outbox.findById('evt-dead'))!.attempts).toBe(9);
   });
 
   it('never publishes the same message twice across concurrent publishers', async () => {
@@ -156,5 +158,36 @@ describe('PublishOutboxBatch', () => {
     clock.advance(LEASE_MS);
     expect(await useCase().execute()).toMatchObject({ claimed: 1, published: 1 });
     expect(publisher.publishedIds()).toEqual(['evt-0', 'evt-0']);
+  });
+
+  it('fences a stale publisher: its late failure neither touches the row nor counts exhaustion twice', async () => {
+    await enqueue(1);
+    backoff = new ExponentialBackoff({ baseMs: 2_000, capMs: 60_000, maxAttempts: 1, random: () => 0 });
+    let releaseStale: (error: Error) => void = () => undefined;
+    let calls = 0;
+    const scripted: IMessagePublisher = {
+      publish: () => {
+        calls += 1;
+        if (calls === 1) return new Promise<void>((_, reject) => (releaseStale = reject));
+        return Promise.reject(new Error('broker down'));
+      },
+    };
+    const publisherFor = () =>
+      new PublishOutboxBatch(outbox, scripted, clock, backoff, { batchSize: 10, leaseMs: LEASE_MS });
+
+    const stale = publisherFor().execute();
+    await Promise.resolve();
+    clock.advance(LEASE_MS);
+    const owner = await publisherFor().execute();
+    const afterOwner = (await outbox.findById('evt-0'))!.toState();
+
+    clock.advance(1);
+    releaseStale(new Error('timed out'));
+    const late = await stale;
+
+    expect(owner).toMatchObject({ failed: 1, leaseLost: 0, exhausted: 1, exhaustedMessageIds: ['evt-0'] });
+    expect(late).toMatchObject({ failed: 1, leaseLost: 1, exhausted: 0, exhaustedMessageIds: [] });
+    expect((await outbox.findById('evt-0'))!.toState()).toEqual(afterOwner);
+    expect(afterOwner.attempts).toBe(1);
   });
 });

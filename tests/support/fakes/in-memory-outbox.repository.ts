@@ -1,8 +1,11 @@
 import { OutboxMessage, type OutboxMessageState } from '../../../src/business/messaging/entity/outbox-message';
 import type { IOutboxRepository } from '../../../src/business/messaging/port/outbox.repository.port';
+import { uuidv7 } from '../uuid';
 
 const byOccurrence = (a: OutboxMessageState, b: OutboxMessageState): number =>
   a.occurredAt.getTime() - b.occurredAt.getTime() || a.id.localeCompare(b.id);
+
+const withoutLease = ({ lockedUntil: _lockedUntil, leaseToken: _leaseToken, ...rest }: OutboxMessageState) => rest;
 
 /**
  * Single-threaded stand-in for `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED)`: every
@@ -15,7 +18,7 @@ export class InMemoryOutboxRepository implements IOutboxRepository {
     for (const message of messages) {
       if (this.rows.has(message.id)) throw new Error(`Outbox message ${message.id} already exists`);
     }
-    for (const message of messages) this.rows.set(message.id, message.toState());
+    for (const message of messages) this.rows.set(message.id, withoutLease(message.toState()));
   }
 
   async claimBatch(limit: number, leaseMs: number, now: Date): Promise<OutboxMessage[]> {
@@ -24,7 +27,7 @@ export class InMemoryOutboxRepository implements IOutboxRepository {
       .filter((row) => OutboxMessage.rehydrate(row).isDue(now))
       .sort(byOccurrence)
       .slice(0, limit)
-      .map((row) => ({ ...row, lockedUntil }));
+      .map((row) => ({ ...row, lockedUntil, leaseToken: uuidv7() }));
     for (const row of claimed) this.rows.set(row.id, row);
     return claimed.map((row) => OutboxMessage.rehydrate(row));
   }
@@ -32,18 +35,23 @@ export class InMemoryOutboxRepository implements IOutboxRepository {
   async markPublished(message: OutboxMessage): Promise<void> {
     const stored = this.require(message.id);
     if (stored.publishedAt) return;
-    const { lockedUntil: _released, ...rest } = stored;
-    this.rows.set(message.id, { ...rest, publishedAt: message.publishedAt });
+    this.rows.set(message.id, { ...withoutLease(stored), publishedAt: message.publishedAt });
   }
 
-  async scheduleRetry(message: OutboxMessage): Promise<void> {
+  async scheduleRetry(message: OutboxMessage): Promise<boolean> {
     const stored = this.require(message.id);
-    if (stored.publishedAt) return;
-    const { lockedUntil: _released, ...rest } = stored;
-    this.rows.set(message.id, { ...rest, attempts: message.attempts, nextAttemptAt: message.nextAttemptAt });
+    if (stored.publishedAt || message.leaseToken === undefined || stored.leaseToken !== message.leaseToken) {
+      return false;
+    }
+    this.rows.set(message.id, {
+      ...withoutLease(stored),
+      attempts: message.attempts,
+      nextAttemptAt: message.nextAttemptAt,
+    });
+    return true;
   }
 
-  async find(id: string): Promise<OutboxMessage | undefined> {
+  async findById(id: string): Promise<OutboxMessage | undefined> {
     const stored = this.rows.get(id);
     return stored && OutboxMessage.rehydrate(stored);
   }

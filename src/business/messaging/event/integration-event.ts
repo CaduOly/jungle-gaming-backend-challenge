@@ -1,5 +1,6 @@
 import { deepFreeze } from './deep-freeze';
-import { InvalidIntegrationEventError } from '../error/invalid-integration-event.error';
+import { InvalidIntegrationEventError } from '../error/invalid-integration-event-error';
+import { type Jsonify, toJsonValue } from './json';
 
 export interface IntegrationEventProps<T> {
   readonly eventId: string;
@@ -7,7 +8,8 @@ export interface IntegrationEventProps<T> {
   readonly correlationId: string;
   readonly causationId?: string;
   readonly occurredAt: Date;
-  readonly data: T;
+  /** Resolves to `never` for anything that is not plain JSON, so such data cannot be passed. */
+  readonly data: Jsonify<T>;
 }
 
 export interface IntegrationEventEnvelope<T = unknown> {
@@ -25,8 +27,9 @@ export interface IntegrationEventEnvelope<T = unknown> {
 const isBlank = (value: string): boolean => value.trim() === '';
 
 /**
- * `data` must be plain JSON (strings, numbers, booleans, arrays, objects): never value-object
- * instances, so the envelope stays stable and versionable on the wire.
+ * `data` must be plain JSON (strings, numbers, booleans, arrays, objects), never value-object instances,
+ * so the envelope stays stable and versionable on the wire. Enforced by `Jsonify` at compile time and by a
+ * JSON round trip at runtime.
  */
 export abstract class IntegrationEvent<T> {
   abstract readonly eventType: string;
@@ -54,7 +57,7 @@ export abstract class IntegrationEvent<T> {
     this.correlationId = props.correlationId;
     if (props.causationId !== undefined) this.causationId = props.causationId;
     this.occurredAt = new Date(props.occurredAt.getTime());
-    this.data = deepFreeze(structuredClone(props.data));
+    this.data = deepFreeze(toJsonValue(props.data as T));
   }
 
   toJSON(): IntegrationEventEnvelope<T> {
@@ -67,7 +70,7 @@ export abstract class IntegrationEvent<T> {
       correlationId: this.correlationId,
       ...(this.causationId === undefined ? {} : { causationId: this.causationId }),
       occurredAt: this.occurredAt.toISOString(),
-      data: structuredClone(this.data) as T,
+      data: toJsonValue(this.data) as T,
     };
   }
 }

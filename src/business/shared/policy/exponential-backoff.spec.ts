@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { ExponentialBackoff, InvalidBackoffConfigurationError } from './exponential-backoff';
+import { InvalidBackoffConfigurationError } from '../error/invalid-backoff-configuration-error';
+import { ExponentialBackoff, MAX_BACKOFF_CAP_MS } from './exponential-backoff';
 
 const backoff = (random: () => number) =>
   new ExponentialBackoff({ baseMs: 2_000, capMs: 60_000, maxAttempts: 8, random });
@@ -25,6 +26,22 @@ describe('ExponentialBackoff', () => {
     expect(backoff(() => 0).nextDelayMs(10_000)).toBe(30_000);
   });
 
+  it('never returns a zero delay, even with baseMs = 1', () => {
+    const policy = new ExponentialBackoff({ baseMs: 1, capMs: 1, maxAttempts: 3, random: () => 0 });
+    expect(policy.nextDelayMs(1)).toBe(1);
+    expect(policy.nextDelayMs(50)).toBe(1);
+  });
+
+  it('accepts a cap of 24h and stays within it', () => {
+    const policy = new ExponentialBackoff({
+      baseMs: 1_000,
+      capMs: MAX_BACKOFF_CAP_MS,
+      maxAttempts: 3,
+      random: () => 0.999_999_999,
+    });
+    expect(policy.nextDelayMs(1_000)).toBeLessThan(MAX_BACKOFF_CAP_MS);
+  });
+
   it('reports exhaustion once the attempts reach the maximum', () => {
     const policy = backoff(() => 0);
     expect(policy.isExhausted(7)).toBe(false);
@@ -45,6 +62,7 @@ describe('ExponentialBackoff', () => {
     { baseMs: 10, capMs: 5, maxAttempts: 1 },
     { baseMs: 10, capMs: 10, maxAttempts: 0 },
     { baseMs: 1.5, capMs: 10, maxAttempts: 1 },
+    { baseMs: 10, capMs: MAX_BACKOFF_CAP_MS + 1, maxAttempts: 1 },
   ])('rejects invalid configuration %p', (options) => {
     expect(() => new ExponentialBackoff({ ...options, random: () => 0 })).toThrow(
       InvalidBackoffConfigurationError,

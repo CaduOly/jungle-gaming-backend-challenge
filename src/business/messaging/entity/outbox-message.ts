@@ -1,7 +1,8 @@
 import { deepFreeze } from '../event/deep-freeze';
-import { InvalidOutboxRetryError } from '../error/invalid-outbox-retry.error';
-import { OutboxMessageAlreadyPublishedError } from '../error/outbox-message-already-published.error';
+import { InvalidOutboxRetryError } from '../error/invalid-outbox-retry-error';
+import { OutboxMessageAlreadyPublishedError } from '../error/outbox-message-already-published-error';
 import type { IntegrationEvent, IntegrationEventEnvelope } from '../event/integration-event';
+import { toJsonValue } from '../event/json';
 
 export interface OutboxMessageState {
   readonly id: string;
@@ -13,6 +14,11 @@ export interface OutboxMessageState {
   readonly attempts: number;
   readonly nextAttemptAt: Date;
   readonly lockedUntil?: Date;
+  /**
+   * Fencing token of the claim that loaded this message. Transitions release `lockedUntil` in memory but keep
+   * the token, so the repository can apply a retry only while this claim still owns the row.
+   */
+  readonly leaseToken?: string;
   readonly publishedAt?: Date;
 }
 
@@ -32,6 +38,7 @@ export class OutboxMessage {
     private _nextAttemptAt: Date,
     private _lockedUntil?: Date,
     private _publishedAt?: Date,
+    readonly leaseToken?: string,
   ) {}
 
   static fromEvent(event: IntegrationEvent<unknown>): OutboxMessage {
@@ -54,12 +61,13 @@ export class OutboxMessage {
       state.eventType,
       state.aggregateType,
       state.aggregateId,
-      deepFreeze(structuredClone(state.payload)),
+      deepFreeze(toJsonValue(state.payload)),
       copy(state.occurredAt),
       state.attempts,
       copy(state.nextAttemptAt),
       copyOptional(state.lockedUntil),
       copyOptional(state.publishedAt),
+      state.leaseToken,
     );
   }
 
@@ -100,9 +108,12 @@ export class OutboxMessage {
 
   scheduleRetry(now: Date, delayMs: number): void {
     this.ensurePending();
-    if (!Number.isSafeInteger(delayMs) || delayMs < 0) throw new InvalidOutboxRetryError(delayMs);
+    const nextAttemptAt = new Date(now.getTime() + delayMs);
+    if (!Number.isSafeInteger(delayMs) || delayMs < 0 || Number.isNaN(nextAttemptAt.getTime())) {
+      throw new InvalidOutboxRetryError(delayMs);
+    }
     this._attempts += 1;
-    this._nextAttemptAt = new Date(now.getTime() + delayMs);
+    this._nextAttemptAt = nextAttemptAt;
     this._lockedUntil = undefined;
   }
 
@@ -112,11 +123,12 @@ export class OutboxMessage {
       eventType: this.eventType,
       aggregateType: this.aggregateType,
       aggregateId: this.aggregateId,
-      payload: structuredClone(this.payload),
+      payload: toJsonValue(this.payload),
       occurredAt: this.occurredAt,
       attempts: this._attempts,
       nextAttemptAt: this.nextAttemptAt,
       ...(this._lockedUntil === undefined ? {} : { lockedUntil: this.lockedUntil }),
+      ...(this.leaseToken === undefined ? {} : { leaseToken: this.leaseToken }),
       ...(this._publishedAt === undefined ? {} : { publishedAt: this.publishedAt }),
     };
   }

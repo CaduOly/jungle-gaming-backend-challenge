@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
-import { InboxMessageAlreadyProcessedError } from '../error/inbox-message-already-processed.error';
-import { InboxPayloadMismatchError } from '../error/inbox-payload-mismatch.error';
-import { InvalidInboxMessageError } from '../error/invalid-inbox-message.error';
+import { InboxMessageAlreadyProcessedError } from '../error/inbox-message-already-processed-error';
+import { InboxPayloadMismatchError } from '../error/inbox-payload-mismatch-error';
+import { InvalidInboxMessageError } from '../error/invalid-inbox-message-error';
 import { InboxMessage } from './inbox-message';
 
 const receivedAt = new Date('2026-07-29T15:00:00.000Z');
