@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { toDate, toJsonObject, toOptionalDate } from './sql-values';
+import { isUuid, toBigInt, toDate, toJsonObject, toMoney, toOptionalDate, toOptionalMoney, toText } from './sql-values';
 
 describe('sql value mappers', () => {
   it.each([
@@ -41,5 +41,27 @@ describe('sql value mappers', () => {
   it('accepts jsonb as text or as an already parsed object', () => {
     expect(toJsonObject('{"a":1}')).toEqual({ a: 1 });
     expect(toJsonObject({ a: 1 })).toEqual({ a: 1 });
+  });
+
+  it('maps numeric text to Money without passing through number, up to the column maximum', () => {
+    expect(toMoney('100.00', 'BRL').toProps()).toEqual({ amount: '100.00', currency: 'BRL' });
+    expect(toMoney('999999999999999999.99', 'BRL').amount).toBe('999999999999999999.99');
+    expect(toOptionalMoney(null, 'BRL')).toBeUndefined();
+    expect(() => toMoney(100, 'BRL')).toThrow('Expected numeric as text');
+    expect(() => toMoney('1.5', 'BRL')).toThrow();
+  });
+
+  it('maps bigint text and bigint values, rejecting anything else', () => {
+    expect(toBigInt('9223372036854775807')).toBe(9_223_372_036_854_775_807n);
+    expect(toBigInt(7n)).toBe(7n);
+    expect(() => toBigInt(7)).toThrow('Expected a bigint');
+    expect(() => toBigInt('7.0')).toThrow('Expected a bigint');
+  });
+
+  it('recognises uuids and requires text columns', () => {
+    expect(isUuid('0190a6c4-7b1e-7cc0-8a3e-1f2d3c4b5a69')).toBe(true);
+    expect(isUuid('wallet-1')).toBe(false);
+    expect(toText('x', 'round_id')).toBe('x');
+    expect(() => toText(null, 'round_id')).toThrow('round_id');
   });
 });

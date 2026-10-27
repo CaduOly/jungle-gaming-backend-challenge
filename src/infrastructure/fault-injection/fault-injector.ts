@@ -1,4 +1,4 @@
-export const FAULT_POINTS = ['fail_outbox_insert'] as const;
+export const FAULT_POINTS = ['fail_outbox_insert', 'fail_ledger_insert', 'crash_before_commit'] as const;
 
 export type FaultPoint = (typeof FAULT_POINTS)[number];
 
