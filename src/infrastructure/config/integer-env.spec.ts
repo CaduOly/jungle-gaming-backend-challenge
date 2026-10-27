@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { readIntegerEnv } from './integer-env';
+import { parseDecimalInteger, readIntegerEnv } from './integer-env';
 
 describe('readIntegerEnv', () => {
   it('returns the fallback when the variable is missing or empty', () => {
@@ -13,5 +13,16 @@ describe('readIntegerEnv', () => {
 
   it.each(['-1', '1.5', '1e3', ' 80', '0x10', 'abc', '1234567890'])('rejects %p', (raw) => {
     expect(() => readIntegerEnv({ PORT: raw }, 'PORT', 3000)).toThrow('Invalid integer for PORT');
+  });
+});
+
+describe('parseDecimalInteger', () => {
+  it('parses plain non-negative integers', () => {
+    expect(parseDecimalInteger('50')).toBe(50);
+    expect(parseDecimalInteger('0')).toBe(0);
+  });
+
+  it.each([undefined, '', '-1', '1.5', '1e3', ' 5', 'abc', '1234567890123456'])('returns undefined for %p', (raw) => {
+    expect(parseDecimalInteger(raw)).toBeUndefined();
   });
 });

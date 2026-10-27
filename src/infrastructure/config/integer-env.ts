@@ -8,3 +8,9 @@ export const readIntegerEnv = (
   if (!/^\d{1,9}$/.test(raw)) throw new Error(`Invalid integer for ${name}: "${raw}"`);
   return Number.parseInt(raw, 10);
 };
+
+/** Plain non-negative decimal integer from untrusted text (query string, attribute), or undefined. */
+export const parseDecimalInteger = (raw: string | undefined): number | undefined => {
+  if (raw === undefined || !/^\d{1,15}$/.test(raw)) return undefined;
+  return Number.parseInt(raw, 10);
+};
