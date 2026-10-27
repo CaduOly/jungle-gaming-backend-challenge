@@ -1,4 +1,8 @@
-import type { IPayloadHasher, WagerPayload } from '../../../src/business/wagering/port/payload-hasher.port';
+import type {
+  IPayloadHasher,
+  WagerMessagePayload,
+  WagerPayload,
+} from '../../../src/business/wagering/port/payload-hasher.port';
 
 const canonical = (value: unknown): string => {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
@@ -10,5 +14,9 @@ const canonical = (value: unknown): string => {
 export class FakePayloadHasher implements IPayloadHasher {
   hash(payload: WagerPayload): string {
     return canonical(payload);
+  }
+
+  hashMessage(message: WagerMessagePayload): string {
+    return `message:${canonical(message)}`;
   }
 }
