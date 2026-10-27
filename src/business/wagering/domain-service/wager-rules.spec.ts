@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { reconcileInMemoryWallet } from '../../../../tests/support/assertions/reconcile-in-memory-wallet';
 import { brl, T0, wagerProps } from '../../../../tests/support/builders/wager-transaction.builder';
 import { InMemoryLedger } from '../../../../tests/support/fakes/in-memory-ledger';
 import {
@@ -6,7 +7,6 @@ import {
   InMemoryWagerTransactionStore,
 } from '../../../../tests/support/fakes/in-memory-wager-transaction-repository';
 import type { FailureCode } from '../../shared/error/failure-code';
-import { reconcileWallet } from '../../wallet/domain-service/wallet-reconciliation';
 import { Wallet } from '../../wallet/entity/wallet';
 import { type CreateWagerTransactionProps, WagerTransaction } from '../entity/wager-transaction';
 import type { WagerKind } from '../enum/wager-kind';
@@ -56,7 +56,7 @@ describe('wagering rules end to end (domain only)', () => {
   };
 
   afterEach(async () => {
-    expect(reconcileWallet(wallet, await ledger.listAll('wallet-1')).consistent).toBe(true);
+    expect((await reconcileInMemoryWallet(wallet, ledger)).consistent).toBe(true);
   });
 
   it('BET -> REFUND -> ROLLBACK of the REFUND leaves the BET debited and not refundable again', async () => {

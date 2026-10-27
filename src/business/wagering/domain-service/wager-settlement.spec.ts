@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { aProcessedWager, aWager, brl, T0, usd } from '../../../../tests/support/builders/wager-transaction.builder';
+import { FailureCode } from '../../shared/error/failure-code';
+import { InvalidTransactionStateError } from '../../shared/error/invalid-transaction-state-error';
 import { Money } from '../../shared/value-object/money';
 import { Wallet } from '../../wallet/entity/wallet';
 import type { WagerTransaction } from '../entity/wager-transaction';
@@ -144,6 +146,46 @@ describe('WagerSettlement', () => {
     );
     const rollback = aWager(WagerKind.ROLLBACK, 'rb', { referenceExternalTransactionId: 'ref' });
     expect(() => settle(rollback, walletWith('1.00'))).toThrow(InvalidWagerTransactionError);
+  });
+
+  it.each([
+    ['BET', () => aWager(WagerKind.BET, 'tx', { money: brl('25.00') }), null, '75.00', 'PROCESSED'],
+    ['WIN', () => aWager(WagerKind.WIN, 'tx', { money: brl('25.00') }), null, '125.00', 'PROCESSED'],
+    ['LOSS', () => aWager(WagerKind.LOSS, 'tx', { money: brl('25.00') }), null, '100.00', 'PROCESSED'],
+    [
+      'REFUND',
+      () => aWager(WagerKind.REFUND, 'tx', { referenceExternalTransactionId: 'bet' }),
+      () => aProcessedWager(WagerKind.BET, 'bet'),
+      '110.00',
+      'PROCESSED',
+    ],
+    [
+      'ROLLBACK',
+      () => aWager(WagerKind.ROLLBACK, 'tx', { referenceExternalTransactionId: 'win' }),
+      () => aProcessedWager(WagerKind.WIN, 'win'),
+      '90.00',
+      'PROCESSED',
+    ],
+    ['REJECTED BET', () => aWager(WagerKind.BET, 'tx', { money: brl('100.01') }), null, '100.00', 'REJECTED'],
+  ] as const)('%s records observedBalance = the wallet balance after the decision', (_, make, reference, balance, status) => {
+    const wallet = walletWith('100.00');
+    const transaction = make();
+    settle(transaction, wallet, reference === null ? null : reference());
+    expect(transaction.status).toBe(status);
+    expect(wallet.balance.amount).toBe(balance);
+    expect(transaction.observedBalance?.amount).toBe(balance);
+    expect(transaction.observedBalance).toEqual(wallet.balance);
+  });
+
+  it('refuses a terminal transaction before touching the wallet', () => {
+    const wallet = walletWith('100.00');
+    const before = wallet.toState();
+    const processed = aProcessedWager(WagerKind.BET, 'bet', { money: brl('25.00') });
+    expect(() => settle(processed, wallet)).toThrow(InvalidTransactionStateError);
+    const rejected = aWager(WagerKind.WIN, 'win');
+    rejected.reject(FailureCode.CURRENCY_MISMATCH, brl('1.00'), AT);
+    expect(() => settle(rejected, wallet)).toThrow(InvalidTransactionStateError);
+    expect(wallet.toState()).toEqual(before);
   });
 
   it('never moves zero-balance wallets below zero', () => {

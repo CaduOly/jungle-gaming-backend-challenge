@@ -17,6 +17,30 @@ export class WagerConstraintError extends Error {
 
 const REVERSAL_KINDS = new Set(['REFUND', 'ROLLBACK']);
 
+const IMMUTABLE_COLUMNS = [
+  'id',
+  'providerId',
+  'idempotencyKey',
+  'externalTransactionId',
+  'playerId',
+  'walletId',
+  'roundId',
+  'gameId',
+  'kind',
+  'referenceExternalTransactionId',
+  'payloadHash',
+] as const;
+
+/** Mirrors the schema trigger: identity, payload and creation time never change after the insert. */
+const changedImmutableColumn = (current: WagerTransaction, next: WagerTransaction): string | null => {
+  for (const column of IMMUTABLE_COLUMNS) if (current[column] !== next[column]) return column;
+  if (!current.money.equals(next.money)) return 'money';
+  if (current.createdAt.getTime() !== next.createdAt.getTime()) return 'createdAt';
+  const reference = current.referenceTransactionId;
+  if (reference !== undefined && reference !== next.referenceTransactionId) return 'referenceTransactionId';
+  return null;
+};
+
 interface Row {
   state: WagerTransactionState;
   lockedUntil: Date | null;
@@ -73,7 +97,8 @@ export class InMemoryWagerTransactionStore {
 
 /**
  * Repository scoped to one unit of work; `releaseLocks()` is called by the fake unit of work.
- * Like the schema trigger, an update cannot move a row out of a terminal status.
+ * Like the schema trigger, an update needs the row lock, cannot move a row out of a terminal status and cannot
+ * change an immutable column (a reference, once linked, stays linked).
  */
 export class InMemoryWagerTransactionRepository implements IWagerTransactionRepository {
   private readonly held = new Map<string, Promise<Release>>();
@@ -114,7 +139,10 @@ export class InMemoryWagerTransactionRepository implements IWagerTransactionRepo
   async update(transaction: WagerTransaction): Promise<void> {
     const current = this.store.read(transaction.id);
     if (current === null) throw new Error(`Wager transaction ${transaction.id} not found`);
+    if (!this.held.has(transaction.id)) throw new Error(`Wager transaction ${transaction.id} must be locked before update`);
     if (current.isTerminal()) throw new WagerConstraintError('terminal status is immutable');
+    const changed = changedImmutableColumn(current, transaction);
+    if (changed !== null) throw new WagerConstraintError(`${changed} is immutable`);
     this.store.write(transaction);
   }
 

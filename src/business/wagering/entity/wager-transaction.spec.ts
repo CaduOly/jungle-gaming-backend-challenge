@@ -307,4 +307,36 @@ describe('WagerTransaction', () => {
     tx.createdAt.setFullYear(2000);
     expect(tx.createdAt).toEqual(T0);
   });
+
+  it('copies createdAt on create, so the caller cannot rewrite it', () => {
+    const createdAt = new Date(T0);
+    const tx = WagerTransaction.create(wagerProps(WagerKind.BET, 'ext', { createdAt }));
+    createdAt.setFullYear(2000);
+    expect(tx.createdAt).toEqual(T0);
+    expect(tx.toState().createdAt).toEqual(T0);
+  });
+
+  it('copies every date on rehydrate', () => {
+    const createdAt = new Date(T0);
+    const nextAttemptAt = new Date(T1);
+    const processedAt = new Date(T1);
+    const pending = WagerTransaction.rehydrate({
+      ...wagerProps(WagerKind.WIN, 'ext', { referenceExternalTransactionId: 'bet', createdAt }),
+      status: WagerTransactionStatus.PENDING_REFERENCE,
+      attempts: 1,
+      nextAttemptAt,
+    });
+    const processed = WagerTransaction.rehydrate({
+      ...wagerProps(WagerKind.BET, 'bet', { createdAt }),
+      status: WagerTransactionStatus.PROCESSED,
+      observedBalance: brl('1.00'),
+      attempts: 0,
+      processedAt,
+    });
+    for (const date of [createdAt, nextAttemptAt, processedAt]) date.setFullYear(2000);
+    expect(pending.createdAt).toEqual(T0);
+    expect(pending.nextAttemptAt).toEqual(T1);
+    expect(processed.processedAt).toEqual(T1);
+    expect(processed.toState().createdAt).toEqual(T0);
+  });
 });

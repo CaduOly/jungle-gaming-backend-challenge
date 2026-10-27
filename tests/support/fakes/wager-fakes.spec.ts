@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { FailureCode } from '../../../src/business/shared/error/failure-code';
-import type { WagerTransaction } from '../../../src/business/wagering/entity/wager-transaction';
+import { WagerTransaction } from '../../../src/business/wagering/entity/wager-transaction';
 import { WagerKind } from '../../../src/business/wagering/enum/wager-kind';
 import { aProcessedWager, aWager, brl, T0 } from '../builders/wager-transaction.builder';
 import { FakePayloadHasher } from './fake-payload-hasher';
@@ -80,6 +80,7 @@ describe('InMemoryWagerTransactionRepository', () => {
   it('updates non-terminal rows and refuses to leave a terminal status', async () => {
     const waiting = pending('rb', 0);
     await repository.insert(waiting);
+    await repository.lockById(waiting.id);
     waiting.scheduleNextAttempt(at(10));
     await repository.update(waiting);
     expect((await repository.findById(waiting.id))?.attempts).toBe(2);
@@ -87,6 +88,46 @@ describe('InMemoryWagerTransactionRepository', () => {
     await repository.update(waiting);
     await expect(repository.update(waiting)).rejects.toThrow('terminal status is immutable');
     await expect(repository.update(aProcessedWager(WagerKind.BET, 'ghost'))).rejects.toThrow('not found');
+    await repository.releaseLocks();
+  });
+
+  it('requires the row lock to update', async () => {
+    const waiting = pending('rb', 0);
+    await repository.insert(waiting);
+    waiting.scheduleNextAttempt(at(10));
+    await expect(repository.update(waiting)).rejects.toThrow('must be locked');
+    await repository.lockById(waiting.id);
+    await repository.releaseLocks();
+    await expect(repository.update(waiting)).rejects.toThrow('must be locked');
+    expect((await repository.findById(waiting.id))?.attempts).toBe(1);
+  });
+
+  it.each([
+    ['walletId', { walletId: 'wallet-2' }],
+    ['kind', { kind: WagerKind.REFUND }],
+    ['money', { money: brl('10.01') }],
+    ['payloadHash', { payloadHash: 'other' }],
+    ['createdAt', { createdAt: at(1) }],
+    ['referenceExternalTransactionId', { referenceExternalTransactionId: 'other' }],
+  ] as const)('refuses to change the immutable column %s', async (column, change) => {
+    const waiting = pending('rb', 0);
+    await repository.insert(waiting);
+    await repository.lockById(waiting.id);
+    const tampered = WagerTransaction.rehydrate({ ...waiting.toState(), ...change });
+    await expect(repository.update(tampered)).rejects.toThrow(`${column} is immutable`);
+    await repository.releaseLocks();
+  });
+
+  it('links a reference once and never relinks it', async () => {
+    const waiting = pending('rb', 0);
+    await repository.insert(waiting);
+    await repository.lockById(waiting.id);
+    const bet = aProcessedWager(WagerKind.BET, 'missing-rb');
+    waiting.attachReference(bet);
+    await repository.update(waiting);
+    const relinked = WagerTransaction.rehydrate({ ...waiting.toState(), referenceTransactionId: 'other' });
+    await expect(repository.update(relinked)).rejects.toThrow('referenceTransactionId is immutable');
+    await repository.releaseLocks();
   });
 
   it('locks rows re-entrantly, also for concurrent calls within one scope', async () => {
@@ -126,6 +167,13 @@ describe('InMemoryWagerTransactionRepository', () => {
       await repository.insert(pending('c', 9));
       await repository.insert(aProcessedWager(WagerKind.BET, 'bet'));
       expect(await repository.claimPendingBatch({ limit: 2, leaseMs: 60_000, now: at(10) })).toEqual(['id-a', 'id-b']);
+    });
+
+    it('never claims a row whose next attempt is still in the future', async () => {
+      await repository.insert(pending('due', 10));
+      await repository.insert(pending('future', 11));
+      expect(await repository.claimPendingBatch({ limit: 10, leaseMs: 60_000, now: at(10) })).toEqual(['id-due']);
+      expect(await repository.claimPendingBatch({ limit: 10, leaseMs: 60_000, now: at(11) })).toEqual(['id-future']);
     });
 
     it('skips leased rows until the lease ends', async () => {

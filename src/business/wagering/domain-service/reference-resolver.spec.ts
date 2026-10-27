@@ -69,6 +69,39 @@ describe('ReferenceResolver', () => {
     expect(await resolver.resolve(rollback)).toMatchObject({ type: 'Rejected', code: 'REFERENCE_NOT_PROCESSED' });
   });
 
+  it.each([
+    ['REJECTED', { playerId: 'player-2' }],
+    ['FAILED', { roundId: 'round-2' }],
+    ['PENDING_REFERENCE', { walletId: 'wallet-2' }],
+  ] as const)(
+    'answers REFERENCE_MISMATCH for a foreign %s reference, never leaking its status',
+    async (status, owner) => {
+      const foreign = aWager(WagerKind.WIN, 'bet', { referenceExternalTransactionId: 'older', ...owner });
+      if (status === 'REJECTED') foreign.reject(FailureCode.INSUFFICIENT_FUNDS, brl('0.00'), T0);
+      else foreign.markPendingReference(T0);
+      if (status === 'FAILED') foreign.fail(FailureCode.WALLET_NOT_FOUND, T0);
+      await persist(foreign);
+      const rollback = aWager(WagerKind.ROLLBACK, 'rb', { referenceExternalTransactionId: 'bet' });
+      expect(await resolver.resolve(rollback)).toMatchObject({ type: 'Rejected', code: 'REFERENCE_MISMATCH' });
+    },
+  );
+
+  it('answers CURRENCY_MISMATCH before REFERENCE_NOT_PROCESSED for a rejected reference in another currency', async () => {
+    const bet = aWager(WagerKind.BET, 'bet', { money: usd('10.00') });
+    bet.reject(FailureCode.CURRENCY_MISMATCH, brl('0.00'), T0);
+    await persist(bet);
+    expect(await resolver.resolve(refund())).toMatchObject({ type: 'Rejected', code: 'CURRENCY_MISMATCH' });
+  });
+
+  it.each([
+    [WagerKind.WIN, WagerKind.LOSS],
+    [WagerKind.LOSS, WagerKind.WIN],
+  ] as const)('rejects a %s that references a %s with INVALID_REFERENCE_KIND', async (kind, referenceKind) => {
+    await persist(aProcessedWager(referenceKind, 'ref'));
+    const transaction = aWager(kind, 'tx', { referenceExternalTransactionId: 'ref' });
+    expect(await resolver.resolve(transaction)).toMatchObject({ type: 'Rejected', code: 'INVALID_REFERENCE_KIND' });
+  });
+
   it('resolves a processed reference that passes every policy', async () => {
     const bet = await persist(aProcessedWager(WagerKind.BET, 'bet'));
     const resolution = await resolver.resolve(refund());

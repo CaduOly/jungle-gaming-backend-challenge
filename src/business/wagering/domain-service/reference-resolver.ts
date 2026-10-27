@@ -18,7 +18,8 @@ const NOT_PROCESSED: ReadonlySet<WagerTransactionStatus> = new Set([
 ]);
 
 /**
- * Finds the referenced transaction by (provider, external id) and applies the reference policies.
+ * Finds the referenced transaction by (provider, external id) and applies the reference policies, checking
+ * ownership (player, wallet, round, currency) before anything that depends on the reference status.
  * A missing reference (WIN included) or one still waiting for its own reference keeps the
  * dependent pending; a REJECTED/FAILED one rejects it with REFERENCE_NOT_PROCESSED.
  */
@@ -31,13 +32,15 @@ export class ReferenceResolver {
 
     const reference = await this.transactions.findByExternalId(transaction.providerId, externalId);
     if (reference === null) return { type: 'Missing' };
+
+    // Ownership first: the status of another player's (or round's) transaction must not leak through the code.
+    const mismatch = checkReferenceMatch(transaction, reference);
+    if (mismatch !== null) return { type: 'Rejected', code: mismatch, reference };
+
     if (NOT_PROCESSED.has(reference.status)) {
       return { type: 'Rejected', code: FailureCode.REFERENCE_NOT_PROCESSED, reference };
     }
     if (reference.status !== WagerTransactionStatus.PROCESSED) return { type: 'StillPending', reference };
-
-    const mismatch = checkReferenceMatch(transaction, reference);
-    if (mismatch !== null) return { type: 'Rejected', code: mismatch, reference };
 
     if (!transaction.isReversal) {
       return isReferenceKindAllowed(transaction.kind, reference.kind)
