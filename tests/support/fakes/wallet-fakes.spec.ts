@@ -5,7 +5,8 @@ import { reconcileWallet } from '../../../src/business/wallet/domain-service/wal
 import { Wallet } from '../../../src/business/wallet/entity/wallet';
 import { LedgerEntryType } from '../../../src/business/wallet/enum/ledger-entry-type';
 import { WalletAlreadyExistsError } from '../../../src/business/wallet/error/wallet-already-exists-error';
-import { InMemoryLedger, LedgerConstraintError } from './in-memory-ledger';
+import { UniqueConstraintViolationError } from '../../../src/business/shared/error/unique-constraint-violation-error';
+import { InMemoryLedger } from './in-memory-ledger';
 import { InMemoryWalletRepository, InMemoryWalletStore, StaleWalletVersionError } from './in-memory-wallet-repository';
 import { KeyedMutex } from './keyed-mutex';
 
@@ -201,7 +202,7 @@ describe('InMemoryLedger', () => {
     const twin = store.read('wallet-1')!;
     const entry = wallet.credit({ transactionId: 'win', entryType: LedgerEntryType.WIN, amount: brl('1.00'), at });
     await ledger.append(entry);
-    await expect(ledger.append(entry)).rejects.toThrow(LedgerConstraintError);
+    await expect(ledger.append(entry)).rejects.toThrow(UniqueConstraintViolationError);
     const sameVersion = twin.credit({ transactionId: 'win-2', entryType: LedgerEntryType.WIN, amount: brl('1.00'), at });
     await expect(ledger.append(sameVersion)).rejects.toThrow('UNIQUE(wallet_id, wallet_version)');
     expect(ledger.count()).toBe(2);

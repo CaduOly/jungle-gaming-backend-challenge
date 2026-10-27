@@ -1,6 +1,7 @@
 import { OutboxMessage, type OutboxMessageState } from '../../../src/business/messaging/entity/outbox-message';
 import type { IOutboxRepository } from '../../../src/business/messaging/port/outbox.repository.port';
 import { uuidv7 } from '../uuid';
+import type { UndoLog } from './undo-log';
 
 const byOccurrence = (a: OutboxMessageState, b: OutboxMessageState): number =>
   a.occurredAt.getTime() - b.occurredAt.getTime() || a.id.localeCompare(b.id);
@@ -54,6 +55,22 @@ export class InMemoryOutboxRepository implements IOutboxRepository {
   async findById(id: string): Promise<OutboxMessage | undefined> {
     const stored = this.rows.get(id);
     return stored && OutboxMessage.rehydrate(stored);
+  }
+
+  /** View bound to a unit of work: a rollback removes what it enqueued. */
+  withUndo(undo: UndoLog): Pick<IOutboxRepository, 'add'> {
+    return {
+      add: async (messages) => {
+        await this.add(messages);
+        undo.record(() => {
+          for (const message of messages) this.rows.delete(message.id);
+        });
+      },
+    };
+  }
+
+  all(): OutboxMessage[] {
+    return [...this.rows.values()].map((row) => OutboxMessage.rehydrate(row));
   }
 
   pending(): OutboxMessage[] {

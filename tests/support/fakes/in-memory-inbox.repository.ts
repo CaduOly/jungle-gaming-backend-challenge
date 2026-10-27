@@ -1,5 +1,6 @@
 import { InboxMessage, type InboxMessageState } from '../../../src/business/messaging/entity/inbox-message';
 import type { IInboxRepository, InboxInsertResult } from '../../../src/business/messaging/port/inbox.repository.port';
+import type { UndoLog } from './undo-log';
 
 const keyOf = (consumerName: string, messageId: string): string => JSON.stringify([consumerName, messageId]);
 
@@ -25,6 +26,28 @@ export class InMemoryInboxRepository implements IInboxRepository {
   async find(consumerName: string, messageId: string): Promise<InboxMessage | undefined> {
     const stored = this.rows.get(keyOf(consumerName, messageId));
     return stored && InboxMessage.rehydrate(stored);
+  }
+
+  /** View bound to a unit of work: a rollback restores every row it touched. */
+  withUndo(undo: UndoLog): IInboxRepository {
+    const journal = (message: InboxMessage): void => {
+      const key = keyOf(message.consumerName, message.messageId);
+      const before = this.rows.get(key);
+      undo.record(() => {
+        if (before === undefined) this.rows.delete(key);
+        else this.rows.set(key, before);
+      });
+    };
+    return {
+      insertIfAbsent: async (message) => {
+        journal(message);
+        return this.insertIfAbsent(message);
+      },
+      markProcessed: async (message) => {
+        journal(message);
+        return this.markProcessed(message);
+      },
+    };
   }
 
   size(): number {

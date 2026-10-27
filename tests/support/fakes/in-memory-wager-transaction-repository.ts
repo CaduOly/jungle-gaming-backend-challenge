@@ -6,7 +6,9 @@ import type {
   ClaimPendingBatch,
   IWagerTransactionRepository,
 } from '../../../src/business/wagering/port/wager-transaction.repository.port';
+import { UniqueConstraintViolationError } from '../../../src/business/shared/error/unique-constraint-violation-error';
 import { KeyedMutex, type Release } from './keyed-mutex';
+import type { UndoLog } from './undo-log';
 
 export class WagerConstraintError extends Error {
   constructor(readonly constraint: string) {
@@ -17,12 +19,15 @@ export class WagerConstraintError extends Error {
 
 const REVERSAL_KINDS = new Set(['REFUND', 'ROLLBACK']);
 
-interface Row {
+export interface Row {
   state: WagerTransactionState;
   lockedUntil: Date | null;
 }
 
-/** Shared "table" with the schema's unique constraints, terminal-status guard and row locks. */
+/**
+ * Shared "table" with the schema's unique constraints (raised as UniqueConstraintViolationError, the way the
+ * adapter maps 23505), terminal-status guard and row locks.
+ */
 export class InMemoryWagerTransactionStore {
   readonly locks = new KeyedMutex();
   readonly rows = new Map<string, Row>();
@@ -44,6 +49,12 @@ export class InMemoryWagerTransactionStore {
     this.rows.set(state.id, { state, lockedUntil: existing?.lockedUntil ?? null });
   }
 
+  /** Puts a row back as it was (or removes it when it did not exist): the rollback of a write. */
+  restore(id: string, row: Row | undefined): void {
+    if (row === undefined) this.rows.delete(id);
+    else this.rows.set(id, { ...row });
+  }
+
   all(): WagerTransaction[] {
     return [...this.rows.values()].map((row) => WagerTransaction.rehydrate(row.state));
   }
@@ -52,10 +63,10 @@ export class InMemoryWagerTransactionStore {
     for (const { state: other } of this.rows.values()) {
       if (other.id === state.id) continue;
       if (other.providerId === state.providerId && other.idempotencyKey === state.idempotencyKey) {
-        throw new WagerConstraintError('UNIQUE(provider_id, idempotency_key)');
+        throw new UniqueConstraintViolationError('UNIQUE(provider_id, idempotency_key)');
       }
       if (other.providerId === state.providerId && other.externalTransactionId === state.externalTransactionId) {
-        throw new WagerConstraintError('UNIQUE(provider_id, external_transaction_id)');
+        throw new UniqueConstraintViolationError('UNIQUE(provider_id, external_transaction_id)');
       }
       const bothProcessedReversals = [other, state].every(
         (row) => row.status === 'PROCESSED' && REVERSAL_KINDS.has(row.kind),
@@ -65,7 +76,7 @@ export class InMemoryWagerTransactionStore {
         state.referenceTransactionId !== undefined &&
         other.referenceTransactionId === state.referenceTransactionId
       ) {
-        throw new WagerConstraintError('UNIQUE(reference_transaction_id) WHERE processed reversal');
+        throw new UniqueConstraintViolationError('UNIQUE(reference_transaction_id) WHERE processed reversal');
       }
     }
   }
@@ -78,7 +89,10 @@ export class InMemoryWagerTransactionStore {
 export class InMemoryWagerTransactionRepository implements IWagerTransactionRepository {
   private readonly held = new Map<string, Promise<Release>>();
 
-  constructor(private readonly store: InMemoryWagerTransactionStore) {}
+  constructor(
+    private readonly store: InMemoryWagerTransactionStore,
+    private readonly undo?: UndoLog,
+  ) {}
 
   async findById(id: string): Promise<WagerTransaction | null> {
     return this.store.read(id);
@@ -109,13 +123,16 @@ export class InMemoryWagerTransactionRepository implements IWagerTransactionRepo
     if (this.store.rows.has(transaction.id)) throw new WagerConstraintError('PRIMARY KEY(id)');
     if (transaction.status === 'PENDING') throw new Error('PENDING transactions are never persisted');
     this.store.write(transaction);
+    this.journal(transaction.id, undefined);
   }
 
   async update(transaction: WagerTransaction): Promise<void> {
     const current = this.store.read(transaction.id);
     if (current === null) throw new Error(`Wager transaction ${transaction.id} not found`);
     if (current.isTerminal()) throw new WagerConstraintError('terminal status is immutable');
+    const before = this.store.rows.get(transaction.id);
     this.store.write(transaction);
+    this.journal(transaction.id, before && { ...before });
   }
 
   async isReversed(referenceTransactionId: string): Promise<boolean> {
@@ -141,8 +158,15 @@ export class InMemoryWagerTransactionRepository implements IWagerTransactionRepo
       .sort((a, b) => (a.state.nextAttemptAt?.getTime() ?? 0) - (b.state.nextAttemptAt?.getTime() ?? 0))
       .slice(0, limit);
     const leaseEnd = new Date(now.getTime() + leaseMs);
-    for (const row of due) row.lockedUntil = leaseEnd;
+    for (const row of due) {
+      this.journal(row.state.id, { ...row });
+      row.lockedUntil = leaseEnd;
+    }
     return due.map((row) => row.state.id);
+  }
+
+  private journal(id: string, before: Row | undefined): void {
+    this.undo?.record(() => this.store.restore(id, before));
   }
 
   async releaseLocks(): Promise<void> {
