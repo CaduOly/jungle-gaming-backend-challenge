@@ -132,13 +132,13 @@ export const describeOutboxRepositoryContract = (
       const [winner] = await repository.claimBatch(1, LEASE_MS, at(LEASE_MS));
 
       winner!.markPublished(at(LEASE_MS + 1));
-      await repository.markPublished(winner!);
+      expect(await repository.markPublished(winner!)).toBe(true);
 
       const retry = OutboxMessage.rehydrate(stale!.toState());
       retry.scheduleRetry(at(LEASE_MS + 2), 0);
       expect(await repository.scheduleRetry(retry)).toBe(false);
       stale!.markPublished(at(LEASE_MS + 3));
-      await repository.markPublished(stale!);
+      expect(await repository.markPublished(stale!)).toBe(false);
 
       const stored = (await repository.findById(message.id))!;
       expect(stored.publishedAt).toEqual(at(LEASE_MS + 1));
@@ -157,7 +157,7 @@ export const describeOutboxRepositoryContract = (
       expect(await repository.scheduleRetry(owner!)).toBe(true);
 
       stale!.markPublished(at(LEASE_MS + 2));
-      await repository.markPublished(stale!);
+      expect(await repository.markPublished(stale!)).toBe(true);
 
       const stored = (await repository.findById(message.id))!;
       expect(stored.publishedAt).toEqual(at(LEASE_MS + 2));

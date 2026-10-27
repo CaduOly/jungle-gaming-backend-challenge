@@ -6,11 +6,17 @@ describe('readDatabaseConfig', () => {
     expect(readDatabaseConfig({ DATABASE_URL: 'postgres://u@h/db' })).toEqual({
       url: 'postgres://u@h/db',
       lockTimeoutMs: 2_000,
+      poolAcquireTimeoutMs: 5_000,
     });
   });
 
   it('reads DB_LOCK_TIMEOUT_MS', () => {
     expect(readDatabaseConfig({ DB_LOCK_TIMEOUT_MS: '750' }).lockTimeoutMs).toBe(750);
+  });
+
+  it('reads DB_POOL_ACQUIRE_TIMEOUT_MS and rejects 0', () => {
+    expect(readDatabaseConfig({ DB_POOL_ACQUIRE_TIMEOUT_MS: '800' }).poolAcquireTimeoutMs).toBe(800);
+    expect(() => readDatabaseConfig({ DB_POOL_ACQUIRE_TIMEOUT_MS: '0' })).toThrow('DB_POOL_ACQUIRE_TIMEOUT_MS');
   });
 
   it.each(['0', '-1', 'abc'])('rejects DB_LOCK_TIMEOUT_MS=%p', (raw) => {

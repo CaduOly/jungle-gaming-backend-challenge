@@ -56,14 +56,15 @@ export class OutboxRepository implements IOutboxRepository {
     return rows.map(outboxMessageFromRow).sort(byOccurrence);
   }
 
-  async markPublished(message: OutboxMessage): Promise<void> {
-    await this.em.execute(
+  async markPublished(message: OutboxMessage): Promise<boolean> {
+    const result = await this.em.execute<RunResult>(
       `UPDATE outbox_messages
           SET published_at = ?, locked_until = NULL, lease_token = NULL
         WHERE event_id = ? AND published_at IS NULL`,
       [message.publishedAt ?? null, message.id],
       'run',
     );
+    return result.affectedRows === 1;
   }
 
   async scheduleRetry(message: OutboxMessage): Promise<boolean> {
