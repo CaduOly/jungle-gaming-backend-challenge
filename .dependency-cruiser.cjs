@@ -13,6 +13,18 @@ const INFRA_ONLY_PACKAGES = [
   '@opentelemetry/[^/]+(/|$)',
 ].join('|');
 
+/** Top-level tests/support files that talk to the real Postgres and SQS. A new harness file must be listed here. */
+const INTEGRATION_HARNESS = `^tests/support/(${[
+  'assert-wallet-consistency',
+  'ensure-infra-up',
+  'infra-config',
+  'settle',
+  'sweep-test-resources',
+  'test-database',
+  'test-queues',
+  'uuid',
+].join('|')})\\.ts$`;
+
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {
   forbidden: [
@@ -30,6 +42,14 @@ module.exports = {
       severity: 'error',
       from: { path: '^src/business/.+\\.spec\\.ts$' },
       to: { pathNot: ['^src/business/', '^bun:test$', '^tests/support/(fakes|contracts|builders|assertions)/'] },
+    },
+    {
+      name: 'test-doubles-import-no-harness',
+      comment:
+        'fakes, contracts, builders and assertions never reach the integration harness, not even transitively (it pulls pg and the AWS SDK). uuid.ts is pure (Bun.randomUUIDv7) and stays allowed.',
+      severity: 'error',
+      from: { path: '^tests/support/(fakes|contracts|builders|assertions)/' },
+      to: { path: '^tests/support/[^/]+\\.ts$', pathNot: '^tests/support/uuid\\.ts$' },
     },
     {
       name: 'test-support-imports-no-infrastructure',
@@ -70,9 +90,9 @@ module.exports = {
     {
       name: 'infra-packages-only-in-infrastructure',
       comment:
-        'ORM/SQL drivers, AWS SDK, jose, pino, prom-client and OpenTelemetry only inside infrastructure/** (specs included) and in the top-level integration harness of tests/support (real PG and SQS); never in fakes, contracts, builders or assertions.',
+        'ORM/SQL drivers, AWS SDK, jose, pino, prom-client and OpenTelemetry only inside infrastructure/** (specs included) and in the integration harness files listed in INTEGRATION_HARNESS (real PG and SQS); never in fakes, contracts, builders or assertions.',
       severity: 'error',
-      from: { pathNot: ['^src/infrastructure/', '^tests/support/[^/]+\\.ts$'] },
+      from: { pathNot: ['^src/infrastructure/', INTEGRATION_HARNESS] },
       to: { path: `(^|/)node_modules/(${INFRA_ONLY_PACKAGES})` },
     },
     {

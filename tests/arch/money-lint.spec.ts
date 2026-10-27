@@ -39,9 +39,7 @@ describe('money safety lint rules', () => {
     ['Number passed as callback', "export const a = ['1.10'].map(Number);"],
     ['bitwise not coercion', "const raw = '1.10';\nexport const a = ~raw;"],
     ['double bitwise not coercion', "const raw = '1.10';\nexport const a = ~~raw;"],
-    ['unary minus on a value', "const raw = '1.10';\nexport const a = -raw;"],
-    ['unary minus on a bigint value', 'export const negate = (cents: bigint): bigint => -cents;'],
-    ['unary minus on a call', "export const a = -Number.parseFloat('1.10');"],
+    ['double negation coercion of a value', "const raw = '1.10';\nexport const a = - -raw;"],
   ])('rejects %s in src/business', async (_name, code) => {
     const rules = await lint(code, 'src/business/wallet/entity/fixture.ts');
     expect(rules.length).toBeGreaterThan(0);
@@ -63,6 +61,20 @@ describe('money safety lint rules', () => {
     ['unary minus on a literal', 'export const offsets = [-1, -1n, -0.5];'],
   ])('accepts %s', async (_name, code) => {
     expect(await lint(code, 'src/business/shared/fixture.ts')).toEqual([]);
+  });
+
+  it.each([
+    ['unary minus on a value', "const raw = '1.10';\nexport const a = -raw;"],
+    ['unary minus on a bigint value', 'export const negate = (cents: bigint): bigint => -cents;'],
+    ['unary minus on a call', 'export const a = (f: () => number): number => -f();'],
+  ])('rejects %s in production business code', async (_name, code) => {
+    expect(await lint(code, 'src/business/wallet/entity/fixture.ts')).toEqual(['no-restricted-syntax']);
+  });
+
+  it('lets specs and infrastructure negate a number (e.g. a clock offset)', async () => {
+    const code = 'export const offset = (count: number): number => -count;';
+    expect(await lint(code, 'src/business/messaging/use-case/fixture.spec.ts')).toEqual([]);
+    expect(await lint(code, 'src/infrastructure/clock/fixture.ts')).toEqual([]);
   });
 
   it('points coercion offenders at Money instead of suggesting Number()', async () => {
@@ -129,6 +141,7 @@ describe('pure business lint rules', () => {
     ['Math.pow / Math.abs', 'export const a = Math.pow(2, 3) + Math.abs(-1);'],
     ['new Date(value)', 'export const at = (iso: string): Date => new Date(iso);'],
     ['Date as a type and in instanceof', 'export const isDate = (value: unknown): value is Date => value instanceof Date;'],
+    ['typeof Date in a type', 'export type DateConstructorType = typeof Date;\nexport type MathType = typeof Math;'],
     ['Date.UTC', 'export const epoch = Date.UTC(2026, 0, 1);'],
     ['a property named Date or Math', 'export const shape = { Date: 1, Math: 2 };\nexport const read = shape.Date + shape.Math;'],
   ])('allows %s in src/business', async (_name, code) => {
