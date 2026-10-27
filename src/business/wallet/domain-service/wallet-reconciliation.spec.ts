@@ -75,8 +75,8 @@ describe('reconcileWallet', () => {
     const drifted = rehydrateWallet(wallet, { balance: brl('100.00') });
     const result = reconcileWallet(drifted, entries);
     expect(result.consistent).toBe(false);
-    expect(result.calculatedBalance).toEqual(brl('119.75'));
-    expect(result.difference).toEqual(brl('19.75'));
+    expect(result.calculatedBalance?.toString()).toBe('119.75');
+    expect(result.difference?.toString()).toBe('19.75');
     expect(result.divergences.map((d) => d.code)).toEqual(['LAST_BALANCE_MISMATCH', 'BALANCE_MISMATCH']);
   });
 
@@ -120,6 +120,29 @@ describe('reconcileWallet', () => {
     expect(codes(wallet, repeated)).toEqual(['SEQ_NOT_ASCENDING']);
   });
 
+  it('flags an OPENING as the second entry (index 1)', () => {
+    const { wallet, entries } = history();
+    const moved = tamper(entries[1]!, { entryType: LedgerEntryType.OPENING });
+    expect(codes(wallet, [entries[0]!, moved, entries[2]!])).toEqual(['OPENING_MISPLACED']);
+  });
+
+  it('reports the absolute difference when the stored balance is above the ledger', () => {
+    const { wallet, entries } = history();
+    const result = reconcileWallet(rehydrateWallet(wallet, { balance: brl('200.00') }), entries);
+    expect(result.calculatedBalance?.toString()).toBe('119.75');
+    expect(result.difference?.toString()).toBe('80.25');
+    expect(result.storedBalance.toString()).toBe('200.00');
+  });
+
+  it('leaves an unknown direction out of the sum instead of treating it as a debit or a credit', () => {
+    const { wallet, entries } = history();
+    const unknownDebit = tamper(entries[2]!, { direction: 'SIDEWAYS' as LedgerEntryState['direction'] });
+    const result = reconcileWallet(wallet, [entries[0]!, entries[1]!, unknownDebit]);
+    expect(result.calculatedBalance?.toString()).toBe('150.00');
+    expect(result.difference?.toString()).toBe('30.25');
+    expect(result.divergences.map((d) => d.code)).toEqual(['UNKNOWN_DIRECTION', 'BALANCE_MISMATCH']);
+  });
+
   it('flags an OPENING that is not the first entry', () => {
     const { wallet, entries } = history();
     const moved = tamper(entries[2]!, { entryType: LedgerEntryType.OPENING });
@@ -149,7 +172,7 @@ describe('reconcileWallet', () => {
     const unknown = tamper(entries[1]!, { direction: 'SIDEWAYS' as LedgerEntryState['direction'] });
     const result = reconcileWallet(wallet, [entries[0]!, unknown, entries[2]!]);
     expect(result.divergences.map((d) => d.code)).toContain('UNKNOWN_DIRECTION');
-    expect(result.calculatedBalance).toEqual(brl('69.75'));
+    expect(result.calculatedBalance?.toString()).toBe('69.75');
   });
 
   it('flags entries out of seq order', () => {
