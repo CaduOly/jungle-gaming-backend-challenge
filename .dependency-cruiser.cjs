@@ -1,12 +1,16 @@
 const INFRA_ONLY_PACKAGES = [
-  '@mikro-orm',
-  '@aws-sdk',
-  '@smithy',
-  'pg',
-  'jose',
-  'pino',
-  'prom-client',
-  '@opentelemetry',
+  '@mikro-orm/[^/]+(/|$)',
+  '@aws-sdk/[^/]+(/|$)',
+  '@smithy/[^/]+(/|$)',
+  'aws-sdk(/|$)',
+  'pg(/|$|-)',
+  'postgres(/|$)',
+  'kysely(/|$)',
+  'knex(/|$)',
+  'jose(/|$)',
+  'pino(/|$|-)',
+  'prom-client(/|$)',
+  '@opentelemetry/[^/]+(/|$)',
 ].join('|');
 
 /** @type {import('dependency-cruiser').IConfiguration} */
@@ -14,15 +18,22 @@ module.exports = {
   forbidden: [
     {
       name: 'business-imports-only-business',
-      comment: 'business/** is pure: no npm packages, no node builtins, no infrastructure.',
+      comment: 'business/** is pure: no npm packages, no node builtins, no infrastructure. Specs may import bun:test.',
       severity: 'error',
       from: { path: '^src/business/' },
-      to: { pathNot: '^src/business/' },
+      to: { pathNot: ['^src/business/', '^bun:test$'] },
+    },
+    {
+      name: 'shared-kernel-imports-no-context',
+      comment: 'business/shared is the shared kernel and must not depend on any bounded context.',
+      severity: 'error',
+      from: { path: '^src/business/shared/' },
+      to: { path: '^src/business/', pathNot: '^src/business/shared/' },
     },
     {
       name: 'cross-context-only-via-public-api',
       comment:
-        'A bounded context may only reach another one through entity/, event/, port/ or value-object/. business/shared is the shared kernel.',
+        'A bounded context may only reach another one through entity/, enum/, event/, port/ or value-object/. business/shared is the shared kernel.',
       severity: 'error',
       from: { path: '^src/business/([^/]+)/' },
       to: {
@@ -30,7 +41,7 @@ module.exports = {
         pathNot: [
           '^src/business/$1/',
           '^src/business/shared/',
-          '^src/business/[^/]+/(entity|event|port|value-object)/',
+          '^src/business/[^/]+/(entity|enum|event|port|value-object)/',
         ],
       },
     },
@@ -43,10 +54,10 @@ module.exports = {
     },
     {
       name: 'infra-packages-only-in-infrastructure',
-      comment: 'ORM, AWS SDK, jose, pino, prom-client and OpenTelemetry only inside infrastructure/**.',
+      comment: 'ORM/SQL drivers, AWS SDK, jose, pino, prom-client and OpenTelemetry only inside infrastructure/** (specs included).',
       severity: 'error',
       from: { pathNot: '^src/infrastructure/' },
-      to: { path: `(^|/)node_modules/(${INFRA_ONLY_PACKAGES})(/|$)` },
+      to: { path: `(^|/)node_modules/(${INFRA_ONLY_PACKAGES})` },
     },
     {
       name: 'no-unresolvable',
@@ -57,7 +68,6 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: '\\.spec\\.ts$' },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.json' },
     enhancedResolveOptions: {

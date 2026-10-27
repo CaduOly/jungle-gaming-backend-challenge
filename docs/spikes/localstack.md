@@ -25,7 +25,13 @@ A 4.4.0 foi validada na prática: sobe e atende SQS sem token. A tag é fixa no
   - `wagering-commands.fifo` → `wagering-commands-dlq.fifo`
   - `wagering-events.fifo` → `wagering-events-dlq.fifo`
   - todas FIFO, `ContentBasedDeduplication=false`, redrive com `maxReceiveCount=5`.
-- O healthcheck do compose só fica verde depois do init (`/_localstack/init/ready` com `completed: true`).
+- O healthcheck do compose (`infra/localstack/healthcheck.sh`) só fica verde quando o init deu certo de verdade:
+  - `/_localstack/init/ready` com `completed: true`, `init-sqs.sh` em `SUCCESSFUL` e nenhum script em `ERROR`;
+  - `wagering-commands.fifo` e `wagering-events.fifo` existem, com `RedrivePolicy` apontando para a DLQ certa.
+
+  Só `completed: true` não basta. Num LocalStack descartável, com um init que termina em `exit 1`, o
+  endpoint devolve `{"completed": true, "scripts": [{"name": "init-sqs.sh", "state": "ERROR"}]}`. O
+  healthcheck antigo, que só olhava `completed`, saía com 0 e marcava o container como healthy. O novo sai com 1.
 - Redrive: 5 receives sem delete devolvem `ApproximateReceiveCount` 1..5. No 6º receive a fila principal vem
   vazia e a mensagem aparece na DLQ com `ApproximateReceiveCount=6` e
   `DeadLetterQueueSourceArn` apontando para a fila de origem.
