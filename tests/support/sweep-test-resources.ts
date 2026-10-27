@@ -24,22 +24,34 @@ export const testResourceSuffix = (name: string): string | undefined =>
 
 export const suffixCreatedAt = (suffix: string): number => Number.parseInt(suffix.slice(0, 12), 16);
 
-const isSweepable = (name: string, options: SweepOptions): boolean => {
+export interface SweepCriteria {
+  readonly minAgeMs: number;
+  readonly now: number;
+  readonly onlySuffixes?: ReadonlySet<string>;
+}
+
+/** Pure: a test resource, inside `onlySuffixes` when given, and at least `minAgeMs` old at `now`. */
+export const isSweepable = (name: string, criteria: SweepCriteria): boolean => {
   const suffix = testResourceSuffix(name);
   if (suffix === undefined) return false;
-  if (options.onlySuffixes !== undefined) return options.onlySuffixes.has(suffix);
-  const age = (options.now ?? Date.now()) - suffixCreatedAt(suffix);
-  return age >= (options.minAgeMs ?? DEFAULT_MIN_AGE_MS);
+  if (criteria.onlySuffixes !== undefined && !criteria.onlySuffixes.has(suffix)) return false;
+  return criteria.now - suffixCreatedAt(suffix) >= criteria.minAgeMs;
 };
 
-const sweepDatabases = async (config: TestInfraConfig, options: SweepOptions): Promise<string[]> => {
+const criteriaOf = (options: SweepOptions): SweepCriteria => ({
+  minAgeMs: options.minAgeMs ?? DEFAULT_MIN_AGE_MS,
+  now: options.now ?? Date.now(),
+  ...(options.onlySuffixes === undefined ? {} : { onlySuffixes: options.onlySuffixes }),
+});
+
+const sweepDatabases = async (config: TestInfraConfig, criteria: SweepCriteria): Promise<string[]> => {
   const client = new Client({ connectionString: postgresUrl(config, config.postgres.adminDatabase) });
   await client.connect();
   try {
     const { rows } = await client.query<{ datname: string }>(
       "SELECT datname FROM pg_database WHERE datname LIKE 'wagering\\_test\\_%'",
     );
-    const doomed = rows.map((row) => row.datname).filter((name) => isSweepable(name, options));
+    const doomed = rows.map((row) => row.datname).filter((name) => isSweepable(name, criteria));
     for (const name of doomed) await client.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
     return doomed;
   } finally {
@@ -60,10 +72,10 @@ const listQueueUrls = async (client: SQSClient): Promise<string[]> => {
 
 const queueName = (url: string): string => url.slice(url.lastIndexOf('/') + 1);
 
-const sweepQueues = async (config: TestInfraConfig, options: SweepOptions): Promise<string[]> => {
+const sweepQueues = async (config: TestInfraConfig, criteria: SweepCriteria): Promise<string[]> => {
   const client = createSqsClient(config);
   try {
-    const doomed = (await listQueueUrls(client)).filter((url) => isSweepable(queueName(url), options));
+    const doomed = (await listQueueUrls(client)).filter((url) => isSweepable(queueName(url), criteria));
     await Promise.all(doomed.map((QueueUrl) => client.send(new DeleteQueueCommand({ QueueUrl }))));
     return doomed.map(queueName);
   } finally {
@@ -75,7 +87,8 @@ export const sweepTestResources = async (
   options: SweepOptions = {},
   config: TestInfraConfig = testInfraConfig(),
 ): Promise<SweepReport> => {
-  const [databases, queues] = await Promise.all([sweepDatabases(config, options), sweepQueues(config, options)]);
+  const criteria = criteriaOf(options);
+  const [databases, queues] = await Promise.all([sweepDatabases(config, criteria), sweepQueues(config, criteria)]);
   return { databases, queues };
 };
 

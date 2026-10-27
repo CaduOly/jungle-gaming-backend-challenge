@@ -1,6 +1,11 @@
 import { afterEach, beforeAll, describe, expect, it } from 'bun:test';
 import { ResourceScope, settleAllOrThrow } from '../../support/settle';
-import { suffixCreatedAt, sweepTestResources, testResourceSuffix } from '../../support/sweep-test-resources';
+import {
+  isSweepable,
+  suffixCreatedAt,
+  sweepTestResources,
+  testResourceSuffix,
+} from '../../support/sweep-test-resources';
 import { createTestDatabase, type TestDatabase } from '../../support/test-database';
 import { createTestQueues, type TestQueues } from '../../support/test-queues';
 import { ensureInfraUp } from '../../support/ensure-infra-up';
@@ -43,10 +48,29 @@ describe('test resource sweep', () => {
     expect(createdAt).toBeLessThanOrEqual(Date.now());
   });
 
-  it('keeps resources younger than the minimum age', async () => {
-    const database = await scope.track(createTestDatabase(), (db: TestDatabase) => db.drop());
-    const report = await sweepTestResources({ minAgeMs: 60 * 60 * 1000 });
-    expect(report.databases).not.toContain(database.name);
+  describe('isSweepable (pure, with an injected now)', () => {
+    const suffix = uniqueSuffix();
+    const createdAt = suffixCreatedAt(suffix);
+    const name = `wagering_test_${suffix}`;
+    const HOUR = 60 * 60 * 1000;
+
+    it('keeps resources younger than the minimum age and sweeps older ones', () => {
+      expect(isSweepable(name, { minAgeMs: HOUR, now: createdAt + HOUR - 1 })).toBe(false);
+      expect(isSweepable(name, { minAgeMs: HOUR, now: createdAt + HOUR })).toBe(true);
+    });
+
+    it('applies onlySuffixes together with the age check', () => {
+      const old = createdAt + 2 * HOUR;
+      expect(isSweepable(name, { minAgeMs: HOUR, now: old, onlySuffixes: new Set([uniqueSuffix()]) })).toBe(false);
+      expect(isSweepable(name, { minAgeMs: HOUR, now: old, onlySuffixes: new Set([suffix]) })).toBe(true);
+      expect(isSweepable(name, { minAgeMs: HOUR, now: createdAt, onlySuffixes: new Set([suffix]) })).toBe(false);
+    });
+
+    it('never sweeps a compose resource, whatever the age', () => {
+      for (const compose of ['wagering', 'wagering-events.fifo', 'wagering-commands-dlq.fifo']) {
+        expect(isSweepable(compose, { minAgeMs: 0, now: Number.MAX_SAFE_INTEGER })).toBe(false);
+      }
+    });
   });
 
   it('drops leaked databases and queues without touching the compose queues', async () => {
@@ -57,7 +81,8 @@ describe('test resource sweep', () => {
     const suffix = testResourceSuffix(database.name);
     expect(suffix).toBeDefined();
 
-    const report = await sweepTestResources({ onlySuffixes: new Set([database.name.slice(-32), queues.suffix]) });
+    const ownSuffixes = new Set([database.name.slice(-32), queues.suffix]);
+    const report = await sweepTestResources({ minAgeMs: 0, onlySuffixes: ownSuffixes });
 
     expect(report.databases).toEqual([database.name]);
     expect([...report.queues].sort()).toEqual(
@@ -68,7 +93,7 @@ describe('test resource sweep', () => {
         `wagering-events-dlq-${queues.suffix}.fifo`,
       ].sort(),
     );
-    const again = await sweepTestResources({ onlySuffixes: new Set([database.name.slice(-32), queues.suffix]) });
+    const again = await sweepTestResources({ minAgeMs: 0, onlySuffixes: ownSuffixes });
     expect(again).toEqual({ databases: [], queues: [] });
   });
 });
