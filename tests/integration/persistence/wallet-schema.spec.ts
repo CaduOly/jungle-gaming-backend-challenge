@@ -22,6 +22,12 @@ describe('wallets schema', () => {
     expect(rows[0]!.balance).toBe('999999999999999999.99');
   });
 
+  it('rounds a third decimal place half up (documents why Money must reject it before the database)', async () => {
+    const id = await insertWallet(client, { balance: '10.005' });
+    const { rows } = await client.query<{ balance: string }>('SELECT balance FROM wallets WHERE id = $1', [id]);
+    expect(rows[0]!.balance).toBe('10.01');
+  });
+
   it('rejects a negative balance on insert and on update', async () => {
     await expectSqlError(insert(client, 'wallets', walletRow({ balance: '-0.01' })), '23514', 'wallets_balance_non_negative');
     const id = await insertWallet(client, { balance: '10.00' });

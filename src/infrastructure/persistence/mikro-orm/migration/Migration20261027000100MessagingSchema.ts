@@ -3,8 +3,9 @@ import { Migration } from '@mikro-orm/migrations';
 /*
  * Inbox: dedup of incoming SQS messages per consumer. Same message_id with another payload_hash is a
  * permanent contract violation (DLQ), decided by the application from the stored hash.
- * Outbox: one row per integration event (PK = event_id, the consumers' dedup key). The partial index keeps
- * the publisher's claim (`… WHERE published_at IS NULL … FOR UPDATE SKIP LOCKED`) cheap as the table grows.
+ * Outbox: one row per integration event (PK = event_id, the consumers' dedup key). The partial indexes keep
+ * the publisher's claim (`… WHERE published_at IS NULL … ORDER BY occurred_at, event_id … FOR UPDATE SKIP LOCKED`)
+ * cheap as the table grows, whether the planner filters by next_attempt_at or walks the occurrence order.
  * lease_token fences writes: a claim sets (locked_until, lease_token) together, and a retry only applies with
  * `WHERE event_id = $1 AND published_at IS NULL AND lease_token = $2`, so a publisher whose lease expired and
  * was reclaimed cannot overwrite the new owner's state.
@@ -48,6 +49,10 @@ CREATE TABLE outbox_messages (
 
 CREATE INDEX outbox_messages_unpublished
   ON outbox_messages (next_attempt_at, occurred_at, event_id)
+  WHERE published_at IS NULL;
+
+CREATE INDEX outbox_messages_unpublished_by_occurrence
+  ON outbox_messages (occurred_at, event_id)
   WHERE published_at IS NULL;
 `;
 
