@@ -30,12 +30,14 @@ Fluxo de cada task:
 | ID | Task | Dono | Depende de | Etapa do plano |
 | --- | --- | --- | --- | --- |
 | T01 | Scaffold, lint, dependency-cruiser, compose (PG + LocalStack), helpers de teste, spike LocalStack | Dev A | — | 1 |
+| T01b | Hardening da T01 (achados do QA): lint de dinheiro, healthcheck do LocalStack, limpeza de recursos de teste, regras extras de arquitetura | Dev A | T01 | 1 |
 | T02 | `Money` + erros base + `IUseCase` + ports compartilhados | Dev A | T01 | 2 |
-| T03 | `Wallet` + `WalletLedgerEntry` + `WalletBalanceChanged` | Dev A | T02 | 3 |
-| T04 | Messaging: `InboxMessage`, `OutboxMessage`, `IntegrationEvent`, ports | Dev B | T02 | 5 |
+| T03 | `Wallet` + `WalletLedgerEntry` + reconciliação pura (o `WalletBalanceChanged` entra depois da T04) | Dev A | T02 | 3 |
+| T04 | Messaging: `InboxMessage`, `OutboxMessage`, `IntegrationEvent`, ports, `PublishOutboxBatch`, backoff | Dev B | T01 | 5 |
 | T05 | `WagerTransaction`, transições, policies, `ReferenceResolver`, `WagerSettlement` | Dev A | T03 | 4 |
 | T06 | Use cases com fakes: `ProcessWagerTransaction`, idempotência, hash, `WagerOutcomeEvents`, wallet use cases, `RetryPendingReferences` | Dev B | T04, T05 | 6 |
-| T07 | Persistência MikroORM: migrations, constraints, triggers, UoW, contratos, atomicidade, races 2×80 e 50 paralelos | Dev A | T06 | 7 |
+| T07a | Schema: migrations, constraints, índices parciais e triggers, testados no PG real | Dev B | T02 | 7 |
+| T07b | Persistência: mappers, repositórios, UoW, contratos, atomicidade, races 2×80 e 50 paralelos | Dev A | T06, T07a | 7 |
 | T08 | HTTP Nest: controllers, filter, status table-driven, cursor, reconciliação, auth no-op | Dev B | T07 | 8 |
 | T09 | SQS consumer: inbox, DLQ explícita, circuit breaker, SIGTERM, crash commit→ack | Dev A | T08 | 9 |
 | T10 | Outbox publisher + worker de pendências | Dev B | T08 | 10 |

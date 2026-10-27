@@ -16,6 +16,8 @@ describe('Money', () => {
     it.each(['0.00', '0.01', '0.10', '1.00', '25.00', '25.50', '100.99', MAX])('accepts %p and round-trips it', (amount) => {
       const money = brl(amount);
       expect(money.toString()).toBe(amount);
+      expect(money.amount).toBe(amount);
+      expect(money.amount).toBe(money.toString());
       expect(money.toProps()).toEqual({ amount, currency: 'BRL' });
       expect(money.currency).toBe('BRL');
     });
@@ -206,6 +208,10 @@ describe('Money', () => {
       expect(() => {
         raw.currency = 'USD';
       }).toThrow(TypeError);
+      expect(() => {
+        raw.amount = '99.00';
+      }).toThrow(TypeError);
+      expect(money.amount).toBe('25.00');
       expect(money.toProps()).toEqual({ amount: '25.00', currency: 'BRL' });
     });
 
@@ -213,11 +219,27 @@ describe('Money', () => {
       expect(Object.isFrozen(brl('1.00'))).toBe(true);
     });
 
-    it('does not expose the bigint through spread or keys', () => {
+    it('exposes only amount and currency, both strings, through spread or keys', () => {
       const money = brl('25.00');
-      expect({ ...money }).toEqual({ currency: 'BRL' });
-      expect(Object.keys(money)).toEqual(['currency']);
-      expect(Object.values(money).some((value) => typeof value === 'bigint')).toBe(false);
+      expect({ ...money }).toEqual({ amount: '25.00', currency: 'BRL' });
+      expect(Object.keys(money).sort()).toEqual(['amount', 'currency']);
+      expect(Object.values(money).every((value) => typeof value === 'string')).toBe(true);
+    });
+
+    it('keeps amount in step with the arithmetic', () => {
+      expect(brl('0.10').add(brl('0.20')).amount).toBe('0.30');
+      expect(brl('1.00').subtract(brl('0.01')).amount).toBe('0.99');
+      expect(Money.zero('BRL').amount).toBe('0.00');
+      expect(brl(MAX).amount).toBe(MAX);
+    });
+  });
+
+  describe('structural equality', () => {
+    it('toEqual sees the amount, not only the currency', () => {
+      expect(brl('1.00')).not.toEqual(brl('2.00'));
+      expect(brl('1.00')).toEqual(brl('1.00'));
+      expect(brl('1.00')).not.toEqual(usd('1.00'));
+      expect({ balance: brl('0.30') }).toEqual({ balance: brl('0.10').add(brl('0.20')) });
     });
   });
 
