@@ -55,6 +55,8 @@ const WRITES: ReadonlySet<string> = new Set([
 export class FakeUnitOfWork implements IUnitOfWork<TxRepositories> {
   commits = 0;
   rollbacks = 0;
+  /** Mode of every unit run so far, in order. */
+  readonly modes: NonNullable<UnitOfWorkOptions['mode']>[] = [];
   private readonly hooks = new Map<string, { hook: Hook; remaining: number }[]>();
 
   constructor(readonly db: FakeDatabase = new FakeDatabase()) {}
@@ -81,6 +83,7 @@ export class FakeUnitOfWork implements IUnitOfWork<TxRepositories> {
   }
 
   async run<T>(work: (tx: TxRepositories) => Promise<T>, options: UnitOfWorkOptions = {}): Promise<T> {
+    this.modes.push(options.mode ?? 'read-write');
     const undo = new UndoLog();
     const wallets = new InMemoryWalletRepository(this.db.wallets, undo);
     const wagers = new InMemoryWagerTransactionRepository(this.db.wagers, undo);
