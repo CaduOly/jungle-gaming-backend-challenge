@@ -1,0 +1,93 @@
+import { Wallet, type WalletState } from '../../../src/business/wallet/entity/wallet';
+import { WalletAlreadyExistsError } from '../../../src/business/wallet/error/wallet-already-exists-error';
+import type { IWalletRepository } from '../../../src/business/wallet/port/wallet.repository.port';
+import { KeyedMutex, type Release } from './keyed-mutex';
+
+export class StaleWalletVersionError extends Error {
+  constructor(walletId: string, expected: number, actual: number) {
+    super(`Wallet ${walletId} is at version ${actual}, expected ${expected}`);
+    this.name = 'StaleWalletVersionError';
+  }
+}
+
+/** Shared "table" of wallets plus the per-wallet lock, shared by every scoped repository. */
+export class InMemoryWalletStore {
+  readonly locks = new KeyedMutex();
+  private readonly rows = new Map<string, WalletState>();
+
+  read(id: string): Wallet | null {
+    const row = this.rows.get(id);
+    return row === undefined ? null : Wallet.rehydrate(row);
+  }
+
+  write(wallet: Wallet): void {
+    this.rows.set(wallet.id, wallet.toState());
+  }
+
+  has(id: string): boolean {
+    return this.rows.has(id);
+  }
+
+  findByPlayerAndCurrency(playerId: string, currency: string): Wallet | null {
+    for (const row of this.rows.values()) {
+      if (row.playerId === playerId && row.balance.currency === currency) return Wallet.rehydrate(row);
+    }
+    return null;
+  }
+
+  all(): Wallet[] {
+    return [...this.rows.values()].map((row) => Wallet.rehydrate(row));
+  }
+}
+
+/**
+ * Repository scoped to one unit of work. Locks taken by `lockById` are held until
+ * `releaseLocks()`, which the fake unit of work calls on commit or rollback.
+ * Stricter than Postgres on purpose: `update` requires the wallet to be locked in this scope.
+ */
+export class InMemoryWalletRepository implements IWalletRepository {
+  private readonly held = new Map<string, Release>();
+
+  constructor(private readonly store: InMemoryWalletStore) {}
+
+  async lockById(id: string): Promise<Wallet | null> {
+    if (!this.store.has(id)) return null;
+    if (!this.held.has(id)) this.held.set(id, await this.store.locks.acquire(id));
+    return this.store.read(id);
+  }
+
+  async findById(id: string): Promise<Wallet | null> {
+    return this.store.read(id);
+  }
+
+  async existsByPlayerAndCurrency(playerId: string, currency: string): Promise<boolean> {
+    return this.store.findByPlayerAndCurrency(playerId, currency) !== null;
+  }
+
+  async insert(wallet: Wallet): Promise<void> {
+    if (this.store.has(wallet.id)) throw new Error(`Wallet ${wallet.id} already exists`);
+    if (this.store.findByPlayerAndCurrency(wallet.playerId, wallet.currency) !== null) {
+      throw new WalletAlreadyExistsError(wallet.playerId, wallet.currency);
+    }
+    this.store.write(wallet);
+  }
+
+  async update(wallet: Wallet, expectedVersion: number): Promise<void> {
+    if (!this.held.has(wallet.id)) throw new Error(`Wallet ${wallet.id} must be locked before update`);
+    const current = this.store.read(wallet.id);
+    if (current === null) throw new Error(`Wallet ${wallet.id} not found`);
+    if (current.version !== expectedVersion) {
+      throw new StaleWalletVersionError(wallet.id, expectedVersion, current.version);
+    }
+    this.store.write(wallet);
+  }
+
+  holdsLock(id: string): boolean {
+    return this.held.has(id);
+  }
+
+  releaseLocks(): void {
+    for (const release of this.held.values()) release();
+    this.held.clear();
+  }
+}
