@@ -11,6 +11,8 @@ import { GetLedger } from '../../../src/business/wallet/use-case/get-ledger/get-
 import { GetWallet } from '../../../src/business/wallet/use-case/get-wallet/get-wallet';
 import { ReconcileWallet } from '../../../src/business/wallet/use-case/reconcile-wallet/reconcile-wallet';
 import type { WalletView } from '../../../src/business/wallet/use-case/wallet-view';
+
+export type { WalletView };
 import { FakeClock } from './fake-clock';
 import { FakePayloadHasher } from './fake-payload-hasher';
 import { FakeUnitOfWork } from './fake-unit-of-work';

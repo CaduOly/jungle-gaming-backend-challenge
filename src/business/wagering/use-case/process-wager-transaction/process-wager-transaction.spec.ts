@@ -6,13 +6,12 @@ import {
   createFakeWageringApp,
   type FakeWageringApp,
   type SubmissionOptions,
+  type WalletView,
 } from '../../../../../tests/support/fakes/fake-wagering-app';
-import { InboxPayloadMismatchError } from '../../../messaging/error/inbox-payload-mismatch-error';
 import { InvalidRequestError } from '../../../shared/error/invalid-request-error';
 import { UniqueConstraintViolationError } from '../../../shared/error/unique-constraint-violation-error';
 import { WalletNotFoundError } from '../../../shared/error/wallet-not-found-error';
 import { Money } from '../../../shared/value-object/money';
-import type { WalletView } from '../../../wallet/use-case/wallet-view';
 import { WagerTransaction } from '../../entity/wager-transaction';
 import { WagerKind } from '../../enum/wager-kind';
 import { IdempotencyConflictError } from '../../error/idempotency-conflict-error';
@@ -506,9 +505,10 @@ describe('ProcessWagerTransaction', () => {
     it('the same messageId with another payload is a permanent error and persists nothing', async () => {
       const wallet = await open();
       await submit(wallet, 'BET', 'tx', { source: SQS('msg-1') });
-      await expect(submit(wallet, 'BET', 'tx-other', { source: SQS('msg-1') })).rejects.toBeInstanceOf(
-        InboxPayloadMismatchError,
-      );
+      await expect(submit(wallet, 'BET', 'tx-other', { source: SQS('msg-1') })).rejects.toMatchObject({
+        name: 'InboxPayloadMismatchError',
+        messageId: 'msg-1',
+      });
       expect(wagerCount()).toBe(1);
       expect(balanceOf(wallet)).toBe('990.00');
     });

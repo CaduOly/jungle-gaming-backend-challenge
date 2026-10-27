@@ -5,9 +5,9 @@ import {
   createFakeWageringApp,
   type FakeWageringApp,
   type SubmissionOptions,
+  type WalletView,
 } from '../../../../../tests/support/fakes/fake-wagering-app';
 import { FailureCode } from '../../../shared/error/failure-code';
-import type { WalletView } from '../../../wallet/use-case/wallet-view';
 
 describe('RetryPendingReferences', () => {
   let app: FakeWageringApp;
