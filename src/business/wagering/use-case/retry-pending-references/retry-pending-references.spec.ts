@@ -108,12 +108,41 @@ describe('RetryPendingReferences', () => {
 
   it('runs out with REFERENCE_NOT_PROCESSED when the reference exists but itself stays pending', async () => {
     const wallet = await open();
-    await submit(wallet, 'WIN', 'win', { amount: '30.00', reference: 'bet' });
+    const winId = (await submit(wallet, 'WIN', 'win', { amount: '30.00', reference: 'bet' })).transactionId;
+    app.db.wagers.rows.get(winId)!.state.nextAttemptAt = new Date(app.clock.now().getTime() + 3_600_000);
     const id = (await submit(wallet, 'ROLLBACK', 'rb', { amount: '30.00', reference: 'win' })).transactionId;
+    expect(await runAt(1_000)).toMatchObject({ claimed: 1, rescheduled: 1 });
+    expect(await runAt(2_000)).toMatchObject({ claimed: 1, rescheduled: 1 });
+    expect(await runAt(4_000)).toMatchObject({ claimed: 1, exhausted: 1, rejected: 0 });
+    expect(stateOf(id)).toMatchObject({ status: 'REJECTED', failureCode: 'REFERENCE_NOT_PROCESSED', attempts: 3 });
+    expect(stateOf(winId)).toMatchObject({ status: 'PENDING_REFERENCE', attempts: 1 });
+  });
+
+  it('moves the transaction to FAILED when settling breaks a domain invariant (credit over the Money maximum)', async () => {
+    const wallet = await open('999999999999999999.99');
+    const id = (await submit(wallet, 'WIN', 'win', { amount: '1.00', reference: 'bet' })).transactionId;
+    await submit(wallet, 'BET', 'bet', { amount: '0.50' });
+    const before = app.db.outbox.all().length;
+
+    expect(await runAt(1_000)).toMatchObject({ claimed: 1, failed: 1, processed: 0, erroredIds: [] });
+
+    expect(stateOf(id)).toMatchObject({ status: 'FAILED', failureCode: 'REFERENCE_MISMATCH' });
+    expect(balanceOf(wallet)).toBe('999999999999999999.49');
+    expect(app.db.outbox.all()).toHaveLength(before);
+    expect(await runAt(60_000)).toMatchObject({ claimed: 0 });
+  });
+
+  it('correlates the events of a settled retry by the transaction id', async () => {
+    const wallet = await open();
+    const id = (
+      await submit(wallet, 'ROLLBACK', 'rb', { amount: '30.00', reference: 'bet', correlationId: 'request-1' })
+    ).transactionId;
+    await submit(wallet, 'BET', 'bet', { amount: '30.00' });
+    const before = app.db.outbox.all().length;
     await runAt(1_000);
-    await runAt(2_000);
-    await runAt(4_000);
-    expect(stateOf(id)).toMatchObject({ status: 'REJECTED', failureCode: 'REFERENCE_NOT_PROCESSED' });
+    const events = app.db.outbox.all().slice(before);
+    expect(events).toHaveLength(2);
+    for (const event of events) expect(event.payload.correlationId).toBe(id);
   });
 
   it('rejects at once when the reference shows up rejected or failing a policy', async () => {
