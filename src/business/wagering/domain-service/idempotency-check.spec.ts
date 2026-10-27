@@ -55,4 +55,23 @@ describe('IdempotencyCheck', () => {
   it('scopes keys and external ids by provider', async () => {
     expect(await check.check(request({ providerId: 'provider-2' }))).toEqual({ type: 'New' });
   });
+
+  describe('when the request commits between the key lookup and the external id lookup', () => {
+    const racing = (payloadHash: string) => {
+      const bet = aWager(WagerKind.BET, 'ext-race');
+      bet.markProcessed(brl('80.00'), T0);
+      return new IdempotencyCheck({
+        findByIdempotencyKey: async () => null,
+        findByExternalId: async () => bet,
+      }).check(request({ idempotencyKey: 'key-ext-race', externalTransactionId: 'ext-race', payloadHash }));
+    };
+
+    it('is a Replay, not DUPLICATE_EXTERNAL_TRANSACTION', async () => {
+      expect(await racing('hash-ext-race')).toMatchObject({ type: 'Replay', existing: { id: 'id-ext-race' } });
+    });
+
+    it('is still IDEMPOTENCY_CONFLICT when the payload differs', async () => {
+      expect(await racing('different')).toMatchObject({ type: 'Conflict', code: 'IDEMPOTENCY_CONFLICT' });
+    });
+  });
 });
