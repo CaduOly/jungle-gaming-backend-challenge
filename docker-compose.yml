@@ -30,11 +30,13 @@ services:
       - "${LOCALSTACK_HOST_PORT:-4566}:4566"
     volumes:
       - ./infra/localstack/init-sqs.sh:/etc/localstack/init/ready.d/init-sqs.sh:ro
+      - ./infra/localstack/healthcheck.sh:/usr/local/bin/wagering-healthcheck.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/init/ready | grep -q '\"completed\": *true'"]
-      interval: 2s
-      timeout: 3s
-      retries: 60
+      test: ["CMD", "bash", "/usr/local/bin/wagering-healthcheck.sh"]
+      interval: 3s
+      timeout: 10s
+      start_period: 60s
+      retries: 40
 
 volumes:
   postgres-data:
