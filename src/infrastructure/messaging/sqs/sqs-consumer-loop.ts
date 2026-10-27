@@ -63,8 +63,8 @@ export interface SqsConsumerLoopDeps {
   readonly faults?: FaultInjector;
   readonly requestTimeoutMs?: number;
   /** Hooks for the metrics/log decorators (T11). */
-  readonly onOutcome?: (event: MessageOutcomeEvent) => void;
-  readonly onError?: (error: unknown, operation: string) => void;
+  readonly onOutcome?: (event: MessageOutcomeEvent) => unknown;
+  readonly onError?: (error: unknown, operation: string) => unknown;
   readonly onCircuitStateChange?: (state: CircuitState) => void;
 }
 
@@ -79,6 +79,7 @@ interface Received {
   readonly sqsMessageId: string;
   readonly receiveCount: number;
   readonly groupId: string | undefined;
+  readonly receivedAt: number;
 }
 
 const toVisibilitySeconds = (delayMs: number): number =>
@@ -86,6 +87,15 @@ const toVisibilitySeconds = (delayMs: number): number =>
 
 const truncate = (value: string): string =>
   value.length <= MAX_DETAIL_LENGTH ? value : `${value.slice(0, MAX_DETAIL_LENGTH - 1)}…`;
+
+/** An observer must never stop the consumer, whether it throws or returns a rejected promise. */
+const observe = (callback: () => unknown): void => {
+  try {
+    Promise.resolve(callback()).catch(() => undefined);
+  } catch {
+    // see above
+  }
+};
 
 const isAbort = (error: unknown): boolean =>
   error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError');
@@ -200,6 +210,7 @@ export class SqsConsumerLoop {
         }),
         { abortSignal: this.receiveAbort.signal },
       );
+      const receivedAt = this.clock.now().getTime();
       return Messages.flatMap((message) => {
         if (message.ReceiptHandle === undefined || message.MessageId === undefined) return [];
         return [
@@ -209,6 +220,7 @@ export class SqsConsumerLoop {
             sqsMessageId: message.MessageId,
             receiveCount: parseSafeInteger(message.Attributes?.ApproximateReceiveCount) ?? 1,
             groupId: message.Attributes?.MessageGroupId,
+            receivedAt,
           },
         ];
       });
@@ -354,8 +366,15 @@ export class SqsConsumerLoop {
     );
   }
 
+  /**
+   * Sets the visibility to visibilityTimeout plus the time already spent since the receive. On AWS that only
+   * holds the message a little longer after a crash; on LocalStack it is required, because LocalStack
+   * expires the receipt handle at receive time + the last visibility set, so a plain extension would make
+   * the final DeleteMessage fail with "The receipt handle has expired".
+   */
   private async extendVisibility(messages: Received[]): Promise<void> {
     if (messages.length === 0) return;
+    const now = this.clock.now().getTime();
     try {
       await this.deps.client.send(
         new ChangeMessageVisibilityBatchCommand({
@@ -363,7 +382,10 @@ export class SqsConsumerLoop {
           Entries: messages.map((message, index) => ({
             Id: `${index}`,
             ReceiptHandle: message.receiptHandle,
-            VisibilityTimeout: this.deps.config.visibilityTimeoutSeconds,
+            VisibilityTimeout: Math.min(
+              MAX_VISIBILITY_TIMEOUT_SECONDS,
+              this.deps.config.visibilityTimeoutSeconds + toVisibilitySeconds(now - message.receivedAt),
+            ),
           })),
         }),
         { abortSignal: AbortSignal.timeout(this.requestTimeoutMs) },
@@ -379,18 +401,11 @@ export class SqsConsumerLoop {
     startedAt: number,
     transient: boolean,
   ): void {
-    try {
-      this.deps.onOutcome?.({ message, outcome, durationMs: this.clock.now().getTime() - startedAt, transient });
-    } catch {
-      // An observer must never stop the consumer.
-    }
+    const durationMs = this.clock.now().getTime() - startedAt;
+    observe(() => this.deps.onOutcome?.({ message, outcome, durationMs, transient }));
   }
 
   private reportError(error: unknown, operation: string): void {
-    try {
-      this.deps.onError?.(error, operation);
-    } catch {
-      // An observer must never stop the consumer.
-    }
+    observe(() => this.deps.onError?.(error, operation));
   }
 }
