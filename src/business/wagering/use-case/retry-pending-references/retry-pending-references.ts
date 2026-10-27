@@ -102,6 +102,8 @@ export class RetryPendingReferences implements IUseCase<void, RetryPendingRefere
     try {
       decision = await this.decide(tx, transaction, wallet, now);
     } catch (error) {
+      // A domain invariant broke while settling (e.g. the credit would overflow the Money maximum): retrying can
+      // never succeed, so the transaction leaves the queue as FAILED with the closest of the persisted codes.
       if (!(error instanceof DomainError) || error instanceof BusinessRuleError) throw error;
       const fresh = await tx.wagers.lockById(id);
       if (fresh === null) throw error;
@@ -116,6 +118,8 @@ export class RetryPendingReferences implements IUseCase<void, RetryPendingRefere
       await tx.wallets.update(wallet, expectedVersion);
     }
     if (transaction.isTerminal()) {
+      // The submission's correlation id is not persisted: the retry is a new causal chain started by the worker,
+      // and the transaction id is what both chains share (it is in every event of the transaction).
       const events = this.outcomeEvents.toEvents(
         { transaction, wallet, entry: decision.entry },
         { correlationId: transaction.id, occurredAt: now },

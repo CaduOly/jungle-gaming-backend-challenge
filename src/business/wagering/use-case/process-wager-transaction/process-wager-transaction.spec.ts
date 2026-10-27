@@ -210,6 +210,16 @@ describe('ProcessWagerTransaction', () => {
         'payload',
       ],
       [
+        'an external id with surrounding whitespace',
+        (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, externalTransactionId: ' tx' } }),
+        'externalTransactionId',
+      ],
+      [
+        'an idempotency key with a trailing space',
+        (input: ReturnType<typeof aSubmission>) => ({ ...input, idempotencyKey: 'key ' }),
+        'idempotencyKey',
+      ],
+      [
         'an SQS source without messageId',
         (input: ReturnType<typeof aSubmission>) => ({ ...input, source: { channel: 'SQS', consumerName: 'c', messageId: '' } as const }),
         'messageId',
@@ -513,12 +523,53 @@ describe('ProcessWagerTransaction', () => {
       expect(balanceOf(wallet)).toBe('990.00');
     });
 
-    it('a new messageId for an already committed decision is answered by the lock-free pre-check', async () => {
+    it('a new messageId for an already committed decision is a replay that still records the message', async () => {
       const wallet = await open();
       const first = await submit(wallet, 'BET', 'tx', { source: SQS('msg-1') });
       const other = await submit(wallet, 'BET', 'tx', { source: SQS('msg-2') });
       expect(other).toEqual({ ...first, idempotentReplay: true });
       expect(wagerCount()).toBe(1);
+      expect((await app.db.inbox.find('wager-consumer', 'msg-2'))?.isProcessed()).toBe(true);
+    });
+
+    it('a messageId reused for another request is a payload mismatch even when that request was committed over HTTP', async () => {
+      const wallet = await open();
+      await submit(wallet, 'BET', 'tx-a', { source: SQS('msg-1') });
+      await submit(wallet, 'BET', 'tx-b');
+      await expect(submit(wallet, 'BET', 'tx-b', { source: SQS('msg-1') })).rejects.toMatchObject({
+        name: 'InboxPayloadMismatchError',
+        messageId: 'msg-1',
+      });
+      expect(balanceOf(wallet)).toBe('980.00');
+    });
+
+    it('a messageId reused with the same key and another amount is a payload mismatch, not a 409', async () => {
+      const wallet = await open();
+      await submit(wallet, 'BET', 'tx', { amount: '10.00', source: SQS('msg-1') });
+      const error = await submit(wallet, 'BET', 'tx', { amount: '11.00', source: SQS('msg-1') }).catch(
+        (reason: unknown) => reason,
+      );
+      expect(error).toMatchObject({ name: 'InboxPayloadMismatchError', messageId: 'msg-1' });
+      expect(error).not.toBeInstanceOf(IdempotencyConflictError);
+      expect(wagerCount()).toBe(1);
+    });
+
+    it('a new messageId whose request is committed by someone else while waiting for the lock is replayed and marked processed', async () => {
+      const wallet = await open();
+      let winner: Awaited<ReturnType<typeof submit>> | undefined;
+      app.uow.before(
+        'wallets.lockById',
+        async () => {
+          winner = await submit(wallet, 'BET', 'tx', { amount: '25.00' });
+        },
+        1,
+      );
+      const result = await submit(wallet, 'BET', 'tx', { amount: '25.00', source: SQS('msg-1') });
+      expect(winner?.idempotentReplay).toBe(false);
+      expect(result).toEqual({ ...winner!, idempotentReplay: true, channel: 'SQS' });
+      expect((await app.db.inbox.find('wager-consumer', 'msg-1'))?.isProcessed()).toBe(true);
+      expect(wagerCount()).toBe(1);
+      expect(balanceOf(wallet)).toBe('975.00');
     });
   });
 
