@@ -90,7 +90,12 @@ export class WagerTransaction {
   }
 
   static rehydrate(state: WagerTransactionState): WagerTransaction {
-    return new WagerTransaction({ ...state });
+    return new WagerTransaction({
+      ...state,
+      createdAt: new Date(state.createdAt),
+      nextAttemptAt: WagerTransaction.copyDate(state.nextAttemptAt),
+      processedAt: WagerTransaction.copyDate(state.processedAt),
+    });
   }
 
   get id(): string {

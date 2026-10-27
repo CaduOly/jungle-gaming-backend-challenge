@@ -3,10 +3,12 @@ import { FailureCode } from '../../../src/business/shared/error/failure-code';
 import { Money } from '../../../src/business/shared/value-object/money';
 import { reconcileWallet } from '../../../src/business/wallet/domain-service/wallet-reconciliation';
 import { Wallet } from '../../../src/business/wallet/entity/wallet';
+import { WalletLedgerEntry } from '../../../src/business/wallet/entity/wallet-ledger-entry';
+import { LedgerDirection } from '../../../src/business/wallet/enum/ledger-direction';
 import { LedgerEntryType } from '../../../src/business/wallet/enum/ledger-entry-type';
 import { WalletAlreadyExistsError } from '../../../src/business/wallet/error/wallet-already-exists-error';
 import { UniqueConstraintViolationError } from '../../../src/business/shared/error/unique-constraint-violation-error';
-import { InMemoryLedger } from './in-memory-ledger';
+import { InMemoryLedger, LedgerConstraintError } from './in-memory-ledger';
 import { InMemoryWalletRepository, InMemoryWalletStore, StaleWalletVersionError } from './in-memory-wallet-repository';
 import { KeyedMutex } from './keyed-mutex';
 
@@ -51,6 +53,43 @@ describe('KeyedMutex', () => {
     const releaseB = await mutex.acquire('b');
     releaseA();
     releaseB();
+  });
+
+  it('never admits two holders: a third locker arriving after the first release waits for the second', async () => {
+    const mutex = new KeyedMutex();
+    let holders = 0;
+    let maxHolders = 0;
+    const hold = async (release: () => void): Promise<void> => {
+      holders += 1;
+      maxHolders = Math.max(maxHolders, holders);
+      await tick();
+      await tick();
+      holders -= 1;
+      release();
+    };
+
+    const releaseFirst = await mutex.acquire('k');
+    holders += 1;
+    maxHolders = Math.max(maxHolders, holders);
+    const second = mutex.acquire('k').then(hold);
+    holders -= 1;
+    releaseFirst();
+    await Promise.resolve();
+    const third = mutex.acquire('k').then(hold);
+    await Promise.all([second, third]);
+
+    expect(maxHolders).toBe(1);
+    expect(mutex.isLocked('k')).toBe(false);
+  });
+
+  it('keeps the key locked while a waiter is queued behind a released holder', async () => {
+    const mutex = new KeyedMutex();
+    const releaseFirst = await mutex.acquire('k');
+    const second = mutex.acquire('k');
+    releaseFirst();
+    expect(mutex.isLocked('k')).toBe(true);
+    (await second)();
+    expect(mutex.isLocked('k')).toBe(false);
   });
 
   it('ignores a second release', async () => {
@@ -114,6 +153,34 @@ describe('InMemoryWalletRepository', () => {
     expect(second?.id).toBe('wallet-1');
     await repository.releaseLocks();
     expect(store.locks.isLocked('wallet-1')).toBe(false);
+  });
+
+  it('forgets the released locks: the scope must lock again before updating', async () => {
+    const { store } = await seed();
+    const repository = new InMemoryWalletRepository(store);
+    const wallet = (await repository.lockById('wallet-1'))!;
+    await repository.releaseLocks();
+    expect(repository.holdsLock('wallet-1')).toBe(false);
+    await expect(repository.update(wallet, 1)).rejects.toThrow('must be locked');
+  });
+
+  it('really re-acquires after a release, so it waits for a scope that took the lock meanwhile', async () => {
+    const { store } = await seed();
+    const repository = new InMemoryWalletRepository(store);
+    const other = new InMemoryWalletRepository(store);
+    await repository.lockById('wallet-1');
+    await repository.releaseLocks();
+    await other.lockById('wallet-1');
+    let reacquired = false;
+    const waiting = repository.lockById('wallet-1').then(() => {
+      reacquired = true;
+    });
+    await tick();
+    expect(reacquired).toBe(false);
+    await other.releaseLocks();
+    await waiting;
+    expect(reacquired).toBe(true);
+    await repository.releaseLocks();
   });
 
   it('is re-entrant within the same scope', async () => {
@@ -194,6 +261,35 @@ describe('InMemoryLedger', () => {
     expect(page.next).toBeNull();
     const firstOfTwo = await ledger.page({ walletId: 'wallet-1', after: null, limit: 1 });
     expect(firstOfTwo.next?.seq).toBe(1n);
+  });
+
+  it('enforces the arithmetic CHECK on entries that bypass the factory', async () => {
+    const ledger = new InMemoryLedger();
+    const broken = WalletLedgerEntry.rehydrate({
+      walletId: 'wallet-1',
+      transactionId: 'win',
+      direction: LedgerDirection.CREDIT,
+      entryType: LedgerEntryType.WIN,
+      amount: brl('1.00'),
+      balanceBefore: brl('0.00'),
+      balanceAfter: brl('2.00'),
+      walletVersion: 2,
+      createdAt: at,
+      seq: undefined,
+    });
+    await expect(ledger.append(broken)).rejects.toThrow(LedgerConstraintError);
+    await expect(ledger.append(broken)).rejects.toThrow('CHECK arithmetic');
+    expect(ledger.count()).toBe(0);
+  });
+
+  it('scopes UNIQUE(wallet_id, wallet_version) per wallet', async () => {
+    const ledger = new InMemoryLedger();
+    for (const id of ['wallet-1', 'wallet-2']) {
+      const { openingEntry } = Wallet.open({ id, playerId: id, initialBalance: brl('1.00'), openingTransactionId: `o-${id}`, at });
+      await ledger.append(openingEntry!);
+    }
+    expect(ledger.count()).toBe(2);
+    expect((await ledger.listAll('wallet-2')).map((entry) => entry.walletVersion)).toEqual([1]);
   });
 
   it('enforces UNIQUE(transaction_id) and UNIQUE(wallet_id, wallet_version)', async () => {

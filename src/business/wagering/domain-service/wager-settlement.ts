@@ -1,9 +1,11 @@
 import { BusinessRuleError } from '../../shared/error/business-rule-error';
 import { FailureCode } from '../../shared/error/failure-code';
+import { InvalidTransactionStateError } from '../../shared/error/invalid-transaction-state-error';
 import type { Wallet } from '../../wallet/entity/wallet';
 import type { WalletLedgerEntry } from '../../wallet/entity/wallet-ledger-entry';
 import type { WagerTransaction } from '../entity/wager-transaction';
 import { WagerKind } from '../enum/wager-kind';
+import { WagerTransactionStatus } from '../enum/wager-transaction-status';
 import { InvalidWagerTransactionError } from '../error/invalid-wager-transaction-error';
 
 export interface SettleCommand {
@@ -28,6 +30,9 @@ type DebitKind = typeof WagerKind.BET | typeof WagerKind.ROLLBACK;
  */
 export class WagerSettlement {
   settle({ transaction, wallet, reference, at }: SettleCommand): SettlementOutcome {
+    if (transaction.isTerminal()) {
+      throw new InvalidTransactionStateError(transaction.status, WagerTransactionStatus.PROCESSED);
+    }
     if (transaction.isOpening) throw new InvalidWagerTransactionError('OPENING is settled by Wallet.open');
     if (wallet.id !== transaction.walletId) {
       throw new InvalidWagerTransactionError(`wallet ${wallet.id} is not ${transaction.walletId}`);

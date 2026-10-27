@@ -290,6 +290,38 @@ describe('Wallet', () => {
     });
   });
 
+  it('copies the dates it receives, so the caller cannot rewrite its history', () => {
+    const at = new Date(openedAt);
+    const { wallet } = Wallet.open({ id: 'w', playerId: 'p', initialBalance: brl('1.00'), openingTransactionId: 'o', at });
+    at.setFullYear(2000);
+    expect(wallet.createdAt).toEqual(openedAt);
+    expect(wallet.updatedAt).toEqual(openedAt);
+
+    const creditAt = new Date(later);
+    wallet.credit({ transactionId: 'win', entryType: LedgerEntryType.WIN, amount: brl('1.00'), at: creditAt });
+    creditAt.setFullYear(2000);
+    expect(wallet.updatedAt).toEqual(later);
+    expect(wallet.createdAt).toEqual(openedAt);
+
+    const debitAt = new Date('2026-01-03T00:00:00.000Z');
+    wallet.debit({
+      transactionId: 'bet',
+      entryType: LedgerEntryType.BET,
+      amount: brl('1.00'),
+      at: debitAt,
+      insufficientFundsCode: FailureCode.INSUFFICIENT_FUNDS,
+    });
+    debitAt.setFullYear(2000);
+    expect(wallet.updatedAt).toEqual(new Date('2026-01-03T00:00:00.000Z'));
+  });
+
+  it('keeps createdAt and updatedAt independent after opening', () => {
+    const { wallet } = open();
+    wallet.credit({ transactionId: 'win', entryType: LedgerEntryType.WIN, amount: brl('1.00'), at: later });
+    expect(wallet.createdAt).toEqual(openedAt);
+    expect(wallet.updatedAt).toEqual(later);
+  });
+
   it('does not leak mutable dates', () => {
     const { wallet } = open();
     wallet.updatedAt.setFullYear(2000);
