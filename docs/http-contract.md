@@ -1,6 +1,16 @@
 # Contrato HTTP (T08)
 
-Segue o padrão das APIs do time (`financial-integration`): envelope único em todos os endpoints e mensagens como **chaves i18n**. O backend não traduz, quem traduz é o front.
+Todos os endpoints respondem no mesmo envelope, e as mensagens saem como **chaves i18n**. O backend não traduz, quem traduz é o front.
+
+## Por que esse formato
+
+O objetivo é tornar o mapeamento de erros e mensagens previsível para quem consome a API:
+
+- **Uma estrutura só.** O cliente usa o mesmo parser em qualquer endpoint, de sucesso ou de erro, sem caso especial.
+- **Decisão pelo código, não pelo texto.** O provedor decide o que fazer, como reenviar, desistir ou corrigir o payload, a partir de `code` (o status) e de `detailsMessage[].code` (o `FailureCode`). Os dois são estáveis. Ninguém precisa interpretar uma frase para saber se pode tentar de novo.
+- **Mensagem desacoplada do código.** A chave i18n fica separada do código de erro. Dá para trocar o texto ou acrescentar um idioma sem mexer no contrato, e o mesmo erro aparece igual no log, na métrica e na tela.
+- **Vários problemas numa resposta.** Uma validação devolve todos os campos inválidos de uma vez, cada um com o seu `field`.
+- **Catálogo verificável.** Todo código tem uma chave, e um teste garante que nenhum `FailureCode` fica sem mensagem.
 
 ## Envelope
 
