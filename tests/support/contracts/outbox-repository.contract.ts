@@ -132,13 +132,13 @@ export const describeOutboxRepositoryContract = (
       const [winner] = await repository.claimBatch(1, LEASE_MS, at(LEASE_MS));
 
       winner!.markPublished(at(LEASE_MS + 1));
-      await repository.markPublished(winner!);
+      expect(await repository.markPublished(winner!)).toBe(true);
 
       const retry = OutboxMessage.rehydrate(stale!.toState());
       retry.scheduleRetry(at(LEASE_MS + 2), 0);
       expect(await repository.scheduleRetry(retry)).toBe(false);
       stale!.markPublished(at(LEASE_MS + 3));
-      await repository.markPublished(stale!);
+      expect(await repository.markPublished(stale!)).toBe(false);
 
       const stored = (await repository.findById(message.id))!;
       expect(stored.publishedAt).toEqual(at(LEASE_MS + 1));
@@ -146,6 +146,42 @@ export const describeOutboxRepositoryContract = (
       expect(stored.nextAttemptAt).toEqual(message.nextAttemptAt);
       expect(stored.lockedUntil).toBeUndefined();
       expect(await repository.claimBatch(10, LEASE_MS, at(LEASE_MS * 10))).toEqual([]);
+    });
+
+    it('keeps the current owner retry state when a stale publisher later publishes successfully', async () => {
+      const message = aMessage();
+      await repository.add([message]);
+      const [stale] = await repository.claimBatch(1, LEASE_MS, at(0));
+      const [owner] = await repository.claimBatch(1, LEASE_MS, at(LEASE_MS));
+      owner!.scheduleRetry(at(LEASE_MS + 1), 5_000);
+      expect(await repository.scheduleRetry(owner!)).toBe(true);
+
+      stale!.markPublished(at(LEASE_MS + 2));
+      expect(await repository.markPublished(stale!)).toBe(true);
+
+      const stored = (await repository.findById(message.id))!;
+      expect(stored.publishedAt).toEqual(at(LEASE_MS + 2));
+      expect(stored.attempts).toBe(1);
+      expect(stored.nextAttemptAt).toEqual(at(LEASE_MS + 5_001));
+    });
+
+    it('clears lease_token and locked_until after a retry and after a publication', async () => {
+      const retried = aMessage();
+      const published = aMessage(1);
+      await repository.add([retried, published]);
+      const claimed = await repository.claimBatch(2, LEASE_MS, at(10));
+      const [toRetry, toPublish] = [claimed.find((m) => m.id === retried.id)!, claimed.find((m) => m.id === published.id)!];
+
+      toRetry.scheduleRetry(at(11), 1_000);
+      expect(await repository.scheduleRetry(toRetry)).toBe(true);
+      toPublish.markPublished(at(11));
+      await repository.markPublished(toPublish);
+
+      for (const id of [retried.id, published.id]) {
+        const stored = (await repository.findById(id))!;
+        expect(stored.leaseToken).toBeUndefined();
+        expect(stored.lockedUntil).toBeUndefined();
+      }
     });
 
     it('refuses a retry for a message that was never claimed', async () => {
