@@ -4,13 +4,14 @@ export interface PollingLoopOptions<T> {
   readonly nextDelayMs: (output: T) => number;
   /** Delay after a round that threw. */
   readonly errorDelayMs: number;
-  readonly onRound?: (output: T) => void;
-  readonly onError?: (error: unknown) => void;
+  readonly onRound?: (output: T) => unknown;
+  readonly onError?: (error: unknown) => unknown;
 }
 
 /**
  * Runs rounds one at a time, never overlapping, until stopped. `stop()` cancels the pending wait and
- * resolves only after the round in flight (if any) has finished. Observers that throw are ignored.
+ * resolves only after the round in flight (if any) has finished; the loop can then be started again.
+ * Observers that throw or reject are ignored.
  */
 export class PollingLoop<T> {
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -29,6 +30,11 @@ export class PollingLoop<T> {
   }
 
   start(): void {
+    if (this.stopping) {
+      if (this.inFlight !== undefined) throw new Error('The loop is still stopping; await stop() first');
+      this.stopping = false;
+      this.started = false;
+    }
     if (this.started) return;
     this.started = true;
     this.schedule(0);
@@ -64,10 +70,11 @@ export class PollingLoop<T> {
   }
 }
 
-const notify = (callback: () => void): void => {
+/** An observer must never stop the loop, whether it throws or returns a rejected promise. */
+const notify = (callback: () => unknown): void => {
   try {
-    callback();
+    Promise.resolve(callback()).catch(() => undefined);
   } catch {
-    // An observer must never stop the loop.
+    // see above
   }
 };

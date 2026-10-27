@@ -7,6 +7,7 @@ import type { OutboxPublisherConfig } from '../../config/outbox-publisher-config
 import { FaultInjector } from '../../fault-injection/fault-injector';
 import { OutboxRepository } from '../../persistence/mikro-orm/repository/outbox.repository';
 import { FaultInjectingMessagePublisher } from '../fault-injecting-message-publisher';
+import { TimeoutMessagePublisher } from '../timeout-message-publisher';
 import { OutboxPublisherWorker, type OutboxPublisherWorkerOptions } from './outbox-publisher-worker';
 
 export interface OutboxPublisherWorkerDeps {
@@ -28,7 +29,10 @@ export interface OutboxPublisherWorkerDeps {
 export const createOutboxPublisherWorker = (deps: OutboxPublisherWorkerDeps): OutboxPublisherWorker => {
   const faults = deps.faults ?? FaultInjector.none();
   const backoff = new ExponentialBackoff({ ...deps.config.backoff, random: deps.random ?? Math.random });
-  const publisher = new FaultInjectingMessagePublisher(deps.publisher, faults);
+  const publisher = new FaultInjectingMessagePublisher(
+    new TimeoutMessagePublisher(deps.publisher, deps.config.publishTimeoutMs),
+    faults,
+  );
   const batch = { batchSize: deps.config.batchSize, leaseMs: deps.config.leaseMs };
   return new OutboxPublisherWorker(
     () => new PublishOutboxBatch(new OutboxRepository(deps.em.fork(), faults), publisher, deps.clock, backoff, batch),

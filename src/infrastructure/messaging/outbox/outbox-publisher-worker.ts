@@ -7,15 +7,16 @@ export type PublishOutboxRound = IUseCase<void, PublishOutboxBatchOutput>;
 export interface OutboxPublisherWorkerOptions {
   readonly pollIntervalMs: number;
   /** Output of every finished round; the hook the metrics decorator (T11) plugs into. */
-  readonly onRound?: (output: PublishOutboxBatchOutput) => void;
+  readonly onRound?: (output: PublishOutboxBatchOutput) => unknown;
   /** A round that threw (database down, for instance). The loop keeps going after the poll interval. */
-  readonly onError?: (error: unknown) => void;
+  readonly onError?: (error: unknown) => unknown;
 }
 
 /**
  * Polls the outbox, one round at a time. A round that published something is followed right away by the
  * next one, to drain a backlog; an empty or failing round waits for the poll interval. `createRound` is
- * called per round so every round gets a fresh EntityManager fork.
+ * called per round so every round gets a fresh EntityManager fork. After `stop()` resolves the worker can be
+ * started again; starting it while a stop is still waiting for its round throws.
  */
 export class OutboxPublisherWorker {
   private readonly loop: PollingLoop<PublishOutboxBatchOutput>;

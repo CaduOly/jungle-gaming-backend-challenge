@@ -95,6 +95,9 @@ describe('schema migrations', () => {
     );
     const byName = new Map(rows.map((row) => [row.indexname, row.indexdef]));
     expect(byName.get('outbox_messages_unpublished')).toContain('WHERE (published_at IS NULL)');
+    expect(byName.get('outbox_messages_unpublished_by_occurrence')).toContain(
+      '(occurred_at, event_id) WHERE (published_at IS NULL)',
+    );
     expect(byName.get('wager_transactions_pending_reference_due')).toContain("WHERE (status = 'PENDING_REFERENCE'::text)");
     expect(byName.get('wager_transactions_single_reversal_per_reference')).toMatch(/^CREATE UNIQUE INDEX .*WHERE/);
   });

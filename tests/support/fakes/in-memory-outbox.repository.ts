@@ -32,10 +32,11 @@ export class InMemoryOutboxRepository implements IOutboxRepository {
     return claimed.map((row) => OutboxMessage.rehydrate(row));
   }
 
-  async markPublished(message: OutboxMessage): Promise<void> {
+  async markPublished(message: OutboxMessage): Promise<boolean> {
     const stored = this.require(message.id);
-    if (stored.publishedAt) return;
+    if (stored.publishedAt) return false;
     this.rows.set(message.id, { ...withoutLease(stored), publishedAt: message.publishedAt });
+    return true;
   }
 
   async scheduleRetry(message: OutboxMessage): Promise<boolean> {
@@ -48,6 +49,16 @@ export class InMemoryOutboxRepository implements IOutboxRepository {
       attempts: message.attempts,
       nextAttemptAt: message.nextAttemptAt,
     });
+    return true;
+  }
+
+  async defer(message: OutboxMessage, until: Date): Promise<boolean> {
+    const stored = this.require(message.id);
+    if (stored.publishedAt || message.leaseToken === undefined || stored.leaseToken !== message.leaseToken) {
+      return false;
+    }
+    const nextAttemptAt = new Date(Math.max(stored.nextAttemptAt.getTime(), until.getTime()));
+    this.rows.set(message.id, { ...withoutLease(stored), nextAttemptAt });
     return true;
   }
 

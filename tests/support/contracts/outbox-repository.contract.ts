@@ -132,13 +132,13 @@ export const describeOutboxRepositoryContract = (
       const [winner] = await repository.claimBatch(1, LEASE_MS, at(LEASE_MS));
 
       winner!.markPublished(at(LEASE_MS + 1));
-      await repository.markPublished(winner!);
+      expect(await repository.markPublished(winner!)).toBe(true);
 
       const retry = OutboxMessage.rehydrate(stale!.toState());
       retry.scheduleRetry(at(LEASE_MS + 2), 0);
       expect(await repository.scheduleRetry(retry)).toBe(false);
       stale!.markPublished(at(LEASE_MS + 3));
-      await repository.markPublished(stale!);
+      expect(await repository.markPublished(stale!)).toBe(false);
 
       const stored = (await repository.findById(message.id))!;
       expect(stored.publishedAt).toEqual(at(LEASE_MS + 1));
@@ -157,7 +157,7 @@ export const describeOutboxRepositoryContract = (
       expect(await repository.scheduleRetry(owner!)).toBe(true);
 
       stale!.markPublished(at(LEASE_MS + 2));
-      await repository.markPublished(stale!);
+      expect(await repository.markPublished(stale!)).toBe(true);
 
       const stored = (await repository.findById(message.id))!;
       expect(stored.publishedAt).toEqual(at(LEASE_MS + 2));
@@ -228,6 +228,32 @@ export const describeOutboxRepositoryContract = (
       const message = aMessage();
       await repository.add([message]);
       await expect(repository.add([message])).rejects.toThrow();
+    });
+
+    it('defers a claimed message without counting an attempt, fenced by the lease token', async () => {
+      const message = aMessage();
+      await repository.add([message]);
+      const [stale] = await repository.claimBatch(1, LEASE_MS, at(0));
+      const [owner] = await repository.claimBatch(1, LEASE_MS, at(LEASE_MS));
+
+      expect(await repository.defer(stale!, at(LEASE_MS + 500))).toBe(false);
+      expect((await repository.findById(message.id))!.lockedUntil).toEqual(at(LEASE_MS * 2));
+
+      expect(await repository.defer(owner!, at(LEASE_MS + 500))).toBe(true);
+      const stored = (await repository.findById(message.id))!;
+      expect(stored.lockedUntil).toBeUndefined();
+      expect(stored.attempts).toBe(0);
+      expect(stored.nextAttemptAt).toEqual(at(LEASE_MS + 500));
+      expect(await repository.claimBatch(1, LEASE_MS, at(LEASE_MS + 499))).toEqual([]);
+      expect(ids(await repository.claimBatch(1, LEASE_MS, at(LEASE_MS + 500)))).toEqual([message.id]);
+    });
+
+    it('never moves nextAttemptAt back when deferring', async () => {
+      const message = aMessage();
+      await repository.add([message]);
+      const [claimed] = await repository.claimBatch(1, LEASE_MS, at(0));
+      expect(await repository.defer(claimed!, at(-5_000))).toBe(true);
+      expect((await repository.findById(message.id))!.nextAttemptAt).toEqual(message.nextAttemptAt);
     });
   });
 };

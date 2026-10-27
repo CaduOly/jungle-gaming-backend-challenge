@@ -87,6 +87,18 @@ describe('wallet_ledger_entries schema', () => {
     );
   });
 
+  it.each([
+    ['REJECTED', { status: 'REJECTED', failure_code: 'INSUFFICIENT_FUNDS', processed_at: null }],
+    ['FAILED', { status: 'FAILED', failure_code: 'WALLET_NOT_FOUND', processed_at: null }],
+  ])('rejects an entry tied to a %s transaction', async (_status, overrides) => {
+    const notProcessed = await insertTransaction(client, walletId, overrides);
+    await expectSqlError(
+      insert(client, 'wallet_ledger_entries', ledgerRow(walletId, notProcessed)),
+      '23503',
+      'wallet_ledger_entries_transaction_fk',
+    );
+  });
+
   it('rejects an entry in a currency other than the wallet currency', async () => {
     await expectSqlError(insertEntry({ currency: 'USD' }), '23503', 'wallet_ledger_entries_wallet_currency_fk');
   });
@@ -97,6 +109,7 @@ describe('wallet_ledger_entries schema', () => {
     await expectSqlError(client.query('UPDATE wallet_ledger_entries SET created_at = created_at WHERE id = $1', [id]), '23001');
     await expectSqlError(client.query('DELETE FROM wallet_ledger_entries WHERE id = $1', [id]), '23001');
     await expectSqlError(client.query('TRUNCATE wallet_ledger_entries'), '23001');
+    await expectSqlError(client.query('TRUNCATE wallet_ledger_entries CASCADE'), '23001');
     const { rows } = await client.query<{ amount: string }>('SELECT amount FROM wallet_ledger_entries WHERE id = $1', [id]);
     expect(rows[0]!.amount).toBe('10.00');
   });

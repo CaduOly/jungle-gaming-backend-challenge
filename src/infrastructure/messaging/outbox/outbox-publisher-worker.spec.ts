@@ -6,6 +6,7 @@ const output = (published: number): PublishOutboxBatchOutput => ({
   claimed: published,
   published,
   failed: 0,
+  deferred: 0,
   leaseLost: 0,
   exhausted: 0,
   exhaustedMessageIds: [],
@@ -135,5 +136,67 @@ describe('OutboxPublisherWorker', () => {
     await Bun.sleep(20);
 
     expect(rounds.rounds()).toBe(1);
+  });
+
+  it('survives an observer that returns a rejected promise', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const rounds = scripted([async () => output(0)]);
+      const worker = new OutboxPublisherWorker(rounds.createRound, {
+        pollIntervalMs: 1,
+        onRound: async () => {
+          throw new Error('async metrics exploded');
+        },
+        onError: async () => {
+          throw new Error('async logger exploded');
+        },
+      });
+
+      worker.start();
+      await until(() => rounds.rounds() >= 3);
+      await worker.stop();
+      await Bun.sleep(5);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+    expect(unhandled).toEqual([]);
+  });
+
+  it('can be started again after stop() resolved', async () => {
+    const rounds = scripted([async () => output(0)]);
+    const worker = new OutboxPublisherWorker(rounds.createRound, { pollIntervalMs: 60_000 });
+
+    worker.start();
+    await until(() => rounds.rounds() === 1);
+    await worker.stop();
+    expect(worker.isRunning).toBe(false);
+
+    worker.start();
+    expect(worker.isRunning).toBe(true);
+    await until(() => rounds.rounds() === 2);
+    await worker.stop();
+  });
+
+  it('refuses to start while a stop is still waiting for the round in flight', async () => {
+    let release: () => void = () => undefined;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const rounds = scripted([
+      async () => {
+        await blocked;
+        return output(0);
+      },
+    ]);
+    const worker = new OutboxPublisherWorker(rounds.createRound, { pollIntervalMs: 60_000 });
+
+    worker.start();
+    await until(() => rounds.rounds() === 1);
+    const stopping = worker.stop();
+    expect(() => worker.start()).toThrow('still stopping');
+    release();
+    await stopping;
   });
 });

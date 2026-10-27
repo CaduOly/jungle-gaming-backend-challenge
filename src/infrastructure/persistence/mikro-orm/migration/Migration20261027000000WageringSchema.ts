@@ -17,6 +17,17 @@ import { Migration } from '@mikro-orm/migrations';
  * wallet's, which would break FK (wallet_id, currency). `wallet_currency` is a generated column that is NULL
  * only for that rejection; the composite FK uses MATCH SIMPLE and is skipped there, while wallet_id keeps its
  * own FK. For every other row the FK forces currency = wallet currency.
+ *
+ * The same trick ties player_id to the wallet's player: `wallet_player_id` is NULL only for a
+ * WALLET_PLAYER_MISMATCH rejection, which is persisted (so its replay keeps answering 422) with the player the
+ * provider sent. WALLET_NOT_FOUND is never persisted: the wallet FK has nothing to point to.
+ *
+ * References stay inside the wallet: (reference_transaction_id, wallet_id) → (id, wallet_id), so a reversal
+ * in wallet B can never take the single-reversal slot of a BET in wallet A.
+ *
+ * A ledger entry only exists for a PROCESSED transaction: `transaction_status` is a generated constant
+ * 'PROCESSED' and the FK (transaction_id, wallet_id, transaction_status) → (id, wallet_id, status) fails for
+ * any other status. It is stable because PROCESSED is terminal (trigger below).
  */
 const UP = /* sql */ `
 CREATE TABLE wallets (
@@ -32,7 +43,8 @@ CREATE TABLE wallets (
   CONSTRAINT wallets_balance_non_negative CHECK (balance >= 0),
   CONSTRAINT wallets_version_positive CHECK (version >= 1),
   CONSTRAINT wallets_player_currency_unique UNIQUE (player_id, currency),
-  CONSTRAINT wallets_id_currency_unique UNIQUE (id, currency)
+  CONSTRAINT wallets_id_currency_unique UNIQUE (id, currency),
+  CONSTRAINT wallets_id_player_unique UNIQUE (id, player_id)
 );
 
 CREATE FUNCTION wallets_guard() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -57,6 +69,15 @@ $$;
 CREATE TRIGGER wallets_guard BEFORE UPDATE OR DELETE ON wallets
   FOR EACH ROW EXECUTE FUNCTION wallets_guard();
 
+CREATE FUNCTION reject_truncate() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION '% cannot be truncated', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
+END;
+$$;
+
+CREATE TRIGGER wallets_no_truncate BEFORE TRUNCATE ON wallets
+  FOR EACH STATEMENT EXECUTE FUNCTION reject_truncate();
+
 CREATE TABLE wager_transactions (
   id                                uuid          NOT NULL,
   provider_id                       text          NOT NULL,
@@ -74,6 +95,9 @@ CREATE TABLE wager_transactions (
   wallet_currency                   text GENERATED ALWAYS AS (
                                       CASE WHEN failure_code = 'CURRENCY_MISMATCH' THEN NULL ELSE currency END
                                     ) STORED,
+  wallet_player_id                  uuid GENERATED ALWAYS AS (
+                                      CASE WHEN failure_code = 'WALLET_PLAYER_MISMATCH' THEN NULL ELSE player_id END
+                                    ) STORED,
   reference_external_transaction_id text,
   reference_transaction_id          uuid,
   failure_code                      text,
@@ -88,11 +112,14 @@ CREATE TABLE wager_transactions (
   CONSTRAINT wager_transactions_provider_idempotency_key_unique UNIQUE (provider_id, idempotency_key),
   CONSTRAINT wager_transactions_provider_external_id_unique UNIQUE (provider_id, external_transaction_id),
   CONSTRAINT wager_transactions_id_wallet_unique UNIQUE (id, wallet_id),
+  CONSTRAINT wager_transactions_id_wallet_status_unique UNIQUE (id, wallet_id, status),
   CONSTRAINT wager_transactions_wallet_fk FOREIGN KEY (wallet_id) REFERENCES wallets (id),
   CONSTRAINT wager_transactions_wallet_currency_fk FOREIGN KEY (wallet_id, wallet_currency)
     REFERENCES wallets (id, currency) MATCH SIMPLE,
-  CONSTRAINT wager_transactions_reference_fk FOREIGN KEY (reference_transaction_id)
-    REFERENCES wager_transactions (id),
+  CONSTRAINT wager_transactions_wallet_player_fk FOREIGN KEY (wallet_id, wallet_player_id)
+    REFERENCES wallets (id, player_id) MATCH SIMPLE,
+  CONSTRAINT wager_transactions_reference_fk FOREIGN KEY (reference_transaction_id, wallet_id)
+    REFERENCES wager_transactions (id, wallet_id),
   CONSTRAINT wager_transactions_not_blank CHECK (
     btrim(provider_id) <> '' AND btrim(external_transaction_id) <> ''
     AND btrim(idempotency_key) <> '' AND btrim(payload_hash) <> ''
@@ -110,6 +137,11 @@ CREATE TABLE wager_transactions (
   CONSTRAINT wager_transactions_opening_without_reference CHECK (
     kind <> 'OPENING' OR (reference_external_transaction_id IS NULL AND reference_transaction_id IS NULL)
   ),
+  CONSTRAINT wager_transactions_reference_only_on_referencing_kinds CHECK (
+    kind IN ('REFUND', 'ROLLBACK', 'WIN', 'LOSS')
+    OR (reference_external_transaction_id IS NULL AND reference_transaction_id IS NULL)
+  ),
+  CONSTRAINT wager_transactions_bet_never_pending CHECK (kind <> 'BET' OR status <> 'PENDING_REFERENCE'),
   CONSTRAINT wager_transactions_resolved_reference_requires_external CHECK (
     reference_transaction_id IS NULL OR reference_external_transaction_id IS NOT NULL
   ),
@@ -128,7 +160,12 @@ CREATE TABLE wager_transactions (
   CONSTRAINT wager_transactions_failure_code_by_status CHECK (
     (status IN ('REJECTED', 'FAILED')) = (failure_code IS NOT NULL)
   ),
-  CONSTRAINT wager_transactions_failure_code_format CHECK (failure_code ~ '^[A-Z][A-Z_]*$'),
+  CONSTRAINT wager_transactions_failure_code_valid CHECK (failure_code IN (
+    'INSUFFICIENT_FUNDS', 'REVERSAL_INSUFFICIENT_FUNDS', 'CURRENCY_MISMATCH', 'WALLET_NOT_FOUND',
+    'WALLET_PLAYER_MISMATCH', 'PROVIDER_IDENTITY_MISMATCH', 'REFERENCE_NOT_FOUND', 'REFERENCE_MISMATCH',
+    'INVALID_REFERENCE_KIND', 'REFERENCE_NOT_PROCESSED', 'ALREADY_REVERSED', 'AMOUNT_MISMATCH',
+    'DUPLICATE_EXTERNAL_TRANSACTION', 'IDEMPOTENCY_CONFLICT'
+  )),
   CONSTRAINT wager_transactions_processed_reversal_resolved CHECK (
     status <> 'PROCESSED' OR kind NOT IN ('REFUND', 'ROLLBACK') OR reference_transaction_id IS NOT NULL
   ),
@@ -205,12 +242,6 @@ $$;
 CREATE TRIGGER wager_transactions_guard BEFORE UPDATE OR DELETE ON wager_transactions
   FOR EACH ROW EXECUTE FUNCTION wager_transactions_guard();
 
-CREATE FUNCTION reject_truncate() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  RAISE EXCEPTION '% cannot be truncated', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
-END;
-$$;
-
 CREATE TRIGGER wager_transactions_no_truncate BEFORE TRUNCATE ON wager_transactions
   FOR EACH STATEMENT EXECUTE FUNCTION reject_truncate();
 
@@ -226,12 +257,13 @@ CREATE TABLE wallet_ledger_entries (
   balance_after   numeric(20,2) NOT NULL,
   wallet_version  integer       NOT NULL,
   created_at      timestamptz   NOT NULL,
+  transaction_status text GENERATED ALWAYS AS ('PROCESSED') STORED,
   CONSTRAINT wallet_ledger_entries_pkey PRIMARY KEY (id),
   CONSTRAINT wallet_ledger_entries_seq_unique UNIQUE (seq),
   CONSTRAINT wallet_ledger_entries_transaction_unique UNIQUE (transaction_id),
   CONSTRAINT wallet_ledger_entries_wallet_version_unique UNIQUE (wallet_id, wallet_version),
-  CONSTRAINT wallet_ledger_entries_transaction_fk FOREIGN KEY (transaction_id, wallet_id)
-    REFERENCES wager_transactions (id, wallet_id),
+  CONSTRAINT wallet_ledger_entries_transaction_fk FOREIGN KEY (transaction_id, wallet_id, transaction_status)
+    REFERENCES wager_transactions (id, wallet_id, status),
   CONSTRAINT wallet_ledger_entries_wallet_currency_fk FOREIGN KEY (wallet_id, currency)
     REFERENCES wallets (id, currency),
   CONSTRAINT wallet_ledger_entries_direction_valid CHECK (direction IN ('CREDIT', 'DEBIT')),
@@ -264,8 +296,8 @@ DROP TABLE wallet_ledger_entries;
 DROP FUNCTION wallet_ledger_entries_immutable();
 DROP TABLE wager_transactions;
 DROP FUNCTION wager_transactions_guard();
-DROP FUNCTION reject_truncate();
 DROP TABLE wallets;
+DROP FUNCTION reject_truncate();
 DROP FUNCTION wallets_guard();
 `;
 

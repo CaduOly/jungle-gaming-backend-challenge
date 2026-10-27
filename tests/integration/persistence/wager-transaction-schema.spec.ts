@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import type { Client } from 'pg';
+import { Client } from 'pg';
 import { ensureInfraUp } from '../../support/ensure-infra-up';
 import { uuidv7 } from '../../support/uuid';
 import {
@@ -10,6 +10,7 @@ import {
   insertWallet,
   type MigratedDatabase,
   openingRow,
+  playerOf,
   transactionRow,
 } from './schema-fixtures';
 
@@ -58,6 +59,31 @@ describe('wager_transactions schema', () => {
     it('still persists a CURRENCY_MISMATCH rejection in the requested currency', async () => {
       await insertTx({ currency: 'USD', status: 'REJECTED', failure_code: 'CURRENCY_MISMATCH', processed_at: null });
     });
+
+    it('rejects a player other than the wallet player', async () => {
+      await expectSqlError(insertTx({ player_id: uuidv7() }), '23503', 'wager_transactions_wallet_player_fk');
+      await expectSqlError(
+        insertTx({ player_id: uuidv7(), status: 'REJECTED', failure_code: 'INSUFFICIENT_FUNDS', processed_at: null }),
+        '23503',
+        'wager_transactions_wallet_player_fk',
+      );
+    });
+
+    it('still persists a WALLET_PLAYER_MISMATCH rejection with the player the provider sent', async () => {
+      const strangerId = uuidv7();
+      const id = await insertTransaction(client, walletId, {
+        player_id: strangerId,
+        status: 'REJECTED',
+        failure_code: 'WALLET_PLAYER_MISMATCH',
+        processed_at: null,
+      });
+      const { rows } = await client.query<{ player_id: string; wallet_player_id: string | null }>(
+        'SELECT player_id, wallet_player_id FROM wager_transactions WHERE id = $1',
+        [id],
+      );
+      expect(rows[0]).toEqual({ player_id: strangerId, wallet_player_id: null });
+      expect(playerOf(walletId)).not.toBe(strangerId);
+    });
   });
 
   describe('amount, kind and reference', () => {
@@ -77,6 +103,32 @@ describe('wager_transactions schema', () => {
         insertTx({ kind, status: 'REJECTED', failure_code: 'REFERENCE_NOT_FOUND', processed_at: null }),
         '23514',
         'wager_transactions_reversal_requires_reference',
+      );
+    });
+
+    it.each(['BET', 'OPENING'])('rejects a reference on %s', async (kind) => {
+      const id = await insertWallet(client);
+      const row =
+        kind === 'OPENING'
+          ? openingRow(id, '5.00', { reference_external_transaction_id: 'ext-1' })
+          : transactionRow(id, { reference_external_transaction_id: 'ext-1' });
+      await expectSqlError(
+        insert(client, 'wager_transactions', row),
+        '23514',
+        kind === 'OPENING' ? 'wager_transactions_opening_without_reference' : 'wager_transactions_reference_only_on_referencing_kinds',
+      );
+    });
+
+    it.each(['WIN', 'LOSS'])('accepts a reference on %s', async (kind) => {
+      const betId = await insertTransaction(client, walletId, { external_transaction_id: `bet-${kind}` });
+      await insertTx({ kind, reference_external_transaction_id: `bet-${kind}`, reference_transaction_id: betId });
+    });
+
+    it('never keeps a BET in PENDING_REFERENCE', async () => {
+      await expectSqlError(
+        insertTx({ status: 'PENDING_REFERENCE', processed_at: null, observed_balance: null, next_attempt_at: '2026-07-29T15:00:02Z' }),
+        '23514',
+        'wager_transactions_bet_never_pending',
       );
     });
 
@@ -105,6 +157,15 @@ describe('wager_transactions schema', () => {
 
     it('rejects a failure code on a PROCESSED transaction', async () => {
       await expectSqlError(insertTx({ failure_code: 'INSUFFICIENT_FUNDS' }), '23514', 'wager_transactions_failure_code_by_status');
+    });
+
+    it('accepts only the known failure codes', async () => {
+      await expectSqlError(
+        insertTx({ status: 'REJECTED', failure_code: 'SOMETHING_ELSE', processed_at: null }),
+        '23514',
+        'wager_transactions_failure_code_valid',
+      );
+      await insertTx({ status: 'REJECTED', failure_code: 'REFERENCE_MISMATCH', processed_at: null });
     });
 
     it('records the observed balance on every outcome', async () => {
@@ -161,6 +222,47 @@ describe('wager_transactions schema', () => {
         failure_code: 'ALREADY_REVERSED',
         processed_at: null,
       });
+    });
+
+    it('never lets a reversal in wallet B take the slot of a BET in wallet A', async () => {
+      const otherWalletId = await insertWallet(client, { balance: '100.00' });
+      const betId = await insertTransaction(client, walletId, { external_transaction_id: 'bet-of-a' });
+      const reversal = { kind: 'REFUND', reference_external_transaction_id: 'bet-of-a', reference_transaction_id: betId };
+
+      await expectSqlError(
+        insert(client, 'wager_transactions', transactionRow(otherWalletId, reversal)),
+        '23503',
+        'wager_transactions_reference_fk',
+      );
+      await insertTx(reversal);
+    });
+
+    it('lets exactly one of two concurrent reversals of the same BET commit', async () => {
+      const betId = await insertTransaction(client, walletId, { external_transaction_id: 'bet-raced' });
+      const reversal = (kind: string) =>
+        transactionRow(walletId, { kind, reference_external_transaction_id: 'bet-raced', reference_transaction_id: betId });
+      const [first, second] = [new Client({ connectionString: db.database.url }), new Client({ connectionString: db.database.url })];
+      await Promise.all([first.connect(), second.connect()]);
+      try {
+        await first.query('BEGIN');
+        await second.query('BEGIN');
+        await insert(first, 'wager_transactions', reversal('REFUND'));
+        const racing = insert(second, 'wager_transactions', reversal('ROLLBACK')).then(
+          () => 'inserted',
+          (error: { code?: string; constraint?: string }) => `${error.code}:${error.constraint}`,
+        );
+        await Bun.sleep(100);
+        await first.query('COMMIT');
+        expect(await racing).toBe('23505:wager_transactions_single_reversal_per_reference');
+        await second.query('ROLLBACK');
+      } finally {
+        await Promise.all([first.end(), second.end()]);
+      }
+      const { rows } = await client.query<{ total: string }>(
+        "SELECT count(*)::text AS total FROM wager_transactions WHERE reference_transaction_id = $1 AND status = 'PROCESSED'",
+        [betId],
+      );
+      expect(rows[0]!.total).toBe('1');
     });
 
     it('requires a PROCESSED reversal to point to the resolved reference', async () => {
@@ -236,7 +338,7 @@ describe('wager_transactions schema', () => {
         ),
         '23001',
       );
-      const failed = await insertTransaction(client, walletId, { status: 'FAILED', failure_code: 'BROKEN_INVARIANT', processed_at: null });
+      const failed = await insertTransaction(client, walletId, { status: 'FAILED', failure_code: 'WALLET_NOT_FOUND', processed_at: null });
       await expectSqlError(client.query('UPDATE wager_transactions SET locked_until = now() WHERE id = $1', [failed]), '23001');
     });
 
@@ -252,6 +354,8 @@ describe('wager_transactions schema', () => {
       await expectSqlError(client.query('DELETE FROM wager_transactions WHERE id = $1', [id]), '23001');
       await expectSqlError(client.query('TRUNCATE wager_transactions CASCADE'), '23001');
       await expectSqlError(client.query('TRUNCATE wallets CASCADE'), '23001');
+      await expectSqlError(client.query('TRUNCATE wallets'), '0A000');
+      await expectSqlError(client.query('TRUNCATE wallets, wager_transactions, wallet_ledger_entries CASCADE'), '23001');
       const { rows } = await client.query<{ found: boolean }>(
         'SELECT EXISTS (SELECT 1 FROM wager_transactions WHERE id = $1) AS found',
         [id],

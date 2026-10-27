@@ -56,14 +56,15 @@ export class OutboxRepository implements IOutboxRepository {
     return rows.map(outboxMessageFromRow).sort(byOccurrence);
   }
 
-  async markPublished(message: OutboxMessage): Promise<void> {
-    await this.em.execute(
+  async markPublished(message: OutboxMessage): Promise<boolean> {
+    const result = await this.em.execute<RunResult>(
       `UPDATE outbox_messages
           SET published_at = ?, locked_until = NULL, lease_token = NULL
         WHERE event_id = ? AND published_at IS NULL`,
       [message.publishedAt ?? null, message.id],
       'run',
     );
+    return result.affectedRows === 1;
   }
 
   async scheduleRetry(message: OutboxMessage): Promise<boolean> {
@@ -73,6 +74,18 @@ export class OutboxRepository implements IOutboxRepository {
           SET attempts = ?, next_attempt_at = ?, locked_until = NULL, lease_token = NULL
         WHERE event_id = ? AND published_at IS NULL AND lease_token = ?`,
       [message.attempts, message.nextAttemptAt, message.id, message.leaseToken],
+      'run',
+    );
+    return result.affectedRows === 1;
+  }
+
+  async defer(message: OutboxMessage, until: Date): Promise<boolean> {
+    if (message.leaseToken === undefined) return false;
+    const result = await this.em.execute<RunResult>(
+      `UPDATE outbox_messages
+          SET locked_until = NULL, lease_token = NULL, next_attempt_at = GREATEST(next_attempt_at, ?)
+        WHERE event_id = ? AND published_at IS NULL AND lease_token = ?`,
+      [until, message.id, message.leaseToken],
       'run',
     );
     return result.affectedRows === 1;
