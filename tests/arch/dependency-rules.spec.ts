@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { cruise, type IConfiguration, type ICruiseResult } from 'dependency-cruiser';
@@ -9,7 +10,8 @@ const config = createRequire(import.meta.url)(resolve(projectRoot, '.dependency-
 
 const violatedRules = async (baseDir: string): Promise<string[]> => {
   const { tsConfig: _tsConfig, ...options } = config.options ?? {};
-  const reporting = await cruise(['src'], {
+  const roots = ['src', 'tests/support'].filter((root) => existsSync(resolve(baseDir, root)));
+  const reporting = await cruise(roots, {
     ...options,
     baseDir,
     validate: true,
@@ -50,8 +52,13 @@ describe('architecture rules (dependency-cruiser)', () => {
     ['business-imports-test-support', ['business-imports-only-business']],
     ['business-spec-imports-other-test-support', ['business-spec-imports-only-business-or-test-doubles']],
     ['fake-imports-infra-package', ['infra-packages-only-in-infrastructure']],
+    ['support-imports-infrastructure', ['test-support-imports-no-infrastructure']],
   ])('flags %s', async (scenario, expected) => {
     expect(await violatedRules(resolve(fixturesRoot, scenario))).toEqual(expected);
+  });
+
+  it('lets the top-level integration harness of tests/support use pg and the AWS SDK', async () => {
+    expect(await violatedRules(resolve(fixturesRoot, 'support-harness-imports-infra-package'))).toEqual([]);
   });
 
   it.each([

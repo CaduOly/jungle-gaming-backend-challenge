@@ -26,10 +26,17 @@ module.exports = {
     {
       name: 'business-spec-imports-only-business-or-test-doubles',
       comment:
-        'business specs may also import bun:test and the test doubles in tests/support/{fakes,contracts,builders}. Those doubles are still bound by the infra package rule.',
+        'business specs may also import bun:test and the test helpers in tests/support/{fakes,contracts,builders,assertions}. Those helpers are still bound by the infra package rule.',
       severity: 'error',
       from: { path: '^src/business/.+\\.spec\\.ts$' },
-      to: { pathNot: ['^src/business/', '^bun:test$', '^tests/support/(fakes|contracts|builders)/'] },
+      to: { pathNot: ['^src/business/', '^bun:test$', '^tests/support/(fakes|contracts|builders|assertions)/'] },
+    },
+    {
+      name: 'test-support-imports-no-infrastructure',
+      comment: 'tests/support (fakes, builders, assertions, harness) stands in for infrastructure and never imports src/infrastructure.',
+      severity: 'error',
+      from: { path: '^tests/support/' },
+      to: { path: '^src/infrastructure/' },
     },
     {
       name: 'shared-kernel-imports-no-context',
@@ -62,9 +69,10 @@ module.exports = {
     },
     {
       name: 'infra-packages-only-in-infrastructure',
-      comment: 'ORM/SQL drivers, AWS SDK, jose, pino, prom-client and OpenTelemetry only inside infrastructure/** (specs included).',
+      comment:
+        'ORM/SQL drivers, AWS SDK, jose, pino, prom-client and OpenTelemetry only inside infrastructure/** (specs included) and in the top-level integration harness of tests/support (real PG and SQS); never in fakes, contracts, builders or assertions.',
       severity: 'error',
-      from: { pathNot: '^src/infrastructure/' },
+      from: { pathNot: ['^src/infrastructure/', '^tests/support/[^/]+\\.ts$'] },
       to: { path: `(^|/)node_modules/(${INFRA_ONLY_PACKAGES})` },
     },
     {
