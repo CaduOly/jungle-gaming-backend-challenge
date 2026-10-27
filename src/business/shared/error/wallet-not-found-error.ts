@@ -1,5 +1,5 @@
-import { BusinessRuleError } from '../../shared/error/business-rule-error';
-import { FailureCode } from '../../shared/error/failure-code';
+import { BusinessRuleError } from './business-rule-error';
+import { FailureCode } from './failure-code';
 
 export class WalletNotFoundError extends BusinessRuleError {
   constructor(readonly walletId: string) {

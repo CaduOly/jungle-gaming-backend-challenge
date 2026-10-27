@@ -10,7 +10,7 @@ import type { IUseCase } from '../../../shared/use-case';
 import { Money } from '../../../shared/value-object/money';
 import type { Wallet } from '../../../wallet/entity/wallet';
 import type { WalletLedgerEntry } from '../../../wallet/entity/wallet-ledger-entry';
-import { WalletNotFoundError } from '../../../wallet/error/wallet-not-found-error';
+import { WalletNotFoundError } from '../../../shared/error/wallet-not-found-error';
 import { IdempotencyCheck } from '../../domain-service/idempotency-check';
 import { ReferenceResolver } from '../../domain-service/reference-resolver';
 import { WagerSettlement } from '../../domain-service/wager-settlement';

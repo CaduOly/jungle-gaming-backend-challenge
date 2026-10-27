@@ -1,6 +1,15 @@
 import { Money } from '../../../src/business/shared/value-object/money';
-import { WalletConsistencyError } from '../assert-wallet-consistency';
-import type { FakeDatabase } from './fake-unit-of-work';
+import type { FakeDatabase } from '../fakes/fake-unit-of-work';
+
+export class FakeWalletConsistencyError extends Error {
+  constructor(
+    readonly walletId: string,
+    readonly violations: readonly string[],
+  ) {
+    super(`Wallet ${walletId} is inconsistent:\n- ${violations.join('\n- ')}`);
+    this.name = 'FakeWalletConsistencyError';
+  }
+}
 
 /**
  * In-memory twin of the SQL `assertWalletConsistency`, written independently of `reconcileWallet`:
@@ -45,7 +54,7 @@ export const findFakeWalletInconsistencies = async (db: FakeDatabase, walletId: 
 
 export const assertFakeWalletConsistency = async (db: FakeDatabase, walletId: string): Promise<void> => {
   const violations = await findFakeWalletInconsistencies(db, walletId);
-  if (violations.length > 0) throw new WalletConsistencyError(walletId, violations);
+  if (violations.length > 0) throw new FakeWalletConsistencyError(walletId, violations);
 };
 
 export const assertEveryFakeWalletConsistent = async (db: FakeDatabase): Promise<void> => {

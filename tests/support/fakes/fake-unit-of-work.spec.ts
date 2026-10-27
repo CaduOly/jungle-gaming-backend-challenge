@@ -7,7 +7,7 @@ import { Wallet } from '../../../src/business/wallet/entity/wallet';
 import { LedgerEntryType } from '../../../src/business/wallet/enum/ledger-entry-type';
 import { WagerKind } from '../../../src/business/wagering/enum/wager-kind';
 import { aProcessedWager } from '../builders/wager-transaction.builder';
-import { assertFakeWalletConsistency, findFakeWalletInconsistencies } from './assert-fake-wallet-consistency';
+import { assertFakeWalletConsistency, findFakeWalletInconsistencies } from '../assertions/assert-fake-wallet-consistency';
 import { aFakeEvent } from './fake-integration-event';
 import { FakeDatabase, FakeUnitOfWork, InjectedFaultError, ReadOnlyTransactionError } from './fake-unit-of-work';
 
