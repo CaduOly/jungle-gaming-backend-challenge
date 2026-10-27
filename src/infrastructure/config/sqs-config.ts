@@ -11,9 +11,13 @@ export interface SqsConfig {
   readonly credentials?: { readonly accessKeyId: string; readonly secretAccessKey: string };
   readonly maxAttempts: number;
   readonly eventsQueue: SqsQueueRef;
+  readonly commandsQueue: SqsQueueRef;
+  readonly commandsDeadLetterQueue: SqsQueueRef;
 }
 
 export const DEFAULT_EVENTS_QUEUE_NAME = 'wagering-events.fifo';
+export const DEFAULT_COMMANDS_QUEUE_NAME = 'wagering-commands.fifo';
+export const DEFAULT_COMMANDS_DLQ_NAME = 'wagering-commands-dlq.fifo';
 
 const optional = (env: Env, name: string): string | undefined => {
   const value = env[name]?.trim();
@@ -38,14 +42,14 @@ const readCredentials = (env: Env): SqsConfig['credentials'] => {
   return { accessKeyId, secretAccessKey };
 };
 
-const readEventsQueue = (env: Env): SqsQueueRef => {
-  const url = optional(env, 'SQS_EVENTS_QUEUE_URL');
-  const name = url ?? optional(env, 'SQS_EVENTS_QUEUE_NAME') ?? DEFAULT_EVENTS_QUEUE_NAME;
-  if (!name.endsWith('.fifo')) throw new Error(`The events queue must be FIFO (.fifo), got "${name}"`);
+const readQueue = (env: Env, prefix: string, label: string, fallback: string): SqsQueueRef => {
+  const url = optional(env, `${prefix}_URL`);
+  const name = url ?? optional(env, `${prefix}_NAME`) ?? fallback;
+  if (!name.endsWith('.fifo')) throw new Error(`The ${label} queue must be FIFO (.fifo), got "${name}"`);
   return url === undefined ? { name } : { url };
 };
 
-/** SQS_EVENTS_QUEUE_URL wins over SQS_EVENTS_QUEUE_NAME, which is resolved with GetQueueUrl on first use. */
+/** Every SQS_*_URL wins over its SQS_*_NAME, which is resolved with GetQueueUrl on first use. */
 export const readSqsConfig = (env: Env): SqsConfig => {
   const maxAttempts = readIntegerEnv(env, 'SQS_MAX_ATTEMPTS', 3);
   if (maxAttempts === 0) throw new Error('Invalid SQS_MAX_ATTEMPTS: must be at least 1');
@@ -56,6 +60,8 @@ export const readSqsConfig = (env: Env): SqsConfig => {
     region: optional(env, 'AWS_REGION') ?? 'us-east-1',
     ...(credentials === undefined ? {} : { credentials }),
     maxAttempts,
-    eventsQueue: readEventsQueue(env),
+    eventsQueue: readQueue(env, 'SQS_EVENTS_QUEUE', 'events', DEFAULT_EVENTS_QUEUE_NAME),
+    commandsQueue: readQueue(env, 'SQS_COMMANDS_QUEUE', 'commands', DEFAULT_COMMANDS_QUEUE_NAME),
+    commandsDeadLetterQueue: readQueue(env, 'SQS_COMMANDS_DLQ', 'commands dead-letter', DEFAULT_COMMANDS_DLQ_NAME),
   };
 };

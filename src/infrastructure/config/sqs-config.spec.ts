@@ -7,6 +7,8 @@ describe('readSqsConfig', () => {
       region: 'us-east-1',
       maxAttempts: 3,
       eventsQueue: { name: 'wagering-events.fifo' },
+      commandsQueue: { name: 'wagering-commands.fifo' },
+      commandsDeadLetterQueue: { name: 'wagering-commands-dlq.fifo' },
     });
   });
 
@@ -27,6 +29,8 @@ describe('readSqsConfig', () => {
       credentials: { accessKeyId: 'test', secretAccessKey: 'secret' },
       maxAttempts: 1,
       eventsQueue: { url: 'http://localhost:4566/000000000000/wagering-events-x.fifo' },
+      commandsQueue: { name: 'wagering-commands.fifo' },
+      commandsDeadLetterQueue: { name: 'wagering-commands-dlq.fifo' },
     });
   });
 
@@ -34,6 +38,16 @@ describe('readSqsConfig', () => {
     expect(readSqsConfig({ SQS_EVENTS_QUEUE_NAME: 'events-test.fifo' }).eventsQueue).toEqual({
       name: 'events-test.fifo',
     });
+  });
+
+  it('reads the commands queue and its dead-letter queue', () => {
+    const config = readSqsConfig({
+      SQS_COMMANDS_QUEUE_URL: 'http://h/1/commands-x.fifo',
+      SQS_COMMANDS_DLQ_NAME: 'commands-dlq-x.fifo',
+    });
+    expect(config.commandsQueue).toEqual({ url: 'http://h/1/commands-x.fifo' });
+    expect(config.commandsDeadLetterQueue).toEqual({ name: 'commands-dlq-x.fifo' });
+    expect(() => readSqsConfig({ SQS_COMMANDS_DLQ_NAME: 'dlq' })).toThrow('commands dead-letter queue must be FIFO');
   });
 
   it('rejects a standard (non FIFO) events queue', () => {

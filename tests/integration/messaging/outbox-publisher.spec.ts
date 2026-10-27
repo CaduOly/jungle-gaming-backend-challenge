@@ -5,9 +5,9 @@ import type { IMessagePublisher } from '../../../src/business/messaging/port/mes
 import type { PublishOutboxBatchOutput } from '../../../src/business/messaging/use-case/publish-outbox-batch/publish-outbox-batch';
 import { SystemClock } from '../../../src/infrastructure/clock/system-clock';
 import type { OutboxPublisherConfig } from '../../../src/infrastructure/config/outbox-publisher-config';
-import type { SqsConfig, SqsQueueRef } from '../../../src/infrastructure/config/sqs-config';
+import type { SqsQueueRef } from '../../../src/infrastructure/config/sqs-config';
 import { createOutboxPublisherWorker } from '../../../src/infrastructure/messaging/outbox/outbox-publisher-worker.factory';
-import { createSqsClient } from '../../../src/infrastructure/messaging/sqs/sqs-client';
+import { createSqsClient, type SqsClientConfig } from '../../../src/infrastructure/messaging/sqs/sqs-client';
 import { SqsMessagePublisher } from '../../../src/infrastructure/messaging/sqs/sqs-message-publisher';
 import { OutboxRepository } from '../../../src/infrastructure/persistence/mikro-orm/repository/outbox.repository';
 import { FakeClock } from '../../support/fakes/fake-clock';
@@ -21,9 +21,9 @@ import { createOrmDatabase, type OrmDatabase } from '../persistence/messaging-or
 const DEAD_ENDPOINT = 'http://127.0.0.1:1';
 const PROCESS_SCRIPT = new URL('./outbox-publisher-process.ts', import.meta.url).pathname;
 
-const sqsConfig = (eventsQueue: SqsQueueRef, endpoint = testInfraConfig().sqs.endpoint): SqsConfig => {
+const sqsConfig = (endpoint = testInfraConfig().sqs.endpoint): SqsClientConfig => {
   const { region, accessKeyId, secretAccessKey } = testInfraConfig().sqs;
-  return { endpoint, region, credentials: { accessKeyId, secretAccessKey }, maxAttempts: 1, eventsQueue };
+  return { endpoint, region, credentials: { accessKeyId, secretAccessKey }, maxAttempts: 1 };
 };
 
 const publisherConfig = (overrides: Partial<OutboxPublisherConfig> = {}): OutboxPublisherConfig => ({
@@ -86,14 +86,14 @@ describe('outbox publisher against PostgreSQL and LocalStack SQS', () => {
   const clients: Array<{ destroy(): void }> = [];
 
   const realPublisher = (queue: SqsQueueRef = { url: queues.events.url }): SqsMessagePublisher => {
-    const client = createSqsClient(sqsConfig(queue));
+    const client = createSqsClient(sqsConfig());
     clients.push(client);
     return new SqsMessagePublisher(client, queue);
   };
 
   const deadPublisher = (): SqsMessagePublisher => {
     const queue = { url: queues.events.url };
-    const client = createSqsClient(sqsConfig(queue, DEAD_ENDPOINT));
+    const client = createSqsClient(sqsConfig(DEAD_ENDPOINT));
     clients.push(client);
     return new SqsMessagePublisher(client, queue, { requestTimeoutMs: 2_000 });
   };
