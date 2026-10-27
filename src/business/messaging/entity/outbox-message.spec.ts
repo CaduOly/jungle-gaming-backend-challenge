@@ -104,6 +104,22 @@ describe('OutboxMessage', () => {
     expect(rehydrated.toState()).toEqual(message.toState());
   });
 
+  it('round-trips a claimed message keeping its lease token and lock', () => {
+    const claimed = OutboxMessage.rehydrate({
+      ...aMessage().toState(),
+      lockedUntil: later(30_000),
+      leaseToken: 'lease-a',
+    });
+
+    const state = claimed.toState();
+    expect(state.leaseToken).toBe('lease-a');
+    expect(state.lockedUntil).toEqual(later(30_000));
+    expect(OutboxMessage.rehydrate(state).toState()).toEqual(state);
+
+    claimed.scheduleRetry(later(1), 1_000);
+    expect(OutboxMessage.rehydrate(claimed.toState()).leaseToken).toBe('lease-a');
+  });
+
   it('rehydrates a published message without revalidating transitions', () => {
     const message = OutboxMessage.rehydrate({ ...aMessage().toState(), attempts: 3, publishedAt: later(5) });
     expect(message.isPending()).toBe(false);
