@@ -15,4 +15,12 @@ describe('FaultInjector', () => {
   it('rejects unknown points so a typo never silently disables a fault', () => {
     expect(() => FaultInjector.fromEnv({ FAULT_INJECTION: 'fail_outbox_insret' })).toThrow('Unknown FAULT_INJECTION');
   });
+
+  it('crashes only at an active point', () => {
+    const kills: string[] = [];
+    const faults = FaultInjector.of('crash_after_publish_before_mark');
+    faults.crash('fail_outbox_insert', () => kills.push('fail_outbox_insert'));
+    faults.crash('crash_after_publish_before_mark', () => kills.push('crash_after_publish_before_mark'));
+    expect(kills).toEqual(['crash_after_publish_before_mark']);
+  });
 });

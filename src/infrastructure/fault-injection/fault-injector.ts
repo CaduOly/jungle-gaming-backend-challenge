@@ -1,4 +1,4 @@
-export const FAULT_POINTS = ['fail_outbox_insert'] as const;
+export const FAULT_POINTS = ['fail_outbox_insert', 'crash_after_publish_before_mark'] as const;
 
 export type FaultPoint = (typeof FAULT_POINTS)[number];
 
@@ -8,6 +8,10 @@ export class InjectedFaultError extends Error {
     this.name = 'InjectedFaultError';
   }
 }
+
+const killSelf = (): void => {
+  process.kill(process.pid, 'SIGKILL');
+};
 
 const isFaultPoint = (value: string): value is FaultPoint => (FAULT_POINTS as readonly string[]).includes(value);
 
@@ -40,5 +44,10 @@ export class FaultInjector {
 
   trip(point: FaultPoint): void {
     if (this.isActive(point)) throw new InjectedFaultError(point);
+  }
+
+  /** Kills the process without any cleanup, the way a crash or `kill -9` would. */
+  crash(point: FaultPoint, kill: () => void = killSelf): void {
+    if (this.isActive(point)) kill();
   }
 }
