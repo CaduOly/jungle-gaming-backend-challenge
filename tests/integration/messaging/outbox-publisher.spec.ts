@@ -30,6 +30,7 @@ const publisherConfig = (overrides: Partial<OutboxPublisherConfig> = {}): Outbox
   leaseMs: 10_000,
   batchSize: 5,
   pollIntervalMs: 10,
+  publishTimeoutMs: 1_000,
   backoff: { baseMs: 50, capMs: 1_000, maxAttempts: 5 },
   ...overrides,
 });
@@ -173,6 +174,7 @@ describe('outbox publisher against PostgreSQL and LocalStack SQS', () => {
         SQS_EVENTS_QUEUE_URL: queues.events.url,
         OUTBOX_LEASE_MS: `${leaseMs}`,
         OUTBOX_BATCH_SIZE: '1',
+        OUTBOX_PUBLISH_TIMEOUT_MS: '1000',
         FAULT_INJECTION: 'crash_after_publish_before_mark',
       },
       stdout: 'pipe',

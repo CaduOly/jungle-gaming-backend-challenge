@@ -6,15 +6,16 @@ export type PublishOutboxRound = IUseCase<void, PublishOutboxBatchOutput>;
 export interface OutboxPublisherWorkerOptions {
   readonly pollIntervalMs: number;
   /** Output of every finished round; the hook the metrics decorator (T11) plugs into. */
-  readonly onRound?: (output: PublishOutboxBatchOutput) => void;
+  readonly onRound?: (output: PublishOutboxBatchOutput) => unknown;
   /** A round that threw (database down, for instance). The loop keeps going after the poll interval. */
-  readonly onError?: (error: unknown) => void;
+  readonly onError?: (error: unknown) => unknown;
 }
 
 /**
  * Polls the outbox, one round at a time. A round that published something is followed right away by the
  * next one, to drain a backlog; an empty or failing round waits for the poll interval. `createRound` is
- * called per round so every round gets a fresh EntityManager fork.
+ * called per round so every round gets a fresh EntityManager fork. After `stop()` resolves the worker can be
+ * started again; starting it while a stop is still waiting for its round throws.
  */
 export class OutboxPublisherWorker {
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -32,6 +33,11 @@ export class OutboxPublisherWorker {
   }
 
   start(): void {
+    if (this.stopping) {
+      if (this.inFlight !== undefined) throw new Error('OutboxPublisherWorker is still stopping; await stop() first');
+      this.stopping = false;
+      this.started = false;
+    }
     if (this.started) return;
     this.started = true;
     this.schedule(0);
@@ -71,11 +77,12 @@ export class OutboxPublisherWorker {
     this.schedule(nextDelayMs);
   }
 
-  private notify(callback: () => void): void {
+  /** An observer must never stop the publisher, whether it throws or returns a rejected promise. */
+  private notify(callback: () => unknown): void {
     try {
-      callback();
+      Promise.resolve(callback()).catch(() => undefined);
     } catch {
-      // An observer must never stop the publisher.
+      // see above
     }
   }
 }

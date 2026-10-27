@@ -52,6 +52,16 @@ export class InMemoryOutboxRepository implements IOutboxRepository {
     return true;
   }
 
+  async defer(message: OutboxMessage, until: Date): Promise<boolean> {
+    const stored = this.require(message.id);
+    if (stored.publishedAt || message.leaseToken === undefined || stored.leaseToken !== message.leaseToken) {
+      return false;
+    }
+    const nextAttemptAt = new Date(Math.max(stored.nextAttemptAt.getTime(), until.getTime()));
+    this.rows.set(message.id, { ...withoutLease(stored), nextAttemptAt });
+    return true;
+  }
+
   async findById(id: string): Promise<OutboxMessage | undefined> {
     const stored = this.rows.get(id);
     return stored && OutboxMessage.rehydrate(stored);
