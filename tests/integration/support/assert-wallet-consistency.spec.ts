@@ -174,6 +174,31 @@ describe('assertWalletConsistency', () => {
     expect((await violationsOf(walletId)).length).toBeGreaterThan(0);
   });
 
+  it('flags a negative wallet balance', async () => {
+    const walletId = await seedWallet('-5.00', 1, []);
+    expect(await violationsOf(walletId)).toContain('wallet.balance -5.00 is negative');
+  });
+
+  it('flags a negative balance_after even when the chain and the sum agree', async () => {
+    const walletId = await seedWallet('-10.00', 2, [
+      ['CREDIT', '10.00', '0.00', '10.00', 1],
+      ['DEBIT', '20.00', '10.00', '-10.00', 2],
+    ]);
+    const seq = await lastSeq(walletId);
+    const violations = await violationsOf(walletId);
+    expect(violations).toContain(`seq ${seq} balance_after -10.00 is negative`);
+    expect(violations).toContain('wallet.balance -10.00 is negative');
+  });
+
+  it('flags a wallet_version 1 entry that is not a CREDIT', async () => {
+    const walletId = await seedWallet('0.00', 2, [
+      ['DEBIT', '10.00', '0.00', '10.00', 1],
+      ['DEBIT', '10.00', '10.00', '0.00', 2],
+    ]);
+    const violations = await violationsOf(walletId);
+    expect(violations.some((v) => v.endsWith('wallet_version 1 must be a CREDIT (OPENING), got DEBIT'))).toBe(true);
+  });
+
   it('flags a missing wallet', async () => {
     expect(await violationsOf(uuidv7())).toHaveLength(1);
   });

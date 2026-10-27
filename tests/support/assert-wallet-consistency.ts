@@ -19,11 +19,11 @@ export class WalletConsistencyError extends Error {
  *                         balance_before numeric, balance_after numeric, wallet_version int)
  *
  * Versioning contract:
- *   - Wallet.open with balance > 0 writes an OPENING entry with wallet_version = 1;
+ *   - Wallet.open with balance > 0 writes an OPENING entry (a CREDIT) with wallet_version = 1;
  *   - Wallet.open with balance 0 writes no entry and leaves version = 1;
  *   - every debit/credit bumps version by exactly 1 and writes exactly one entry with the new version.
  * So entries carry consecutive versions starting at 1 (opened with funds) or 2 (opened empty),
- * and the last one equals wallets.version.
+ * and the last one equals wallets.version. Neither wallets.balance nor any balance_after is negative.
  *
  * All arithmetic runs in SQL on numeric (no monetary value becomes a JS number), and every
  * comparison uses IS DISTINCT FROM so a NULL never hides a violation.
@@ -48,6 +48,15 @@ totals AS (
 )
 SELECT format('balance %s differs from ledger sum %s', w.balance, t.net) AS violation
   FROM wallet w, totals t WHERE w.balance IS DISTINCT FROM t.net
+UNION ALL
+SELECT format('wallet.balance %s is negative', w.balance)
+  FROM wallet w WHERE w.balance IS NULL OR w.balance < 0
+UNION ALL
+SELECT format('seq %s balance_after %s is negative', e.seq, e.balance_after)
+  FROM entries e WHERE e.balance_after < 0
+UNION ALL
+SELECT format('seq %s wallet_version 1 must be a CREDIT (OPENING), got %s', e.seq, e.direction)
+  FROM entries e WHERE e.wallet_version = 1 AND e.direction IS DISTINCT FROM 'CREDIT'
 UNION ALL
 SELECT format('wallet.version %s with no ledger entries (expected 1)', w.version)
   FROM wallet w, totals t WHERE t.entry_count = 0 AND w.version IS DISTINCT FROM 1
