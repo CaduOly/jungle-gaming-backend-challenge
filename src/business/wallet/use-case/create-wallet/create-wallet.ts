@@ -29,8 +29,8 @@ export const openingIdempotencyKey = (walletId: string): string => `opening:${wa
 /**
  * Opens a wallet at version 1. A positive initial balance also writes, in the same unit of work, the internal
  * OPENING transaction (provider `system`, key `opening:<walletId>`), its CREDIT entry and WalletBalanceChanged.
- * One wallet per player and currency: a duplicate is a conflict (409), also when a concurrent creation wins
- * the race on the unique constraint.
+ * One wallet per player and currency, guaranteed by the unique constraint alone (no read-then-insert race):
+ * the violation becomes the 409 conflict.
  */
 export class CreateWallet implements IUseCase<CreateWalletInput, WalletView> {
   constructor(
@@ -49,9 +49,6 @@ export class CreateWallet implements IUseCase<CreateWalletInput, WalletView> {
 
     try {
       return await this.unitOfWork.run(async (tx) => {
-        if (await tx.wallets.existsByPlayerAndCurrency(playerId, initialBalance.currency)) {
-          throw new WalletAlreadyExistsError(playerId, initialBalance.currency);
-        }
         const now = this.clock.now();
         const walletId = this.ids.generate();
         const openingId = initialBalance.isZero() ? undefined : this.ids.generate();
