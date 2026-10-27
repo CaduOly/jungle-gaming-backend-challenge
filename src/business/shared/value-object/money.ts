@@ -20,6 +20,11 @@ const MAX_CENTS = 99_999_999_999_999_999_999n;
  */
 export class Money {
   readonly #cents: bigint;
+  /**
+   * Normalized decimal string ("25.00"), derived from the cents. Arithmetic never reads it; it is public so
+   * structural equality (spread, `toEqual`) sees the value and not only the currency.
+   */
+  readonly amount: string;
 
   private constructor(
     cents: bigint,
@@ -28,6 +33,7 @@ export class Money {
     if (cents < 0n) throw new NegativeMoneyError();
     if (cents > MAX_CENTS) throw new MoneyOverflowError();
     this.#cents = cents;
+    this.amount = Money.format(cents);
     Object.freeze(this);
   }
 
@@ -87,8 +93,12 @@ export class Money {
   }
 
   toString(): string {
-    const units = this.#cents / CENTS_PER_UNIT;
-    const fraction = (this.#cents % CENTS_PER_UNIT).toString().padStart(2, '0');
+    return Money.format(this.#cents);
+  }
+
+  private static format(cents: bigint): string {
+    const units = cents / CENTS_PER_UNIT;
+    const fraction = (cents % CENTS_PER_UNIT).toString().padStart(2, '0');
     return `${units}.${fraction}`;
   }
 
