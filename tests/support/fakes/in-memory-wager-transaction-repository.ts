@@ -66,11 +66,12 @@ export class InMemoryWagerTransactionStore {
     return null;
   }
 
-  write(transaction: WagerTransaction): void {
+  /** `keepLease: false` is the update path: writing the decision releases the claim lease. */
+  write(transaction: WagerTransaction, { keepLease = true }: { keepLease?: boolean } = {}): void {
     const state = transaction.toState();
     this.assertUnique(state);
     const existing = this.rows.get(state.id);
-    this.rows.set(state.id, { state, lockedUntil: existing?.lockedUntil ?? null });
+    this.rows.set(state.id, { state, lockedUntil: keepLease ? (existing?.lockedUntil ?? null) : null });
   }
 
   /** Puts a row back as it was (or removes it when it did not exist): the rollback of a write. */
@@ -159,7 +160,7 @@ export class InMemoryWagerTransactionRepository implements IWagerTransactionRepo
     const changed = changedImmutableColumn(current, transaction);
     if (changed !== null) throw new WagerConstraintError(`${changed} is immutable`);
     const before = this.store.rows.get(transaction.id);
-    this.store.write(transaction);
+    this.store.write(transaction, { keepLease: false });
     this.journal(transaction.id, before && { ...before });
   }
 

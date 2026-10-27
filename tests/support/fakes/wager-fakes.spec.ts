@@ -183,6 +183,17 @@ describe('InMemoryWagerTransactionRepository', () => {
       expect(await repository.claimPendingBatch({ limit: 10, leaseMs: 5_000, now: at(6) })).toEqual(['id-a']);
     });
 
+    it('an update releases the lease, so only nextAttemptAt gates the next claim', async () => {
+      const waiting = pending('a', 0);
+      await repository.insert(waiting);
+      expect(await repository.claimPendingBatch({ limit: 10, leaseMs: 60_000, now: at(1) })).toEqual(['id-a']);
+      await repository.lockById(waiting.id);
+      waiting.scheduleNextAttempt(at(2));
+      await repository.update(waiting);
+      await repository.releaseLocks();
+      expect(await repository.claimPendingBatch({ limit: 10, leaseMs: 60_000, now: at(2) })).toEqual(['id-a']);
+    });
+
     it('skips row-locked rows (SKIP LOCKED)', async () => {
       const waiting = pending('a', 0);
       await repository.insert(waiting);
