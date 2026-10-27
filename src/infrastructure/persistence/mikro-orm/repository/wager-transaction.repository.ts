@@ -7,6 +7,7 @@ import type {
 } from '../../../../business/wagering/port/wager-transaction.repository.port';
 import { isUuid } from '../mapper/sql-values';
 import {
+  processedAtColumn,
   WAGER_INSERT_COLUMNS,
   WAGER_SELECT,
   wagerTransactionFromRow,
@@ -70,8 +71,8 @@ export class WagerTransactionRepository implements IWagerTransactionRepository {
         transaction.referenceTransactionId ?? null,
         transaction.attempts,
         transaction.nextAttemptAt ?? null,
-        transaction.processedAt ?? null,
-        this.clock.now(),
+        processedAtColumn(transaction),
+        transaction.processedAt ?? this.clock.now(),
         transaction.id,
       ],
       'run',

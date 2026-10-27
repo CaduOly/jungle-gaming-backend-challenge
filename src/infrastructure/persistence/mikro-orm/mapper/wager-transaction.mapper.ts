@@ -50,13 +50,20 @@ export const WAGER_SELECT = `
   SELECT t.id, t.provider_id, t.external_transaction_id, t.idempotency_key, t.payload_hash, t.wallet_id,
          t.player_id, t.round_id, t.game_id, t.kind, t.status, t.amount, t.currency,
          t.reference_external_transaction_id, t.reference_transaction_id, t.failure_code, t.observed_balance,
-         t.attempts, t.next_attempt_at, t.created_at, t.processed_at, w.currency AS wallet_currency_of_row
+         t.attempts, t.next_attempt_at, t.created_at, t.processed_at, t.updated_at,
+         w.currency AS wallet_currency_of_row
     FROM wager_transactions t
     JOIN wallets w ON w.id = t.wallet_id`;
 
 export interface WagerTransactionSelectRow extends WagerTransactionRow {
+  readonly updated_at: unknown;
   readonly wallet_currency_of_row: string;
 }
+
+const DECIDED_WITHOUT_PROCESSING: ReadonlySet<string> = new Set([
+  WagerTransactionStatus.REJECTED,
+  WagerTransactionStatus.FAILED,
+]);
 
 export const wagerTransactionFromRow = (row: WagerTransactionSelectRow): WagerTransaction => {
   const currency = toText(row.currency, 'wager_transactions.currency');
@@ -65,7 +72,9 @@ export const wagerTransactionFromRow = (row: WagerTransactionSelectRow): WagerTr
   const failureCode = toFailureCode(row.failure_code);
   const observedBalance = toOptionalMoney(row.observed_balance, row.wallet_currency_of_row);
   const nextAttemptAt = toOptionalDate(row.next_attempt_at);
-  const processedAt = toOptionalDate(row.processed_at);
+  const processedAt = DECIDED_WITHOUT_PROCESSING.has(row.status)
+    ? toDate(row.updated_at)
+    : toOptionalDate(row.processed_at);
   return WagerTransaction.rehydrate({
     id: row.id,
     providerId: row.provider_id,
@@ -89,6 +98,15 @@ export const wagerTransactionFromRow = (row: WagerTransactionSelectRow): WagerTr
     ...(processedAt === undefined ? {} : { processedAt }),
   });
 };
+
+/**
+ * The schema stores processed_at exactly when the status is PROCESSED (CHECK
+ * wager_transactions_processed_has_processed_at), while the entity also stamps REJECTED and FAILED with the
+ * moment of the decision. That moment is kept in updated_at (a terminal row never changes again) and read back
+ * from there, so the entity round-trips while processed_at keeps its literal meaning.
+ */
+export const processedAtColumn = (transaction: WagerTransaction): Date | null =>
+  transaction.status === WagerTransactionStatus.PROCESSED ? (transaction.processedAt ?? null) : null;
 
 export const WAGER_INSERT_COLUMNS =
   'id, provider_id, external_transaction_id, idempotency_key, payload_hash, wallet_id, player_id, round_id, ' +
@@ -116,6 +134,6 @@ export const wagerTransactionToInsertParams = (transaction: WagerTransaction): u
   transaction.attempts,
   transaction.nextAttemptAt ?? null,
   transaction.createdAt,
-  transaction.createdAt,
-  transaction.processedAt ?? null,
+  transaction.processedAt ?? transaction.createdAt,
+  processedAtColumn(transaction),
 ];
