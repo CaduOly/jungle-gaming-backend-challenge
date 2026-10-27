@@ -51,8 +51,8 @@ const moneyRestrictedSyntax = [
     message: `${MONEY_MESSAGE} Unary plus coerces to number.`,
   },
   {
-    selector: "UnaryExpression[operator='-']:not([argument.type='Literal'])",
-    message: `${MONEY_MESSAGE} Unary minus on a value coerces it to number; Money is never negative.`,
+    selector: "UnaryExpression[operator='-'] > UnaryExpression[operator='-'].argument",
+    message: `${MONEY_MESSAGE} Double negation coerces to number.`,
   },
   {
     selector: "UnaryExpression[operator='~']",
@@ -93,6 +93,7 @@ const CLOCK_AND_MATH_ALIAS = [
   ':not(Property[computed=false] > Identifier.key)',
   ':not(TSTypeReference > Identifier.typeName)',
   ':not(TSQualifiedName > Identifier)',
+  ':not(TSTypeQuery > Identifier.exprName)',
   ':not(BinaryExpression[operator="instanceof"] > Identifier.right)',
 ].join('');
 
@@ -126,6 +127,20 @@ export const pureBusinessRules = {
   ],
 };
 
+/**
+ * Production business code never negates a value: Money has no negative and counters do not need it. Specs may
+ * (e.g. `-count` offsets in a test clock), so this rule is not part of the shared money rules.
+ */
+const UNARY_MINUS_ON_VALUE = {
+  selector: "UnaryExpression[operator='-']:not([argument.type='Literal'])",
+  message: `${MONEY_MESSAGE} Unary minus on a value coerces it to number; Money is never negative.`,
+};
+
+export const productionBusinessRules = {
+  ...pureBusinessRules,
+  'no-restricted-syntax': [...pureBusinessRules['no-restricted-syntax'], UNARY_MINUS_ON_VALUE],
+};
+
 export default tseslint.config(
   { ignores: ['node_modules/**', 'dist/**', 'coverage/**', 'tests/fixtures/**'] },
   js.configs.recommended,
@@ -150,5 +165,10 @@ export default tseslint.config(
   {
     files: ['src/business/**/*.ts'],
     rules: pureBusinessRules,
+  },
+  {
+    files: ['src/business/**/*.ts'],
+    ignores: ['src/business/**/*.spec.ts'],
+    rules: productionBusinessRules,
   },
 );
