@@ -60,4 +60,18 @@ describe('domain errors', () => {
     expect(new InvalidMoneyAmountError(25).message).toContain('number');
     expect(new InvalidCurrencyError('brl').message).toContain('"brl"');
   });
+
+  it('truncates long rejected input in the message', () => {
+    const huge = '9'.repeat(1024 * 1024);
+    const message = new InvalidMoneyAmountError(huge).message;
+    expect(message).toContain(`"${'9'.repeat(32)}…"`);
+    expect(message).not.toContain('9'.repeat(33));
+    expect(message.length).toBeLessThan(200);
+    expect(new InvalidCurrencyError(huge).message.length).toBeLessThan(200);
+  });
+
+  it('keeps input of exactly the limit untruncated', () => {
+    const limit = 'x'.repeat(32);
+    expect(new InvalidCurrencyError(limit).message).toContain(`"${limit}"`);
+  });
 });

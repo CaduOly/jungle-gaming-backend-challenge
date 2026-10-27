@@ -164,29 +164,60 @@ describe('Money', () => {
       expect(brl('25.00').equals(usd('25.00'))).toBe(false);
     });
 
-    it('isZero / isPositive / isNegative', () => {
+    it('isZero / isPositive', () => {
       expect(brl('0.00').isZero()).toBe(true);
+      expect(brl('0.00').isPositive()).toBe(false);
       expect(brl('0.01').isZero()).toBe(false);
       expect(brl('0.01').isPositive()).toBe(true);
-      expect(brl('0.01').isNegative()).toBe(false);
     });
   });
 
-  describe('negate (internal)', () => {
-    it('flips the sign and serializes the negative amount', () => {
-      const negative = brl('25.50').negate();
-      expect(negative.isNegative()).toBe(true);
-      expect(negative.isPositive()).toBe(false);
-      expect(negative.toString()).toBe('-25.50');
-      expect(negative.negate().equals(brl('25.50'))).toBe(true);
+  describe('non-negativity', () => {
+    it('exposes no API that negates or yields a negative amount', () => {
+      const money = brl('25.00') as unknown as Record<string, unknown>;
+      expect(money.negate).toBeUndefined();
+      expect(money.isNegative).toBeUndefined();
     });
 
-    it('keeps zero as zero', () => {
-      expect(brl('0.00').negate().toString()).toBe('0.00');
+    it('rejects every subtraction that would go below zero', () => {
+      expect(() => brl('0.00').subtract(brl('0.01'))).toThrow(NegativeMoneyError);
+      expect(() => brl('10.00').subtract(brl('50.00'))).toThrow(NegativeMoneyError);
+      expect(() => Money.zero('BRL').subtract(brl(MAX))).toThrow(NegativeMoneyError);
     });
 
-    it('adds a negative amount as a subtraction', () => {
-      expect(brl('10.00').add(brl('0.05').negate()).toString()).toBe('9.95');
+    it('never parses a negative amount', () => {
+      expect(() => brl('-40.00')).toThrow(InvalidMoneyAmountError);
+    });
+
+    it('serializes only amounts that from() accepts back', () => {
+      for (const money of [brl('0.00'), brl('0.30').subtract(brl('0.30')), brl('1.00').add(brl('0.01')), brl(MAX)]) {
+        expect(Money.from(money.toProps()).equals(money)).toBe(true);
+      }
+    });
+  });
+
+  describe('runtime immutability', () => {
+    it('ignores or rejects writes to internals and fields', () => {
+      const money = brl('25.00');
+      const raw = money as unknown as Record<string, unknown>;
+      expect(() => {
+        raw.cents = 1n;
+      }).toThrow(TypeError);
+      expect(() => {
+        raw.currency = 'USD';
+      }).toThrow(TypeError);
+      expect(money.toProps()).toEqual({ amount: '25.00', currency: 'BRL' });
+    });
+
+    it('is frozen', () => {
+      expect(Object.isFrozen(brl('1.00'))).toBe(true);
+    });
+
+    it('does not expose the bigint through spread or keys', () => {
+      const money = brl('25.00');
+      expect({ ...money }).toEqual({ currency: 'BRL' });
+      expect(Object.keys(money)).toEqual(['currency']);
+      expect(Object.values(money).some((value) => typeof value === 'bigint')).toBe(false);
     });
   });
 
