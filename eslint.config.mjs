@@ -2,25 +2,127 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 const MONEY_MESSAGE = 'Money must never pass through number. Use the Money value object (bigint minor units).';
+const PURE_BUSINESS_MESSAGE = 'business/** is pure: inject clocks, randomness and configuration through ports.';
+
+const GLOBAL_OBJECTS = ['globalThis', 'global', 'self', 'window'];
+const MONEY_GLOBALS = ['parseFloat', 'parseInt', 'Number'];
+const BUSINESS_GLOBALS = ['Bun', 'process'];
+const BUSINESS_GLOBAL_ACCESS = ['Math', 'Date', 'crypto', 'performance', ...BUSINESS_GLOBALS];
+const BUSINESS_RESTRICTED_MEMBERS = [
+  ['Math', 'random'],
+  ['Math', 'round'],
+  ['Math', 'ceil'],
+  ['Math', 'trunc'],
+  ['Math', 'fround'],
+  ['Date', 'now'],
+  ['crypto', 'randomUUID'],
+  ['crypto', 'getRandomValues'],
+];
+
+const restrictedGlobals = (names, message) => names.map((name) => ({ name, message }));
+
+const restrictedGlobalAccess = (names, message) =>
+  GLOBAL_OBJECTS.flatMap((object) => names.map((property) => ({ object, property, message })));
+
+const moneyRestrictedGlobals = restrictedGlobals(['parseFloat', 'parseInt'], MONEY_MESSAGE);
+
+const moneyRestrictedProperties = [
+  { object: 'Number', property: 'parseFloat', message: MONEY_MESSAGE },
+  { object: 'Number', property: 'parseInt', message: MONEY_MESSAGE },
+  { property: 'toFixed', message: MONEY_MESSAGE },
+  { property: 'toPrecision', message: MONEY_MESSAGE },
+  ...restrictedGlobalAccess(MONEY_GLOBALS, MONEY_MESSAGE),
+];
+
+const isIntegerParsing = (entry) => entry.name === 'parseInt' || (entry.object === 'Number' && entry.property === 'parseInt');
+
+const moneyRestrictedSyntax = [
+  {
+    selector: [
+      "Identifier[name='Number']",
+      ':not(MemberExpression > Identifier.object)',
+      ':not(MemberExpression[computed=false] > Identifier.property)',
+      ':not(Property[computed=false] > Identifier.key)',
+    ].join(''),
+    message: `${MONEY_MESSAGE} Only static members such as Number.isSafeInteger are allowed.`,
+  },
+  {
+    selector: "UnaryExpression[operator='+']",
+    message: `${MONEY_MESSAGE} Unary plus coerces to number.`,
+  },
+  {
+    selector: "UnaryExpression[operator='-']:not([argument.type='Literal'])",
+    message: `${MONEY_MESSAGE} Unary minus on a value coerces it to number; Money is never negative.`,
+  },
+  {
+    selector: "UnaryExpression[operator='~']",
+    message: `${MONEY_MESSAGE} Bitwise not coerces to a 32-bit number.`,
+  },
+  {
+    selector: "BinaryExpression[operator='*'][left.type='Literal'][left.raw='1']",
+    message: `${MONEY_MESSAGE} Multiplying by 1 coerces to number.`,
+  },
+  {
+    selector: "BinaryExpression[operator='*'][right.type='Literal'][right.raw='1']",
+    message: `${MONEY_MESSAGE} Multiplying by 1 coerces to number.`,
+  },
+  {
+    selector: "BinaryExpression[operator='-'][right.type='Literal'][right.raw='0']",
+    message: `${MONEY_MESSAGE} Subtracting 0 coerces to number.`,
+  },
+];
 
 export const moneySafetyRules = {
+  'no-restricted-globals': ['error', ...moneyRestrictedGlobals],
+  'no-restricted-properties': ['error', ...moneyRestrictedProperties],
+  'no-restricted-syntax': ['error', ...moneyRestrictedSyntax],
+};
+
+/** The integer-env boundary may parse integers (parseInt / Number.parseInt) and nothing else is relaxed. */
+export const integerEnvRules = {
+  'no-restricted-globals': ['error', ...moneyRestrictedGlobals.filter((entry) => !isIntegerParsing(entry))],
+  'no-restricted-properties': ['error', ...moneyRestrictedProperties.filter((entry) => !isIntegerParsing(entry))],
+  'no-restricted-syntax': ['error', ...moneyRestrictedSyntax],
+};
+
+const CLOCK_AND_MATH_ALIAS = [
+  "Identifier[name=/^(Date|Math)$/]",
+  ':not(MemberExpression > Identifier.object)',
+  ':not(NewExpression > Identifier.callee)',
+  ':not(MemberExpression[computed=false] > Identifier.property)',
+  ':not(Property[computed=false] > Identifier.key)',
+  ':not(TSTypeReference > Identifier.typeName)',
+  ':not(TSQualifiedName > Identifier)',
+  ':not(BinaryExpression[operator="instanceof"] > Identifier.right)',
+].join('');
+
+export const pureBusinessRules = {
   'no-restricted-globals': [
     'error',
-    { name: 'parseFloat', message: MONEY_MESSAGE },
-    { name: 'parseInt', message: MONEY_MESSAGE },
+    ...moneyRestrictedGlobals,
+    ...restrictedGlobals([...BUSINESS_GLOBALS, 'performance'], PURE_BUSINESS_MESSAGE),
   ],
   'no-restricted-properties': [
     'error',
-    { object: 'Number', property: 'parseFloat', message: MONEY_MESSAGE },
-    { object: 'Number', property: 'parseInt', message: MONEY_MESSAGE },
-    { property: 'toFixed', message: MONEY_MESSAGE },
+    ...moneyRestrictedProperties,
+    ...restrictedGlobalAccess(BUSINESS_GLOBAL_ACCESS, PURE_BUSINESS_MESSAGE),
+    ...BUSINESS_RESTRICTED_MEMBERS.map(([object, property]) => ({ object, property, message: PURE_BUSINESS_MESSAGE })),
   ],
   'no-restricted-syntax': [
     'error',
-    { selector: "CallExpression[callee.type='Identifier'][callee.name='Number']", message: MONEY_MESSAGE },
-    { selector: "NewExpression[callee.type='Identifier'][callee.name='Number']", message: MONEY_MESSAGE },
-    { selector: "CallExpression[callee.type='Identifier'][callee.name='parseFloat']", message: MONEY_MESSAGE },
-    { selector: "CallExpression[callee.type='Identifier'][callee.name='parseInt']", message: MONEY_MESSAGE },
+    ...moneyRestrictedSyntax,
+    {
+      selector: "NewExpression[callee.type='Identifier'][callee.name='Date'][arguments.length=0]",
+      message: `${PURE_BUSINESS_MESSAGE} new Date() reads the wall clock; use IClock.`,
+    },
+    {
+      selector: "CallExpression[callee.type='Identifier'][callee.name='Date']",
+      message: `${PURE_BUSINESS_MESSAGE} Date() reads the wall clock; use IClock.`,
+    },
+    {
+      selector: CLOCK_AND_MATH_ALIAS,
+      message: `${PURE_BUSINESS_MESSAGE} Date and Math may only be used directly (Date.UTC, new Date(value), Math.max), never aliased.`,
+    },
   ],
 };
 
@@ -39,7 +141,14 @@ export default tseslint.config(
   },
   {
     files: ['src/**/*.ts'],
-    ignores: ['src/infrastructure/config/**'],
     rules: moneySafetyRules,
+  },
+  {
+    files: ['src/infrastructure/config/integer-env.ts'],
+    rules: integerEnvRules,
+  },
+  {
+    files: ['src/business/**/*.ts'],
+    rules: pureBusinessRules,
   },
 );

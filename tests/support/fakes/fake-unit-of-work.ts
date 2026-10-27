@@ -1,4 +1,4 @@
-import type { TxRepositories } from '../../../src/business/shared/port/tx-repositories.port';
+import type { TxRepositories } from '../../../src/business/wagering/port/tx-repositories.port';
 import type { IUnitOfWork, UnitOfWorkOptions } from '../../../src/business/shared/port/unit-of-work.port';
 import { InMemoryInboxRepository } from './in-memory-inbox.repository';
 import { InMemoryLedger } from './in-memory-ledger';
