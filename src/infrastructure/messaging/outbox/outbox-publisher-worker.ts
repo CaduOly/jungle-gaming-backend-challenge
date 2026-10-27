@@ -1,5 +1,6 @@
 import type { PublishOutboxBatchOutput } from '../../../business/messaging/use-case/publish-outbox-batch/publish-outbox-batch';
 import type { IUseCase } from '../../../business/shared/use-case';
+import { PollingLoop } from '../../worker/polling-loop';
 
 export type PublishOutboxRound = IUseCase<void, PublishOutboxBatchOutput>;
 
@@ -17,24 +18,27 @@ export interface OutboxPublisherWorkerOptions {
  * called per round so every round gets a fresh EntityManager fork.
  */
 export class OutboxPublisherWorker {
-  private timer: ReturnType<typeof setTimeout> | undefined;
-  private inFlight: Promise<void> | undefined;
-  private started = false;
-  private stopping = false;
+  private readonly loop: PollingLoop<PublishOutboxBatchOutput>;
 
   constructor(
     private readonly createRound: () => PublishOutboxRound,
-    private readonly options: OutboxPublisherWorkerOptions,
-  ) {}
+    options: OutboxPublisherWorkerOptions,
+  ) {
+    this.loop = new PollingLoop({
+      round: () => this.runOnce(),
+      nextDelayMs: (output) => (output.published > 0 ? 0 : options.pollIntervalMs),
+      errorDelayMs: options.pollIntervalMs,
+      ...(options.onRound === undefined ? {} : { onRound: options.onRound }),
+      ...(options.onError === undefined ? {} : { onError: options.onError }),
+    });
+  }
 
   get isRunning(): boolean {
-    return this.started && !this.stopping;
+    return this.loop.isRunning;
   }
 
   start(): void {
-    if (this.started) return;
-    this.started = true;
-    this.schedule(0);
+    this.loop.start();
   }
 
   runOnce(): Promise<PublishOutboxBatchOutput> {
@@ -42,40 +46,7 @@ export class OutboxPublisherWorker {
   }
 
   /** Stops polling and resolves once the round in flight, if any, has finished. */
-  async stop(): Promise<void> {
-    this.stopping = true;
-    if (this.timer !== undefined) clearTimeout(this.timer);
-    this.timer = undefined;
-    await this.inFlight;
-  }
-
-  private schedule(delayMs: number): void {
-    if (this.stopping) return;
-    this.timer = setTimeout(() => {
-      this.timer = undefined;
-      this.inFlight = this.tick().finally(() => {
-        this.inFlight = undefined;
-      });
-    }, delayMs);
-  }
-
-  private async tick(): Promise<void> {
-    let nextDelayMs = this.options.pollIntervalMs;
-    try {
-      const output = await this.runOnce();
-      if (output.published > 0) nextDelayMs = 0;
-      this.notify(() => this.options.onRound?.(output));
-    } catch (error) {
-      this.notify(() => this.options.onError?.(error));
-    }
-    this.schedule(nextDelayMs);
-  }
-
-  private notify(callback: () => void): void {
-    try {
-      callback();
-    } catch {
-      // An observer must never stop the publisher.
-    }
+  stop(): Promise<void> {
+    return this.loop.stop();
   }
 }
