@@ -157,6 +157,15 @@ describe('ProcessWagerTransaction', () => {
       expect(app.db.outbox.all().at(-1)?.eventType).toBe('WagerTransactionRejected');
     });
 
+    it.each([
+      ['another player', { playerId: 'player-2' }, 'WALLET_PLAYER_MISMATCH'],
+      ['another currency', { currency: 'USD' }, 'CURRENCY_MISMATCH'],
+    ] as const)('rejects a dependent of %s at once instead of parking it as pending', async (_name, options, code) => {
+      const wallet = await open('100.00');
+      const result = await submit(wallet, 'ROLLBACK', 'rb', { amount: '10.00', reference: 'missing', ...options });
+      expect(result).toMatchObject({ status: 'REJECTED', failureCode: code });
+    });
+
     it('a reference that was rejected rejects the dependent at once with REFERENCE_NOT_PROCESSED', async () => {
       const wallet = await open('5.00');
       const bet = await submit(wallet, 'BET', 'bet', { amount: '10.00' });
@@ -254,6 +263,16 @@ describe('ProcessWagerTransaction', () => {
       const replay = await submit(wallet, 'BET', 'tx', { amount: '25.00' });
       expect(replay).toEqual({ ...first, idempotentReplay: true });
       expect([app.db.ledger.count(), app.db.outbox.all().length, wagerCount()]).toEqual(effects);
+    });
+
+    it('answers a committed replay from the lock-free pre-check, without waiting for the wallet lock', async () => {
+      const wallet = await open();
+      await submit(wallet, 'BET', 'tx', { amount: '25.00' });
+      let walletLocks = 0;
+      app.uow.before('wallets.lockById', () => void (walletLocks += 1));
+      expect((await submit(wallet, 'BET', 'tx', { amount: '25.00' })).idempotentReplay).toBe(true);
+      expect(walletLocks).toBe(0);
+      app.uow.clearFaults();
     });
 
     it('same key with another payload is IDEMPOTENCY_CONFLICT (409), never a replay', async () => {
