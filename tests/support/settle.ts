@@ -10,8 +10,35 @@ export const settleAllOrThrow = async <const T extends readonly unknown[]>(promi
   return results.map((result) => (result as PromiseFulfilledResult<unknown>).value) as unknown as T;
 };
 
+export class DisposeTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`A resource did not dispose within ${timeoutMs}ms`);
+    this.name = 'DisposeTimeoutError';
+  }
+}
+
+const DEFAULT_DISPOSE_TIMEOUT_MS = 30_000;
+
+const withTimeout = async (work: Promise<unknown>, timeoutMs: number): Promise<void> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new DisposeTimeoutError(timeoutMs)), timeoutMs);
+  });
+  try {
+    await Promise.race([work, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/**
+ * Disposes tracked resources one at a time, newest first (a queue before the database it may depend on),
+ * each bounded by `disposeTimeoutMs`; a failure or a timeout is collected and the next resource still runs.
+ */
 export class ResourceScope {
   private readonly disposers: Array<() => Promise<unknown>> = [];
+
+  constructor(private readonly disposeTimeoutMs = DEFAULT_DISPOSE_TIMEOUT_MS) {}
 
   track<T>(resource: Promise<T>, dispose: (value: T) => Promise<unknown>): Promise<T> {
     this.disposers.push(async () => {
@@ -23,8 +50,14 @@ export class ResourceScope {
   }
 
   async dispose(): Promise<void> {
-    const results = await Promise.allSettled(this.disposers.splice(0).reverse().map((dispose) => dispose()));
-    const failures = failuresOf(results);
+    const failures: unknown[] = [];
+    for (const dispose of this.disposers.splice(0).reverse()) {
+      try {
+        await withTimeout(dispose(), this.disposeTimeoutMs);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
     if (failures.length > 0) throw new AggregateError(failures, `${failures.length} resources failed to dispose`);
   }
 }

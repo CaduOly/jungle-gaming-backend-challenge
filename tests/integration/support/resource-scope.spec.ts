@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { ResourceScope, settleAllOrThrow } from '../../support/settle';
+import { DisposeTimeoutError, ResourceScope, settleAllOrThrow } from '../../support/settle';
 
 describe('ResourceScope', () => {
   it('disposes a resource that finishes being created after dispose() started', async () => {
@@ -46,5 +46,39 @@ describe('ResourceScope', () => {
 
     await expect(scope.dispose()).rejects.toBeInstanceOf(AggregateError);
     expect(disposed).toEqual(['b']);
+  });
+
+  it('disposes one at a time, in reverse order of tracking', async () => {
+    const scope = new ResourceScope();
+    const events: string[] = [];
+    for (const name of ['database', 'queues', 'consumer']) {
+      await scope.track(Promise.resolve(name), async (value) => {
+        events.push(`${value}:start`);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        events.push(`${value}:end`);
+      });
+    }
+    await scope.dispose();
+    expect(events).toEqual([
+      'consumer:start',
+      'consumer:end',
+      'queues:start',
+      'queues:end',
+      'database:start',
+      'database:end',
+    ]);
+  });
+
+  it('bounds each disposer with a timeout and still disposes the rest', async () => {
+    const scope = new ResourceScope(20);
+    const disposed: string[] = [];
+    await scope.track(Promise.resolve('first'), async (value) => {
+      disposed.push(value);
+    });
+    await scope.track(Promise.resolve('stuck'), () => new Promise(() => {}));
+    const error = await scope.dispose().catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors[0]).toBeInstanceOf(DisposeTimeoutError);
+    expect(disposed).toEqual(['first']);
   });
 });
