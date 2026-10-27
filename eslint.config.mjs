@@ -6,7 +6,18 @@ const PURE_BUSINESS_MESSAGE = 'business/** is pure: inject clocks, randomness an
 
 const GLOBAL_OBJECTS = ['globalThis', 'global', 'self', 'window'];
 const MONEY_GLOBALS = ['parseFloat', 'parseInt', 'Number'];
-const BUSINESS_GLOBALS = ['Math', 'Bun', 'process'];
+const BUSINESS_GLOBALS = ['Bun', 'process'];
+const BUSINESS_GLOBAL_ACCESS = ['Math', 'Date', 'crypto', ...BUSINESS_GLOBALS];
+const BUSINESS_RESTRICTED_MEMBERS = [
+  ['Math', 'random'],
+  ['Math', 'round'],
+  ['Math', 'ceil'],
+  ['Math', 'trunc'],
+  ['Math', 'fround'],
+  ['Date', 'now'],
+  ['crypto', 'randomUUID'],
+  ['crypto', 'getRandomValues'],
+];
 
 const restrictedGlobals = (names, message) => names.map((name) => ({ name, message }));
 
@@ -33,13 +44,32 @@ const moneyRestrictedSyntax = [
     ].join(''),
     message: `${MONEY_MESSAGE} Only static members such as Number.isSafeInteger are allowed.`,
   },
+  {
+    selector: "UnaryExpression[operator='+']",
+    message: `${MONEY_MESSAGE} Unary plus coerces to number.`,
+  },
+  {
+    selector: "UnaryExpression[operator='-'] > UnaryExpression[operator='-'].argument",
+    message: `${MONEY_MESSAGE} Double negation coerces to number.`,
+  },
+  {
+    selector: "BinaryExpression[operator='*'][left.type='Literal'][left.raw='1']",
+    message: `${MONEY_MESSAGE} Multiplying by 1 coerces to number.`,
+  },
+  {
+    selector: "BinaryExpression[operator='*'][right.type='Literal'][right.raw='1']",
+    message: `${MONEY_MESSAGE} Multiplying by 1 coerces to number.`,
+  },
+  {
+    selector: "BinaryExpression[operator='-'][right.type='Literal'][right.raw='0']",
+    message: `${MONEY_MESSAGE} Subtracting 0 coerces to number.`,
+  },
 ];
 
 export const moneySafetyRules = {
   'no-restricted-globals': ['error', ...moneyRestrictedGlobals],
   'no-restricted-properties': ['error', ...moneyRestrictedProperties],
   'no-restricted-syntax': ['error', ...moneyRestrictedSyntax],
-  'no-implicit-coercion': ['error', { boolean: false, string: false, number: true, disallowTemplateShorthand: false }],
 };
 
 export const pureBusinessRules = {
@@ -51,7 +81,16 @@ export const pureBusinessRules = {
   'no-restricted-properties': [
     'error',
     ...moneyRestrictedProperties,
-    ...restrictedGlobalAccess(BUSINESS_GLOBALS, PURE_BUSINESS_MESSAGE),
+    ...restrictedGlobalAccess(BUSINESS_GLOBAL_ACCESS, PURE_BUSINESS_MESSAGE),
+    ...BUSINESS_RESTRICTED_MEMBERS.map(([object, property]) => ({ object, property, message: PURE_BUSINESS_MESSAGE })),
+  ],
+  'no-restricted-syntax': [
+    'error',
+    ...moneyRestrictedSyntax,
+    {
+      selector: "NewExpression[callee.type='Identifier'][callee.name='Date'][arguments.length=0]",
+      message: `${PURE_BUSINESS_MESSAGE} new Date() reads the wall clock; use IClock.`,
+    },
   ],
 };
 

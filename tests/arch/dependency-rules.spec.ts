@@ -43,7 +43,13 @@ describe('architecture rules (dependency-cruiser)', () => {
     ['infra-package-outside-infrastructure', ['infra-packages-only-in-infrastructure']],
     ['infra-package-family-outside-infrastructure', ['infra-packages-only-in-infrastructure']],
     ['shared-imports-context', ['shared-kernel-imports-no-context']],
-    ['business-spec-imports-infra-package', ['business-imports-only-business', 'infra-packages-only-in-infrastructure']],
+    [
+      'business-spec-imports-infra-package',
+      ['business-spec-imports-only-business-or-test-doubles', 'infra-packages-only-in-infrastructure'],
+    ],
+    ['business-imports-test-support', ['business-imports-only-business']],
+    ['business-spec-imports-other-test-support', ['business-spec-imports-only-business-or-test-doubles']],
+    ['fake-imports-infra-package', ['infra-packages-only-in-infrastructure']],
   ])('flags %s', async (scenario, expected) => {
     expect(await violatedRules(resolve(fixturesRoot, scenario))).toEqual(expected);
   });

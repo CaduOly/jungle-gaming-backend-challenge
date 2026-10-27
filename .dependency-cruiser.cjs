@@ -18,10 +18,18 @@ module.exports = {
   forbidden: [
     {
       name: 'business-imports-only-business',
-      comment: 'business/** is pure: no npm packages, no node builtins, no infrastructure. Specs may import bun:test.',
+      comment: 'business/** production code is pure: no npm packages, no node builtins, no infrastructure, no test code.',
       severity: 'error',
-      from: { path: '^src/business/' },
-      to: { pathNot: ['^src/business/', '^bun:test$'] },
+      from: { path: '^src/business/', pathNot: '\\.spec\\.ts$' },
+      to: { pathNot: '^src/business/' },
+    },
+    {
+      name: 'business-spec-imports-only-business-or-test-doubles',
+      comment:
+        'business specs may also import bun:test and the test doubles in tests/support/{fakes,contracts,builders}. Those doubles are still bound by the infra package rule.',
+      severity: 'error',
+      from: { path: '^src/business/.+\\.spec\\.ts$' },
+      to: { pathNot: ['^src/business/', '^bun:test$', '^tests/support/(fakes|contracts|builders)/'] },
     },
     {
       name: 'shared-kernel-imports-no-context',

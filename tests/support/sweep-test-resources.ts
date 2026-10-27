@@ -88,7 +88,26 @@ const minAgeFromArgs = (args: readonly string[]): number => {
   return Number.parseInt(raw, 10) * 60 * 1000;
 };
 
+const USAGE = `Usage: bun run test:sweep [--older-than-minutes=N | --all | --help]
+
+Drops leaked test databases (wagering_test_<suffix>) and test queues
+(wagering-{commands,events}[-dlq]-<suffix>.fifo). The four compose queues are never touched.
+The age comes from the UUIDv7 timestamp in the suffix.
+
+  --older-than-minutes=N  only resources created more than N minutes ago (default: 30)
+  --all                   every test resource, regardless of age
+  --help                  show this message
+
+WARNING: the stack is shared. A sweep removes resources of runs that are still in progress
+if they are older than the threshold. The default of 30 minutes can kill a long run
+(load tests, long --rerun-each loops): while one is running, pass a larger
+--older-than-minutes, and never use --all while someone else is testing.`;
+
 if (import.meta.main) {
+  if (process.argv.includes('--help')) {
+    console.log(USAGE);
+    process.exit(0);
+  }
   const report = await sweepTestResources({ minAgeMs: minAgeFromArgs(process.argv.slice(2)) });
   console.log(`Dropped ${report.databases.length} test databases and ${report.queues.length} test queues.`);
 }

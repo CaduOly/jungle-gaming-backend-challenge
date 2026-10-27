@@ -13,10 +13,13 @@ export const settleAllOrThrow = async <const T extends readonly unknown[]>(promi
 export class ResourceScope {
   private readonly disposers: Array<() => Promise<unknown>> = [];
 
-  async track<T>(resource: Promise<T>, dispose: (value: T) => Promise<unknown>): Promise<T> {
-    const value = await resource;
-    this.disposers.push(() => dispose(value));
-    return value;
+  track<T>(resource: Promise<T>, dispose: (value: T) => Promise<unknown>): Promise<T> {
+    this.disposers.push(async () => {
+      const settled = await Promise.allSettled([resource]);
+      const [outcome] = settled;
+      if (outcome?.status === 'fulfilled') await dispose(outcome.value);
+    });
+    return resource;
   }
 
   async dispose(): Promise<void> {
