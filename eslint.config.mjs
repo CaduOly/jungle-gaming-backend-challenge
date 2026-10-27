@@ -7,7 +7,7 @@ const PURE_BUSINESS_MESSAGE = 'business/** is pure: inject clocks, randomness an
 const GLOBAL_OBJECTS = ['globalThis', 'global', 'self', 'window'];
 const MONEY_GLOBALS = ['parseFloat', 'parseInt', 'Number'];
 const BUSINESS_GLOBALS = ['Bun', 'process'];
-const BUSINESS_GLOBAL_ACCESS = ['Math', 'Date', 'crypto', ...BUSINESS_GLOBALS];
+const BUSINESS_GLOBAL_ACCESS = ['Math', 'Date', 'crypto', 'performance', ...BUSINESS_GLOBALS];
 const BUSINESS_RESTRICTED_MEMBERS = [
   ['Math', 'random'],
   ['Math', 'round'],
@@ -34,6 +34,8 @@ const moneyRestrictedProperties = [
   ...restrictedGlobalAccess(MONEY_GLOBALS, MONEY_MESSAGE),
 ];
 
+const isIntegerParsing = (entry) => entry.name === 'parseInt' || (entry.object === 'Number' && entry.property === 'parseInt');
+
 const moneyRestrictedSyntax = [
   {
     selector: [
@@ -49,8 +51,12 @@ const moneyRestrictedSyntax = [
     message: `${MONEY_MESSAGE} Unary plus coerces to number.`,
   },
   {
-    selector: "UnaryExpression[operator='-'] > UnaryExpression[operator='-'].argument",
-    message: `${MONEY_MESSAGE} Double negation coerces to number.`,
+    selector: "UnaryExpression[operator='-']:not([argument.type='Literal'])",
+    message: `${MONEY_MESSAGE} Unary minus on a value coerces it to number; Money is never negative.`,
+  },
+  {
+    selector: "UnaryExpression[operator='~']",
+    message: `${MONEY_MESSAGE} Bitwise not coerces to a 32-bit number.`,
   },
   {
     selector: "BinaryExpression[operator='*'][left.type='Literal'][left.raw='1']",
@@ -72,11 +78,29 @@ export const moneySafetyRules = {
   'no-restricted-syntax': ['error', ...moneyRestrictedSyntax],
 };
 
+/** The integer-env boundary may parse integers (parseInt / Number.parseInt) and nothing else is relaxed. */
+export const integerEnvRules = {
+  'no-restricted-globals': ['error', ...moneyRestrictedGlobals.filter((entry) => !isIntegerParsing(entry))],
+  'no-restricted-properties': ['error', ...moneyRestrictedProperties.filter((entry) => !isIntegerParsing(entry))],
+  'no-restricted-syntax': ['error', ...moneyRestrictedSyntax],
+};
+
+const CLOCK_AND_MATH_ALIAS = [
+  "Identifier[name=/^(Date|Math)$/]",
+  ':not(MemberExpression > Identifier.object)',
+  ':not(NewExpression > Identifier.callee)',
+  ':not(MemberExpression[computed=false] > Identifier.property)',
+  ':not(Property[computed=false] > Identifier.key)',
+  ':not(TSTypeReference > Identifier.typeName)',
+  ':not(TSQualifiedName > Identifier)',
+  ':not(BinaryExpression[operator="instanceof"] > Identifier.right)',
+].join('');
+
 export const pureBusinessRules = {
   'no-restricted-globals': [
     'error',
     ...moneyRestrictedGlobals,
-    ...restrictedGlobals(BUSINESS_GLOBALS, PURE_BUSINESS_MESSAGE),
+    ...restrictedGlobals([...BUSINESS_GLOBALS, 'performance'], PURE_BUSINESS_MESSAGE),
   ],
   'no-restricted-properties': [
     'error',
@@ -90,6 +114,14 @@ export const pureBusinessRules = {
     {
       selector: "NewExpression[callee.type='Identifier'][callee.name='Date'][arguments.length=0]",
       message: `${PURE_BUSINESS_MESSAGE} new Date() reads the wall clock; use IClock.`,
+    },
+    {
+      selector: "CallExpression[callee.type='Identifier'][callee.name='Date']",
+      message: `${PURE_BUSINESS_MESSAGE} Date() reads the wall clock; use IClock.`,
+    },
+    {
+      selector: CLOCK_AND_MATH_ALIAS,
+      message: `${PURE_BUSINESS_MESSAGE} Date and Math may only be used directly (Date.UTC, new Date(value), Math.max), never aliased.`,
     },
   ],
 };
@@ -109,8 +141,11 @@ export default tseslint.config(
   },
   {
     files: ['src/**/*.ts'],
-    ignores: ['src/infrastructure/config/integer-env.ts'],
     rules: moneySafetyRules,
+  },
+  {
+    files: ['src/infrastructure/config/integer-env.ts'],
+    rules: integerEnvRules,
   },
   {
     files: ['src/business/**/*.ts'],
