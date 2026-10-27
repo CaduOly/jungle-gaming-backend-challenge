@@ -23,4 +23,10 @@ describe('FaultInjector', () => {
     faults.crash('crash_after_publish_before_mark', () => kills.push('crash_after_publish_before_mark'));
     expect(kills).toEqual(['crash_after_publish_before_mark']);
   });
+
+  it('reads how long slow_handler holds a message', () => {
+    expect(FaultInjector.fromEnv({ FAULT_INJECTION: 'slow_handler', FAULT_SLOW_HANDLER_MS: '750' }).slowHandlerMs).toBe(750);
+    expect(FaultInjector.of('slow_handler').slowHandlerMs).toBe(2_000);
+    expect(FaultInjector.of('slow_handler').withSlowHandlerMs(10).slowHandlerMs).toBe(10);
+  });
 });

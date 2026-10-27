@@ -1,4 +1,13 @@
-export const FAULT_POINTS = ['fail_outbox_insert', 'crash_after_publish_before_mark'] as const;
+import { readIntegerEnv } from '../config/integer-env';
+
+export const FAULT_POINTS = [
+  'fail_outbox_insert',
+  'crash_after_publish_before_mark',
+  'crash_after_commit_before_ack',
+  'slow_handler',
+] as const;
+
+export const DEFAULT_SLOW_HANDLER_MS = 2_000;
 
 export type FaultPoint = (typeof FAULT_POINTS)[number];
 
@@ -17,7 +26,11 @@ const isFaultPoint = (value: string): value is FaultPoint => (FAULT_POINTS as re
 
 /** Test-only failure points, enabled exclusively through FAULT_INJECTION=point[,point]. */
 export class FaultInjector {
-  private constructor(private readonly active: ReadonlySet<FaultPoint>) {}
+  private constructor(
+    private readonly active: ReadonlySet<FaultPoint>,
+    /** How long `slow_handler` holds a message (FAULT_SLOW_HANDLER_MS). */
+    readonly slowHandlerMs: number = DEFAULT_SLOW_HANDLER_MS,
+  ) {}
 
   static none(): FaultInjector {
     return new FaultInjector(new Set());
@@ -25,6 +38,10 @@ export class FaultInjector {
 
   static of(...points: FaultPoint[]): FaultInjector {
     return new FaultInjector(new Set(points));
+  }
+
+  withSlowHandlerMs(ms: number): FaultInjector {
+    return new FaultInjector(this.active, ms);
   }
 
   static fromEnv(env: Readonly<Record<string, string | undefined>>): FaultInjector {
@@ -35,7 +52,8 @@ export class FaultInjector {
     if (unknown.length > 0) {
       throw new Error(`Unknown FAULT_INJECTION point(s): ${unknown.join(', ')}. Known: ${FAULT_POINTS.join(', ')}`);
     }
-    return new FaultInjector(new Set(points.filter(isFaultPoint)));
+    const slowHandlerMs = readIntegerEnv(env, 'FAULT_SLOW_HANDLER_MS', DEFAULT_SLOW_HANDLER_MS);
+    return new FaultInjector(new Set(points.filter(isFaultPoint)), slowHandlerMs);
   }
 
   isActive(point: FaultPoint): boolean {
