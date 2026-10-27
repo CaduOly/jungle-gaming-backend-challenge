@@ -51,16 +51,25 @@ export const expectSqlError = async (
 
 const NOW = '2026-07-29T15:00:00.000Z';
 
-export const walletRow = (overrides: Row = {}): Row => ({
-  id: uuidv7(),
-  player_id: uuidv7(),
-  currency: 'BRL',
-  balance: '0.00',
-  version: 1,
-  created_at: NOW,
-  updated_at: NOW,
-  ...overrides,
-});
+const playerOfWallet = new Map<string, string>();
+
+/** The player of a wallet built by walletRow, so transaction rows default to it (FK wallet_id, player_id). */
+export const playerOf = (walletId: string): string | undefined => playerOfWallet.get(walletId);
+
+export const walletRow = (overrides: Row = {}): Row => {
+  const row = {
+    id: uuidv7(),
+    player_id: uuidv7(),
+    currency: 'BRL',
+    balance: '0.00',
+    version: 1,
+    created_at: NOW,
+    updated_at: NOW,
+    ...overrides,
+  };
+  playerOfWallet.set(row.id as string, row.player_id as string);
+  return row;
+};
 
 export const insertWallet = async (client: Client, overrides: Row = {}): Promise<string> => {
   const row = walletRow(overrides);
@@ -75,7 +84,7 @@ export const transactionRow = (walletId: string, overrides: Row = {}): Row => ({
   idempotency_key: `key-${uuidv7()}`,
   payload_hash: 'hash',
   wallet_id: walletId,
-  player_id: uuidv7(),
+  player_id: playerOf(walletId) ?? uuidv7(),
   round_id: 'round-1',
   game_id: 'game-1',
   kind: 'BET',
