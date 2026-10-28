@@ -22,5 +22,11 @@ export interface IOutboxRepository {
    * Returns false when the write was fenced off: the lease expired and another publisher reclaimed it.
    */
   scheduleRetry(message: OutboxMessage): Promise<boolean>;
+  /**
+   * Gives a claimed message back without counting an attempt: clears the lease and pushes nextAttemptAt to
+   * `until` (never earlier than it already is). Fenced by the lease token like scheduleRetry; returns false
+   * when the lease was already lost.
+   */
+  defer(message: OutboxMessage, until: Date): Promise<boolean>;
   findById(id: string): Promise<OutboxMessage | undefined>;
 }

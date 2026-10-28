@@ -19,10 +19,14 @@ describe('PublishOutboxBatch', () => {
   const useCase = (batchSize = 10) =>
     new PublishOutboxBatch(outbox, publisher, clock, backoff, { batchSize, leaseMs: LEASE_MS });
 
-  const enqueue = async (count: number, startMs = count * -1) => {
+  const enqueue = async (count: number, startMs = -count, aggregateOf = (index: number) => `wallet-${index}`) => {
     const messages = Array.from({ length: count }, (_, index) =>
       OutboxMessage.fromEvent(
-        aFakeEvent({ eventId: `evt-${index}`, occurredAt: new Date(clock.now().getTime() + startMs + index) }),
+        aFakeEvent({
+          eventId: `evt-${index}`,
+          aggregateId: aggregateOf(index),
+          occurredAt: new Date(clock.now().getTime() + startMs + index),
+        }),
       ),
     );
     await outbox.add(messages);
@@ -41,6 +45,7 @@ describe('PublishOutboxBatch', () => {
       claimed: 0,
       published: 0,
       failed: 0,
+      deferred: 0,
       leaseLost: 0,
       exhausted: 0,
       exhaustedMessageIds: [],
@@ -78,6 +83,27 @@ describe('PublishOutboxBatch', () => {
     expect(retried.lockedUntil).toBeUndefined();
   });
 
+  it('defers the rest of an aggregate after one of its messages fails, until that retry is due', async () => {
+    await enqueue(4, -4, (index) => (index === 3 ? 'wallet-b' : 'wallet-a'));
+    publisher.failWhen((message) => message.id === 'evt-1');
+
+    const output = await useCase().execute();
+
+    expect(output).toMatchObject({ claimed: 4, published: 2, failed: 1, deferred: 1, leaseLost: 0 });
+    expect(publisher.publishedIds()).toEqual(['evt-0', 'evt-3']);
+    const failed = (await outbox.findById('evt-1'))!;
+    const deferred = (await outbox.findById('evt-2'))!;
+    expect(deferred.attempts).toBe(0);
+    expect(deferred.lockedUntil).toBeUndefined();
+    expect(deferred.nextAttemptAt).toEqual(failed.nextAttemptAt);
+    expect(await useCase().execute()).toMatchObject({ claimed: 0 });
+
+    publisher.recover();
+    clock.set(failed.nextAttemptAt);
+    expect(await useCase().execute()).toMatchObject({ claimed: 2, published: 2 });
+    expect(publisher.publishedIds()).toEqual(['evt-0', 'evt-3', 'evt-1', 'evt-2']);
+  });
+
   it('publishes a failed message again once its backoff elapses', async () => {
     await enqueue(1);
     publisher.failNext();
@@ -109,7 +135,7 @@ describe('PublishOutboxBatch', () => {
 
   it('reports exhausted messages but keeps retrying them at the capped delay', async () => {
     const [message] = await enqueue(1);
-    const almostExhausted = OutboxMessage.rehydrate({ ...message!.toState(), id: 'evt-tired', attempts: 7 });
+    const almostExhausted = OutboxMessage.rehydrate({ ...message!.toState(), id: 'evt-tired', aggregateId: 'wallet-tired', attempts: 7 });
     await outbox.add([almostExhausted]);
     publisher.failWhen(() => true);
 
@@ -124,7 +150,7 @@ describe('PublishOutboxBatch', () => {
 
   it('reports exhaustion only once, when the ceiling is crossed', async () => {
     const [message] = await enqueue(1);
-    await outbox.add([OutboxMessage.rehydrate({ ...message!.toState(), id: 'evt-dead', attempts: 8 })]);
+    await outbox.add([OutboxMessage.rehydrate({ ...message!.toState(), id: 'evt-dead', aggregateId: 'wallet-dead', attempts: 8 })]);
     publisher.failWhen(() => true);
 
     expect(await useCase().execute()).toMatchObject({ failed: 2, exhausted: 0, exhaustedMessageIds: [] });

@@ -79,6 +79,18 @@ export class OutboxRepository implements IOutboxRepository {
     return result.affectedRows === 1;
   }
 
+  async defer(message: OutboxMessage, until: Date): Promise<boolean> {
+    if (message.leaseToken === undefined) return false;
+    const result = await this.em.execute<RunResult>(
+      `UPDATE outbox_messages
+          SET locked_until = NULL, lease_token = NULL, next_attempt_at = GREATEST(next_attempt_at, ?)
+        WHERE event_id = ? AND published_at IS NULL AND lease_token = ?`,
+      [until, message.id, message.leaseToken],
+      'run',
+    );
+    return result.affectedRows === 1;
+  }
+
   async findById(id: string): Promise<OutboxMessage | undefined> {
     const rows = await this.em.execute<OutboxMessageRow[]>(
       `SELECT ${OUTBOX_COLUMNS} FROM outbox_messages WHERE event_id = ?`,
