@@ -284,6 +284,21 @@ describe('ProcessWagerTransaction', () => {
       app.uow.clearFaults();
     });
 
+    it('a twin committed between the two lock-free lookups is a replay, not DUPLICATE_EXTERNAL_TRANSACTION', async () => {
+      const wallet = await open();
+      let winner: Awaited<ReturnType<typeof submit>> | undefined;
+      app.uow.before(
+        'wagers.findByExternalId',
+        async () => {
+          winner = await submit(wallet, 'BET', 'tx', { amount: '25.00' });
+        },
+        1,
+      );
+      const replay = await submit(wallet, 'BET', 'tx', { amount: '25.00' });
+      expect(replay).toEqual({ ...winner!, idempotentReplay: true });
+      expect(balanceOf(wallet)).toBe('975.00');
+    });
+
     it('same key with another payload is IDEMPOTENCY_CONFLICT (409), never a replay', async () => {
       const wallet = await open();
       const first = await submit(wallet, 'BET', 'tx', { amount: '25.00' });
