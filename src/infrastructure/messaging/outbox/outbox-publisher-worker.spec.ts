@@ -6,7 +6,6 @@ const output = (published: number): PublishOutboxBatchOutput => ({
   claimed: published,
   published,
   failed: 0,
-  deferred: 0,
   leaseLost: 0,
   exhausted: 0,
   exhaustedMessageIds: [],

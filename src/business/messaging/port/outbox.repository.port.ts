@@ -6,6 +6,12 @@ export interface IOutboxRepository {
    * Atomically leases up to `limit` due messages (unpublished, nextAttemptAt <= now, lease free or expired),
    * oldest first, setting lockedUntil = now + leaseMs and a fresh leaseToken. A leased message is not
    * claimed again until the lease expires, so concurrent publishers never share a row.
+   *
+   * Head-of-line: only the oldest unpublished message of each aggregate (by occurredAt, then id) is eligible,
+   * even while that head is leased or waiting for its retry. So an aggregate's events go on the wire in order,
+   * across rounds and across instances, at most one in flight at a time. The price: a head that keeps failing
+   * holds its whole aggregate back; it is never dropped, and crossing the attempt ceiling raises the
+   * exhausted alert (PublishOutboxBatchOutput.exhausted) so someone looks at it.
    */
   claimBatch(limit: number, leaseMs: number, now: Date): Promise<OutboxMessage[]>;
   /**
@@ -22,11 +28,5 @@ export interface IOutboxRepository {
    * Returns false when the write was fenced off: the lease expired and another publisher reclaimed it.
    */
   scheduleRetry(message: OutboxMessage): Promise<boolean>;
-  /**
-   * Gives a claimed message back without counting an attempt: clears the lease and pushes nextAttemptAt to
-   * `until` (never earlier than it already is). Fenced by the lease token like scheduleRetry; returns false
-   * when the lease was already lost.
-   */
-  defer(message: OutboxMessage, until: Date): Promise<boolean>;
   findById(id: string): Promise<OutboxMessage | undefined>;
 }
