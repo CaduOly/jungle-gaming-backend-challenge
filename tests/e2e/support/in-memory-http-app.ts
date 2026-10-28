@@ -11,16 +11,17 @@ import { createFakeWageringApp, type FakeWageringApp } from '../../support/fakes
 import { InMemoryWagerTransactionRepository } from '../../support/fakes/in-memory-wager-transaction-repository';
 import { InMemoryWalletRepository } from '../../support/fakes/in-memory-wallet-repository';
 
-/** A unit of work that can be switched to fail as a database outage would. */
+export const databaseDown = (): TransientInfrastructureError =>
+  new TransientInfrastructureError('connection refused', '08006', { cause: undefined });
+
+/** A unit of work that can be made to fail, as a database outage (or a bug) would. */
 export class SwitchableUnitOfWork implements IUnitOfWork<TxRepositories> {
-  down = false;
+  failure: unknown = undefined;
 
   constructor(private readonly inner: IUnitOfWork<TxRepositories>) {}
 
   run<T>(work: (tx: TxRepositories) => Promise<T>, options?: UnitOfWorkOptions): Promise<T> {
-    if (this.down) {
-      return Promise.reject(new TransientInfrastructureError('connection refused', '08006', { cause: undefined }));
-    }
+    if (this.failure !== undefined) return Promise.reject(this.failure);
     return this.inner.run(work, options);
   }
 }
