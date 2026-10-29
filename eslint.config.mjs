@@ -155,6 +155,13 @@ export default tseslint.config(
     languageOptions: { sourceType: 'commonjs', globals: { module: 'writable', require: 'readonly' } },
   },
   {
+    files: ['tests/load/k6/**/*.js'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: { __ENV: 'readonly', __VU: 'readonly', __ITER: 'readonly', open: 'readonly' },
+    },
+  },
+  {
     files: ['src/**/*.ts'],
     rules: moneySafetyRules,
   },

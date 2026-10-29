@@ -9,7 +9,7 @@
     "migrate:down": "bun run src/infrastructure/persistence/mikro-orm/migrate.ts down",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test ./src ./tests/support ./tests/e2e",
+    "test": "bun test ./src ./tests/support ./tests/e2e ./tests/load/support",
     "test:arch": "depcruise src tests/support --config .dependency-cruiser.cjs && bun test ./tests/arch",
     "test:integration": "bun test --timeout 60000 ./tests/integration",
     "test:concurrency": "bun test --timeout 120000 --rerun-each ${RERUN_EACH:-20} ./tests/concurrency",
@@ -17,6 +17,7 @@
     "test:chaos": "bun test --timeout 180000 ./tests/chaos",
     "test:sweep": "bun run tests/support/sweep-test-resources.ts",
     "test:auth": "bun test --timeout 30000 ./tests/auth",
+    "test:load": "bun run tests/load/run.ts",
     "infra:up": "docker compose up -d --wait postgres localstack",
     "infra:down": "docker compose down",
     "start:in-memory": "bun run tests/e2e/support/serve-in-memory.ts"
