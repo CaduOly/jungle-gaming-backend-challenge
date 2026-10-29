@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { FailureCode } from '../../src/business/shared/error/failure-code';
+import { assertEveryFakeWalletConsistent } from '../support/assertions/assert-fake-wallet-consistency';
 import { client, expectEnvelope, type Reply } from './support/http-client';
 import { databaseDown, type InMemoryHttpApp, startInMemoryHttpApp } from './support/in-memory-http-app';
 
@@ -53,6 +54,11 @@ describe('HTTP API over the in-memory persistence', () => {
 
   beforeEach(() => {
     http.uow.failure = undefined;
+  });
+
+  afterEach(async () => {
+    http.uow.failure = undefined;
+    await assertEveryFakeWalletConsistent(http.fake.db);
   });
 
   afterAll(() => http?.close());
