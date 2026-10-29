@@ -207,6 +207,9 @@ describe('RetryPendingReferences', () => {
           transaction.scheduleNextAttempt(new Date(app.clock.now().getTime() + 4_000));
           await tx.wagers.update(transaction);
         });
+        // By the time this instance gets the lock, the other one's new attempt is due too: only the claim time
+        // tells that this attempt was already counted.
+        app.clock.advance(5_000);
       },
       1,
     );
