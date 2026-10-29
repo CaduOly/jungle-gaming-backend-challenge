@@ -60,6 +60,22 @@ describe('wager races on PostgreSQL (separate connection pools)', () => {
     expect(await debits(wallet)).toBe(1);
   });
 
+  it('30 distinct BETs on one wallet in parallel all settle in turn under the wallet lock, none hits the version guard', async () => {
+    const wallet = await open('100.00');
+
+    const outcomes = await Promise.allSettled(
+      Array.from({ length: 30 }, (_, index) => submit(index, wallet, 'BET', uuidv7(), { amount: '1.00' })),
+    );
+
+    expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toEqual([]);
+    const results = outcomes.map((outcome) => (outcome as PromiseFulfilledResult<ProcessWagerTransactionOutput>).value);
+    expect(results.every((result) => result.status === 'PROCESSED')).toBe(true);
+    const observed = results.map((result) => result.balance?.amount).sort();
+    expect(observed).toEqual(Array.from({ length: 30 }, (_, index) => `${70 + index}.00`).sort());
+    expect(await balanceOf(wallet)).toBe('70.00');
+    expect(await debits(wallet)).toBe(30);
+  });
+
   it('50 identical BETs in parallel: one PROCESSED and 49 replays of the same transaction and balance', async () => {
     const wallet = await open('1000.00');
     const ext = uuidv7();
