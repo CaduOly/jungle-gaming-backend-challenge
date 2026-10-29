@@ -4,7 +4,7 @@ import { DeadLetterReason } from '../messaging/sqs/message-handler.port';
 
 export const WAGER_COMMAND_TYPE = 'WagerTransactionRequested';
 
-/** README §10: one wager submission sent by a provider through the commands queue. */
+/** CHALLENGE.md §10: one wager submission sent by a provider through the commands queue. */
 export interface WagerCommand {
   readonly messageId: string;
   readonly occurredAt: string;

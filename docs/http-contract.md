@@ -37,7 +37,7 @@ Vale para sucesso e erro em todos os endpoints de negócio. Health (`/health/*`)
 | --- | --- |
 | `code` | Número igual ao status HTTP. |
 | `message` | Nome do status no catálogo `Code` (`SUCCESS`, `CREATED`, `ACCEPTED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE`, `UNPROCESSABLE_ENTITY`, `SERVICE_UNAVAILABLE`, `INTERNAL_ERROR`). |
-| `data` | O payload descrito no README §9, sem alteração. Também vai preenchido em 422 de replay e em 202 (transação e saldo observado). |
+| `data` | O payload descrito no enunciado (`docs/CHALLENGE.md` §9), sem alteração. Também vai preenchido em 422 de replay e em 202 (transação e saldo observado). |
 | `timestamp` | Epoch em milissegundos, vindo do `IClock`. |
 | `detailsMessage[]` | Lista vazia no sucesso. No erro, cada item tem `code` estável, `message` com a chave i18n, `field` opcional (caminho do campo) e `type` (`error` ou `warning`). |
 

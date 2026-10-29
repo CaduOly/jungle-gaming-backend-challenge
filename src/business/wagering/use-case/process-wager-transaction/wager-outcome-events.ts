@@ -24,7 +24,7 @@ export interface OutcomeEventContext {
 }
 
 /**
- * Turns a decided transaction into the integration events of README §11:
+ * Turns a decided transaction into the integration events of CHALLENGE.md §11:
  * PROCESSED → Processed (+ WalletBalanceChanged when it moved money), REJECTED → Rejected,
  * PENDING_REFERENCE → PendingReference. FAILED is an internal, auditable state with no event.
  */

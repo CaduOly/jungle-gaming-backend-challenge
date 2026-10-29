@@ -40,7 +40,7 @@ describe('ProcessWagerTransaction', () => {
   const wagerCount = (): number => app.db.wagers.all().filter((transaction) => !transaction.isOpening).length;
 
   describe('a new BET', () => {
-    it('debits, persists, emits Processed + WalletBalanceChanged and answers the README §9 payload', async () => {
+    it('debits, persists, emits Processed + WalletBalanceChanged and answers the CHALLENGE.md §9 payload', async () => {
       const wallet = await open();
       const result = await submit(wallet, 'BET', 'tx-123', { amount: '25.00' });
 
@@ -81,7 +81,7 @@ describe('ProcessWagerTransaction', () => {
     });
   });
 
-  describe('business rules (README §7) end to end', () => {
+  describe('business rules (CHALLENGE.md §7) end to end', () => {
     it('WIN credits, with the BET of the round as an optional reference', async () => {
       const wallet = await open('100.00');
       await submit(wallet, 'BET', 'bet', { amount: '10.00' });
@@ -408,7 +408,7 @@ describe('ProcessWagerTransaction', () => {
       expect((await app.db.ledger.listAll(wallet.id)).filter((entry) => entry.direction === 'DEBIT')).toHaveLength(1);
     });
 
-    it('README §8: two 80.00 BETs over 100.00 → one PROCESSED, one REJECTED, 20.00 left, one debit', async () => {
+    it('CHALLENGE.md §8: two 80.00 BETs over 100.00 → one PROCESSED, one REJECTED, 20.00 left, one debit', async () => {
       const wallet = await open('100.00');
       const results = await Promise.all([
         submit(wallet, 'BET', 'bet-a', { amount: '80.00' }),

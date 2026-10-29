@@ -70,7 +70,7 @@ const REFERENCE_FORBIDDEN: ReadonlySet<WagerKind> = new Set([WagerKind.OPENING, 
 const opposite = (direction: LedgerDirection): LedgerDirection => (direction === 'CREDIT' ? 'DEBIT' : 'CREDIT');
 
 /**
- * Transitions (README §6.3 + plan):
+ * Transitions (CHALLENGE.md §6.3 + plan):
  *   PENDING (in memory only)  -> PROCESSED | REJECTED | PENDING_REFERENCE
  *   PENDING_REFERENCE         -> PROCESSED | REJECTED | FAILED
  *   PROCESSED, REJECTED, FAILED are terminal.

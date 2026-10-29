@@ -8,7 +8,7 @@ export interface ReconcileWalletInput {
   readonly walletId: string;
 }
 
-/** README §9 reconciliation payload plus the divergences found. */
+/** CHALLENGE.md §9 reconciliation payload plus the divergences found. */
 export interface ReconcileWalletOutput {
   readonly walletId: string;
   readonly storedBalance: MoneyProps;
