@@ -13,6 +13,7 @@ import {
   playerOf,
   transactionRow,
 } from './schema-fixtures';
+import { FailureCode } from '../../../src/business/shared/error/failure-code';
 
 describe('wager_transactions schema', () => {
   let db: MigratedDatabase;
@@ -166,6 +167,10 @@ describe('wager_transactions schema', () => {
         'wager_transactions_failure_code_valid',
       );
       await insertTx({ status: 'REJECTED', failure_code: 'REFERENCE_MISMATCH', processed_at: null });
+    });
+
+    it.each(Object.values(FailureCode))('accepts the domain failure code %s', async (code) => {
+      await insertTx({ status: 'REJECTED', failure_code: code, processed_at: null });
     });
 
     it('records the observed balance on every outcome', async () => {

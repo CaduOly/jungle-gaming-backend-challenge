@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { FailureCode } from '../../../src/business/shared/error/failure-code';
 import { UniqueConstraintViolationError } from '../../../src/business/shared/error/unique-constraint-violation-error';
 import { Money } from '../../../src/business/shared/value-object/money';
 import type { WagerTransaction } from '../../../src/business/wagering/entity/wager-transaction';
@@ -233,6 +234,24 @@ export const describeWageringRepositoriesContract = (
         const error = await rejectionOf(uow.run((tx) => tx.wagers.insert(reversal(WagerKind.ROLLBACK))));
         expect(error).toBeInstanceOf(UniqueConstraintViolationError);
       });
+
+      it('does not count a rejected reversal that points at the reference, so a legitimate one still goes through', async () => {
+        const wallet = await openWallet();
+        const bet = processedOf(wallet, WagerKind.BET, uuidv7());
+        await uow.run((tx) => tx.wagers.insert(bet));
+
+        const rejected = wagerOf(wallet, WagerKind.REFUND, uuidv7(), { referenceExternalTransactionId: bet.externalTransactionId });
+        rejected.attachReference(bet);
+        rejected.reject(FailureCode.AMOUNT_MISMATCH, brl('0.00'), t0);
+        await uow.run((tx) => tx.wagers.insert(rejected));
+        expect(await uow.run((tx) => tx.wagers.isReversed(bet.id))).toBe(false);
+
+        const legitimate = wagerOf(wallet, WagerKind.ROLLBACK, uuidv7(), { referenceExternalTransactionId: bet.externalTransactionId });
+        legitimate.attachReference(bet);
+        legitimate.markProcessed(brl('0.00'), t0);
+        await uow.run((tx) => tx.wagers.insert(legitimate));
+        expect(await uow.run((tx) => tx.wagers.isReversed(bet.id))).toBe(true);
+      });
     });
 
     describe('claim of pending references', () => {
@@ -256,6 +275,23 @@ export const describeWageringRepositoriesContract = (
           await tx.wagers.update(locked);
         });
         expect(await claim(at(200 + LEASE_MS))).toEqual([early.id]);
+      });
+
+      it('claims by (nextAttemptAt, id): the earliest due first, ties broken by id, and returns them in that order', async () => {
+        const wallet = await openWallet();
+        const pending = [at(30), at(10), at(20), at(10), at(30), at(10)].map((due) => pendingOf(wallet, due));
+        await uow.run(async (tx) => {
+          for (const transaction of [...pending].reverse()) await tx.wagers.insert(transaction);
+        });
+        const expected = [...pending]
+          .sort((a, b) => a.nextAttemptAt!.getTime() - b.nextAttemptAt!.getTime() || (a.id < b.id ? -1 : 1))
+          .map((transaction) => transaction.id);
+
+        const first = await uow.run((tx) => tx.wagers.claimPendingBatch({ limit: 4, leaseMs: LEASE_MS, now: at(100) }));
+        const rest = await uow.run((tx) => tx.wagers.claimPendingBatch({ limit: 10, leaseMs: LEASE_MS, now: at(100) }));
+
+        expect(first).toEqual(expected.slice(0, 4));
+        expect(rest).toEqual(expected.slice(4));
       });
 
       it('never hands the same id to concurrent claimers', async () => {

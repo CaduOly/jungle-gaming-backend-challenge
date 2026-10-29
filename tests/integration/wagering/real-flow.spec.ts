@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'bun:test';
+import { InvalidRequestError } from '../../../src/business/shared/error/invalid-request-error';
 import { IdempotencyConflictError } from '../../../src/business/wagering/error/idempotency-conflict-error';
 import { TransientInfrastructureError } from '../../../src/infrastructure/error/transient-infrastructure-error';
 import { FaultInjector, InjectedFaultError, type FaultPoint } from '../../../src/infrastructure/fault-injection/fault-injector';
@@ -149,5 +150,39 @@ describe('ProcessWagerTransaction over the real PostgreSQL repositories', () => 
     expect(byExternal).toMatchObject({ kind: 'BET', status: 'PROCESSED', money: { amount: '1.00', currency: 'BRL' } });
     await expect(app.getWallet.execute({ walletId: 'not-a-uuid' })).rejects.toMatchObject({ name: 'WalletNotFoundError' });
     expect(await app.reconcile.execute({ walletId: wallet.id })).toMatchObject({ consistent: true, checkedEntries: 4 });
+  });
+  it('persists a WIN past the Money maximum as REJECTED with BALANCE_LIMIT_EXCEEDED', async () => {
+    const wallet = await open('999999999999999999.99');
+    const win = await submit(wallet, 'WIN', uuidv7(), { amount: '0.01' });
+    expect(win).toMatchObject({ status: 'REJECTED', failureCode: 'BALANCE_LIMIT_EXCEEDED' });
+    const [row] = (await db.sql.query('SELECT status, failure_code FROM wager_transactions WHERE id = $1', [win.transactionId])).rows;
+    expect(row).toEqual({ status: 'REJECTED', failure_code: 'BALANCE_LIMIT_EXCEEDED' });
+    expect(await balanceOf(wallet)).toBe('999999999999999999.99');
+  });
+
+  describe('input the uuid and text columns would refuse is a 400, never a raw driver error', () => {
+    it.each([
+      ['a playerId that is not a uuid', { playerId: 'player-x' }, 'playerId'],
+      ['a NUL byte in a text field', { roundId: 'round\u00001' }, 'roundId'],
+    ] as const)('%s on an existing wallet', async (_, options, field) => {
+      const wallet = await open('100.00');
+      const before = await footprint(wallet.id);
+
+      const error = await submit(wallet, 'BET', uuidv7(), options).catch((reason: unknown) => reason);
+
+      expect(error).toBeInstanceOf(InvalidRequestError);
+      expect((error as InvalidRequestError).field).toBe(field);
+      expect(await footprint(wallet.id)).toEqual(before);
+    });
+
+    it('a walletId that is not a uuid', async () => {
+      const wallet = await open('100.00');
+      const error = await app.process
+        .execute(aSubmission({ ...wallet, id: 'wallet-x' }, 'BET', uuidv7()))
+        .catch((reason: unknown) => reason);
+
+      expect(error).toBeInstanceOf(InvalidRequestError);
+      expect((error as InvalidRequestError).field).toBe('walletId');
+    });
   });
 });

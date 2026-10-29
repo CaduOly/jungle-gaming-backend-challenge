@@ -62,8 +62,20 @@ describe('translateDatabaseError', () => {
     expect(translateDatabaseError(translated)).toBe(translated);
   });
 
-  it('leaves other SQL states (e.g. 22P02) for the caller to interpret', () => {
-    const original = sqlError('22P02');
+  it.each([
+    ['22P02', 'invalid text representation (a non-uuid in a uuid column)'],
+    ['08P01', 'protocol violation (a NUL byte in a text parameter)'],
+    ['25006', 'read-only sql transaction (a write inside a snapshot)'],
+  ])('maps %s, %s, to a permanent error: retrying the same input never helps', (code) => {
+    const original = sqlError(code);
+    const translated = translateDatabaseError(original);
+    expect(translated).toBeInstanceOf(PermanentInfrastructureError);
+    expect((translated as PermanentInfrastructureError).sqlState).toBe(code);
+    expect((translated as Error).cause).toBe(original);
+  });
+
+  it('leaves other SQL states (e.g. 42601) for the caller to interpret', () => {
+    const original = sqlError('42601');
     expect(translateDatabaseError(original)).toBe(original);
   });
 

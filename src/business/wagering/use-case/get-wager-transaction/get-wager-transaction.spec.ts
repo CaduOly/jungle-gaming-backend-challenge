@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { aSubmission, createFakeWageringApp, type FakeWageringApp } from '../../../../../tests/support/fakes/fake-wagering-app';
 import { InvalidRequestError } from '../../../shared/error/invalid-request-error';
 import { WagerTransactionNotFoundError } from '../../error/wager-transaction-not-found-error';
+import { aPlayerId } from '../../../../../tests/support/fakes/sequential-id-generator';
 
 describe('GetWagerTransaction', () => {
   let app: FakeWageringApp;
@@ -11,7 +12,7 @@ describe('GetWagerTransaction', () => {
   });
 
   it('finds a transaction by internal id and by the provider external id', async () => {
-    const wallet = await app.createWallet.execute({ playerId: 'player-1', initialBalance: { amount: '100.00', currency: 'BRL' } });
+    const wallet = await app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: { amount: '100.00', currency: 'BRL' } });
     const { transactionId } = await app.process.execute(aSubmission(wallet, 'BET', 'bet', { amount: '25.00' }));
 
     const byId = await app.getTransaction.execute({ transactionId });
@@ -20,7 +21,7 @@ describe('GetWagerTransaction', () => {
       providerId: 'provider-a',
       externalTransactionId: 'bet',
       walletId: wallet.id,
-      playerId: 'player-1',
+      playerId: aPlayerId(1),
       roundId: 'round-1',
       gameId: 'fortune-chimp',
       kind: 'BET',
@@ -39,7 +40,7 @@ describe('GetWagerTransaction', () => {
   });
 
   it('shows a pending transaction with its schedule', async () => {
-    const wallet = await app.createWallet.execute({ playerId: 'player-1', initialBalance: { amount: '1.00', currency: 'BRL' } });
+    const wallet = await app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: { amount: '1.00', currency: 'BRL' } });
     const { transactionId } = await app.process.execute(aSubmission(wallet, 'REFUND', 'refund', { reference: 'bet' }));
     expect(await app.getTransaction.execute({ transactionId })).toMatchObject({
       status: 'PENDING_REFERENCE',
@@ -51,7 +52,7 @@ describe('GetWagerTransaction', () => {
   });
 
   it('answers not found, and scopes the external id by provider', async () => {
-    const wallet = await app.createWallet.execute({ playerId: 'player-1', initialBalance: { amount: '10.00', currency: 'BRL' } });
+    const wallet = await app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: { amount: '10.00', currency: 'BRL' } });
     await app.process.execute(aSubmission(wallet, 'BET', 'bet'));
     await expect(app.getTransaction.execute({ transactionId: 'ghost' })).rejects.toBeInstanceOf(WagerTransactionNotFoundError);
     await expect(

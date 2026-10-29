@@ -141,6 +141,7 @@ describe('wallet, ledger and wager transaction repositories (PostgreSQL)', () =>
     const error = await rejection(
       app.uow.run((tx) => tx.wallets.update(Wallet.rehydrate({ ...wallet.toState(), version: 2 }), 1), { mode: 'snapshot-read' }),
     );
-    expect((error as { code?: string }).code).toBe('25006');
+    expect(error).toBeInstanceOf(PermanentInfrastructureError);
+    expect((error as PermanentInfrastructureError).sqlState).toBe('25006');
   });
 });
