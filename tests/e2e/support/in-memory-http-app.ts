@@ -18,10 +18,13 @@ export const databaseDown = (): TransientInfrastructureError =>
 /** A unit of work that can be made to fail, as a database outage (or a bug) would. */
 export class SwitchableUnitOfWork implements IUnitOfWork<TxRepositories> {
   failure: unknown = undefined;
+  /** Never settles, as a query to a paused database does not. */
+  hanging = false;
 
   constructor(private readonly inner: IUnitOfWork<TxRepositories>) {}
 
   run<T>(work: (tx: TxRepositories) => Promise<T>, options?: UnitOfWorkOptions): Promise<T> {
+    if (this.hanging) return new Promise<T>(() => undefined);
     if (this.failure !== undefined) return Promise.reject(this.failure);
     return this.inner.run(work, options);
   }
@@ -40,9 +43,16 @@ export interface InMemoryHttpAppOptions {
   readonly env?: Record<string, string>;
   /** None by default: over the fakes there is no dependency to check, so the instance is always ready. */
   readonly readinessChecks?: readonly IReadinessCheck[];
+  readonly instanceId?: string;
+  readonly readinessDetails?: () => Record<string, unknown>;
 }
 
-export const startInMemoryHttpApp = async ({ env = {}, readinessChecks }: InMemoryHttpAppOptions = {}): Promise<InMemoryHttpApp> => {
+export const startInMemoryHttpApp = async ({
+  env = {},
+  readinessChecks,
+  instanceId,
+  readinessDetails,
+}: InMemoryHttpAppOptions = {}): Promise<InMemoryHttpApp> => {
   const fake = createFakeWageringApp();
   const uow = new SwitchableUnitOfWork(fake.uow);
   const persistence: WageringPersistence = {
@@ -60,6 +70,8 @@ export const startInMemoryHttpApp = async ({ env = {}, readinessChecks }: InMemo
     env: { HTTP_RETRY_AFTER_SECONDS: '3', HEALTH_READINESS_TIMEOUT_MS: '50', ...env },
     logger: false,
     ...(readinessChecks === undefined ? {} : { readinessChecks }),
+    ...(instanceId === undefined ? {} : { instanceId }),
+    ...(readinessDetails === undefined ? {} : { readinessDetails }),
   });
   await app.listen(0, '127.0.0.1');
   const address = app.getHttpServer().address() as { port: number };

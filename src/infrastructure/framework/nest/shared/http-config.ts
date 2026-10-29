@@ -8,6 +8,11 @@ export interface HttpConfig {
   readonly readinessTimeoutMs: number;
   /** Largest JSON body the parser reads (`512b`, `100kb`, `1mb`); anything above answers 413. */
   readonly bodyLimit: string;
+  /**
+   * Upper bound for one request. Past it the answer is 503 + Retry-After, so a database that stops answering
+   * (paused, partitioned) never leaves a provider hanging; the retry is safe because every write is idempotent.
+   */
+  readonly requestTimeoutMs: number;
 }
 
 const readBodyLimit = (env: Readonly<Record<string, string | undefined>>): string => {
@@ -24,10 +29,13 @@ export const readHttpConfig = (env: Readonly<Record<string, string | undefined>>
   if (retryAfterSeconds === 0) throw new Error('Invalid HTTP_RETRY_AFTER_SECONDS: must be at least 1');
   const readinessTimeoutMs = readIntegerEnv(env, 'HEALTH_READINESS_TIMEOUT_MS', 1_000);
   if (readinessTimeoutMs === 0) throw new Error('Invalid HEALTH_READINESS_TIMEOUT_MS: must be at least 1');
+  const requestTimeoutMs = readIntegerEnv(env, 'HTTP_REQUEST_TIMEOUT_MS', 10_000);
+  if (requestTimeoutMs === 0) throw new Error('Invalid HTTP_REQUEST_TIMEOUT_MS: must be at least 1');
   return {
     port: readIntegerEnv(env, 'PORT', 3000),
     retryAfterSeconds,
     readinessTimeoutMs,
     bodyLimit: readBodyLimit(env),
+    requestTimeoutMs,
   };
 };
