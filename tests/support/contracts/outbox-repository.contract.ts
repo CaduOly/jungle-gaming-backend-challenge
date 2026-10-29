@@ -35,9 +35,10 @@ export const describeOutboxRepositoryContract = (
       await harness.teardown?.();
     });
 
-    it('claims due messages oldest first, up to the limit, and leases them', async () => {
-      const [first, second, third] = [aMessage(0), aMessage(1), aMessage(2)];
-      await repository.add([third!, first!, second!]);
+    it('claims due messages in the order they were added (commit order), up to the limit, and leases them', async () => {
+      const [first, second, third] = [aMessage(2), aMessage(0), aMessage(1)];
+      await repository.add([first!]);
+      await repository.add([second!, third!]);
 
       const claimed = await repository.claimBatch(2, LEASE_MS, at(10));
 
@@ -234,11 +235,23 @@ export const describeOutboxRepositoryContract = (
       const ofAggregate = (aggregateId: string, occurredAtMs: number): OutboxMessage =>
         OutboxMessage.fromEvent(aFakeEvent({ eventId: uuidv7(), aggregateId, occurredAt: at(occurredAtMs) }));
 
-      it('claims only the oldest unpublished message of each aggregate', async () => {
+      it('claims only the first added unpublished message of each aggregate', async () => {
         const [a1, a2, b1] = [ofAggregate('agg-a', 0), ofAggregate('agg-a', 1), ofAggregate('agg-b', 2)];
-        await repository.add([a2!, b1!, a1!]);
+        await repository.add([a1!, b1!, a2!]);
 
         expect(ids(await repository.claimBatch(10, LEASE_MS, at(10)))).toEqual([a1!.id, b1!.id]);
+      });
+
+      it('follows the commit order, not occurredAt: a later add with an earlier timestamp waits for the head', async () => {
+        const [v1, v2] = [ofAggregate('agg-a', 5), ofAggregate('agg-a', 0)];
+        await repository.add([v1!]);
+        await repository.add([v2!]);
+
+        const [head] = await repository.claimBatch(10, LEASE_MS, at(10));
+        expect(head!.id).toBe(v1!.id);
+        head!.markPublished(at(11));
+        await repository.markPublished(head!);
+        expect(ids(await repository.claimBatch(10, LEASE_MS, at(12)))).toEqual([v2!.id]);
       });
 
       it('keeps the rest of the aggregate back while its head is leased', async () => {

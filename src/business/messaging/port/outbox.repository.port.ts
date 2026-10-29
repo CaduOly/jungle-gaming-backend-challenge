@@ -4,10 +4,11 @@ export interface IOutboxRepository {
   add(messages: readonly OutboxMessage[]): Promise<void>;
   /**
    * Atomically leases up to `limit` due messages (unpublished, nextAttemptAt <= now, lease free or expired),
-   * oldest first, setting lockedUntil = now + leaseMs and a fresh leaseToken. A leased message is not
-   * claimed again until the lease expires, so concurrent publishers never share a row.
+   * in the order they were added (commit order), setting lockedUntil = now + leaseMs and a fresh leaseToken.
+   * A leased message is not claimed again until the lease expires, so concurrent publishers never share a row.
    *
-   * Head-of-line: only the oldest unpublished message of each aggregate (by occurredAt, then id) is eligible,
+   * Head-of-line: only the first added unpublished message of each aggregate is eligible (commit order, never
+   * occurredAt, which is taken before the aggregate's lock and so may run backwards across commits),
    * even while that head is leased or waiting for its retry. So an aggregate's events go on the wire in order,
    * across rounds and across instances, at most one in flight at a time. The price: a head that keeps failing
    * holds its whole aggregate back; it is never dropped, and crossing the attempt ceiling raises the
