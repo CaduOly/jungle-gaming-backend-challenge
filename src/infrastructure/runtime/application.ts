@@ -53,6 +53,12 @@ const sqsReadiness = (client: SQSClient, queue: SqsQueueUrl): IReadinessCheck =>
   check: async () => new SqsReadinessCheck(client, await queue.get()).check(),
 });
 
+const dataOf = (body: unknown): Record<string, unknown> => {
+  if (typeof body !== 'object' || body === null || !('data' in body)) return {};
+  const { data } = body as { data: unknown };
+  return typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
+};
+
 /**
  * The composition root of one replica: the real MikroORM persistence, SQS, SHA-256 hashing, UUIDv7 ids and the
  * system clock, with only the roles in APP_ROLES started. Migrations are not run here: `bun run migrate` runs
@@ -94,6 +100,18 @@ export const startApplication = async (env: Env, observed?: Observability): Prom
       ids,
       readiness: boundedPgReadiness,
       handler: {
+        onProcessed: (output, message) =>
+          logger.info(
+            {
+              channel: 'SQS',
+              sqsMessageId: message.sqsMessageId,
+              walletId: dataOf(message.body).walletId,
+              transactionId: output.transactionId,
+              status: output.status,
+              idempotentReplay: output.idempotentReplay,
+            },
+            'wager command processed',
+          ),
         onPermanentFailure: (error, message) =>
           logger.error(
             { sqsMessageId: message.sqsMessageId, error: error.name, errorMessage: error.message, sqlState: error.sqlState },
