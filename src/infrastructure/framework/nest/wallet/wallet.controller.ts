@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { CreateWallet } from '../../../../business/wallet/use-case/create-wallet/create-wallet';
 import { type GetLedger, MAX_LEDGER_LIMIT } from '../../../../business/wallet/use-case/get-ledger/get-ledger';
@@ -8,6 +8,7 @@ import { CREATE_WALLET, GET_LEDGER, GET_WALLET, RECONCILE_WALLET } from '../shar
 import { detail } from '../shared/envelope/api-response';
 import { HttpResult } from '../shared/envelope/http-result';
 import { HttpProblem } from '../shared/errors/http-problem';
+import { JsonContentTypeGuard } from '../shared/http/json-content-type.guard';
 import { ValidationDetailMessage } from '../shared/i18n/validation.detail-message';
 import { WalletDetailMessage } from '../shared/i18n/wallet.detail-message';
 import { LimitQueryPipe, UuidParamPipe } from '../shared/validation/params';
@@ -33,6 +34,7 @@ export class WalletController {
   ) {}
 
   @Post()
+  @UseGuards(JsonContentTypeGuard)
   @ApiCreateWalletResponses()
   async create(@Body() body: CreateWalletRequestDto) {
     const initialBalance = { amount: body.initialBalance.amount, currency: body.initialBalance.currency };

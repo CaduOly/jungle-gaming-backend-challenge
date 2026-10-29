@@ -3,6 +3,7 @@ import { FailureCode } from '../../src/business/shared/error/failure-code';
 import { assertEveryFakeWalletConsistent } from '../support/assertions/assert-fake-wallet-consistency';
 import { MAX_BODY_DEPTH } from '../../src/infrastructure/framework/nest/shared/validation/body-depth';
 import { client, expectEnvelope, type Reply } from './support/http-client';
+import { rawRequest } from './support/raw-http';
 import { databaseDown, type InMemoryHttpApp, startInMemoryHttpApp } from './support/in-memory-http-app';
 
 const NIL_UUID = '00000000-0000-7000-8000-000000000000';
@@ -331,6 +332,35 @@ describe('HTTP API over the in-memory persistence', () => {
         200,
       );
       expectReply(await call('POST', `/wallets/${wallet.id}/reconciliation`), 200);
+    });
+
+    it('checks the media type only on the routes that read a body', async () => {
+      const wallet = await openWallet('100.00');
+      const auth = 'Authorization: Bearer dev:provider-a';
+      const textBody = (method: string, path: string) =>
+        rawRequest(http.baseUrl, [`${method} ${path} HTTP/1.1`, auth, 'Content-Type: text/plain', 'Content-Length: 4'], 'oops');
+      expect((await textBody('GET', `/wallets/${wallet.id}`)).status).toBe(200);
+      expect((await textBody('GET', `/wallets/${wallet.id}/ledger`)).status).toBe(200);
+      expect((await textBody('POST', `/wallets/${wallet.id}/reconciliation`)).status).toBe(200);
+      expect((await textBody('POST', '/wallets')).status).toBe(415);
+    });
+
+    it('takes a chunked POST with an empty body as no body on the reconciliation and as an empty JSON body elsewhere', async () => {
+      const wallet = await openWallet('100.00');
+      const chunked = (path: string, ...headers: string[]) =>
+        rawRequest(
+          http.baseUrl,
+          [`POST ${path} HTTP/1.1`, 'Authorization: Bearer dev:provider-a', 'Transfer-Encoding: chunked', ...headers],
+          '0\r\n\r\n',
+        );
+      expect((await chunked(`/wallets/${wallet.id}/reconciliation`)).status).toBe(200);
+      expect((await chunked('/wallets')).status).toBe(415);
+      const empty = await chunked('/wallets', 'Content-Type: application/json');
+      expect(empty.status).toBe(400);
+      expect((JSON.parse(empty.body) as { detailsMessage: Array<{ field?: string }> }).detailsMessage.map((item) => item.field)).toEqual([
+        'playerId',
+        'initialBalance',
+      ]);
     });
 
     it('answers 400 on the path for a malformed URI', async () => {

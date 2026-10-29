@@ -11,7 +11,6 @@ import { useCaseProviders } from './di/use-case.providers';
 import { EnvelopeInterceptor } from './envelope/envelope.interceptor';
 import { HttpExceptionFilter } from './errors/http-exception.filter';
 import { readHttpConfig } from './http-config';
-import { JsonContentTypeGuard } from './http/json-content-type.guard';
 import { createValidationPipe } from './validation/validation.pipe';
 
 export interface AppModuleOptions {
@@ -38,7 +37,6 @@ export class AppModule {
         options.persistence,
         ...useCaseProviders,
         { provide: APP_GUARD, useClass: ProviderAuthGuard },
-        { provide: APP_GUARD, useClass: JsonContentTypeGuard },
         { provide: APP_INTERCEPTOR, useClass: EnvelopeInterceptor },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
         { provide: APP_PIPE, useFactory: createValidationPipe },

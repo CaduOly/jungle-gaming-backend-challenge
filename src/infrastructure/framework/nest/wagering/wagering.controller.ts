@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, Inject, Param, Post } from '@nestjs/common';
+import { Controller, Get, HttpCode, Inject, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedProvider } from '../../../../business/shared/port/provider-identity.port';
 import { ProviderIdentityMismatchError } from '../../../../business/wagering/error/provider-identity-mismatch-error';
@@ -10,6 +10,7 @@ import { CurrentProvider } from '../shared/auth/current-provider.decorator';
 import { GET_WAGER_TRANSACTION, PROCESS_WAGER_TRANSACTION } from '../shared/di/tokens';
 import { detail } from '../shared/envelope/api-response';
 import { HttpResult } from '../shared/envelope/http-result';
+import { JsonContentTypeGuard } from '../shared/http/json-content-type.guard';
 import { detailForFailureCode } from '../shared/i18n/catalog';
 import { InfraDetailMessage } from '../shared/i18n/infra.detail-message';
 import { WageringDetailMessage } from '../shared/i18n/wagering.detail-message';
@@ -56,6 +57,7 @@ export class WageringController {
   ) {}
 
   @Post('wagering/transactions')
+  @UseGuards(JsonContentTypeGuard)
   @HttpCode(200)
   @ApiSubmitWagerTransactionResponses()
   async submit(
