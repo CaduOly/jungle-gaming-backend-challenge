@@ -7,6 +7,7 @@ import { CLOCK, ID_GENERATOR, WAGERING_PERSISTENCE } from '../../../src/infrastr
 import type { WageringPersistence } from '../../../src/infrastructure/framework/nest/shared/di/wagering-persistence';
 import { createHttpApp } from '../../../src/infrastructure/framework/nest/shared/http-app';
 import type { IReadinessCheck } from '../../../src/infrastructure/health/readiness-check.port';
+import type { Observability } from '../../../src/infrastructure/observability/observability';
 import { UuidV7IdGenerator } from '../../../src/infrastructure/id/uuid-v7-id-generator';
 import { createFakeWageringApp, type FakeWageringApp } from '../../support/fakes/fake-wagering-app';
 import { InMemoryWagerTransactionRepository } from '../../support/fakes/in-memory-wager-transaction-repository';
@@ -40,9 +41,15 @@ export interface InMemoryHttpAppOptions {
   readonly env?: Record<string, string>;
   /** None by default: over the fakes there is no dependency to check, so the instance is always ready. */
   readonly readinessChecks?: readonly IReadinessCheck[];
+  /** The logger and metrics to assert on; a silent logger and a fresh registry otherwise. */
+  readonly observability?: Observability;
 }
 
-export const startInMemoryHttpApp = async ({ env = {}, readinessChecks }: InMemoryHttpAppOptions = {}): Promise<InMemoryHttpApp> => {
+export const startInMemoryHttpApp = async ({
+  env = {},
+  readinessChecks,
+  observability,
+}: InMemoryHttpAppOptions = {}): Promise<InMemoryHttpApp> => {
   const fake = createFakeWageringApp();
   const uow = new SwitchableUnitOfWork(fake.uow);
   const persistence: WageringPersistence = {
@@ -60,6 +67,7 @@ export const startInMemoryHttpApp = async ({ env = {}, readinessChecks }: InMemo
     env: { HTTP_RETRY_AFTER_SECONDS: '3', HEALTH_READINESS_TIMEOUT_MS: '50', ...env },
     logger: false,
     ...(readinessChecks === undefined ? {} : { readinessChecks }),
+    ...(observability === undefined ? {} : { observability }),
   });
   await app.listen(0, '127.0.0.1');
   const address = app.getHttpServer().address() as { port: number };
