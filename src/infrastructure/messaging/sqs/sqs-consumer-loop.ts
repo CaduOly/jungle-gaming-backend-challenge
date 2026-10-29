@@ -142,14 +142,21 @@ export class VisibilityExtensionRejectedError extends Error {
  * heartbeat until it is settled. Settling: ack → DeleteMessage (only after the handler resolved, i.e.
  * after its commit); dead letter → explicit SendMessage to the DLQ, then delete.
  *
- * Retry stays in the process. A failed message is attempted again here, with backoff, while the heartbeat
- * keeps it and the rest of its group invisible; nothing goes back to SQS, so no receive is spent. Each
- * failure first probes readiness: while PostgreSQL is down the attempt does not count (the breaker is fed
- * instead), so an outage never pushes valid commands towards the DLQ. Only after maxInProcessAttempts, or
- * on stop, the message goes back to SQS with a backoff visibility, and the rest of its group in the batch
- * goes back with the same visibility. On the last receive allowed by maxReceiveCount it is dead-lettered
- * explicitly (retries_exhausted) instead; the redrive policy is left as the net for a consumer that dies
- * before settling.
+ * Retry stays in the process, and so does the count that sends a message to the DLQ. A failed message is
+ * attempted again here, with backoff, while the heartbeat keeps it and the rest of its group invisible.
+ * After a failure the readiness probe runs first: while PostgreSQL is down the failure does not count and
+ * the handler is not called again until the probe passes (the breaker paces the probes). Once the message
+ * itself failed maxInProcessAttempts times in a row it is dead-lettered explicitly (retries_exhausted). It
+ * goes back to SQS only on stop, with a backoff visibility, and the rest of its group in the batch goes back
+ * with the same visibility.
+ *
+ * Why not the SQS receive count: it counts deliveries, not failures. A tail handed back with its head, or a
+ * batch handed back on a stop or deploy, gains receives without ever failing, so any decision taken on
+ * ApproximateReceiveCount (ours or the redrive's) could dead-letter a command that was never processed.
+ * Here the DLQ decision only counts the message's own failures inside one delivery, so it never fires
+ * early; a stop restarts that count, which can only delay a dead letter, never bring it forward. The
+ * redrive policy stays as the net for a consumer that crashes before settling, and its maxReceiveCount must
+ * sit far above anything stops and deploys can reach (100 by default): it is not the retry limit.
  *
  * FIFO order: on AWS a group with a message in flight delivers nothing else, so the tail can never pass
  * the head. LocalStack does not honour that block: a message of a group can be received while an older one
@@ -180,7 +187,7 @@ export class SqsConsumerLoop {
     this.deadLetterQueueUrl = new SqsQueueUrl(deps.client, deps.deadLetterQueue, this.requestTimeoutMs);
     this.backoff = new ExponentialBackoff({
       ...config.retry,
-      maxAttempts: config.maxReceiveCount,
+      maxAttempts: config.maxInProcessAttempts,
       random: deps.random ?? Math.random,
     });
     this.breaker = new CircuitBreaker({
@@ -344,7 +351,7 @@ export class SqsConsumerLoop {
       ...(message.groupId === undefined ? {} : { messageGroupId: message.groupId }),
       ...(sentAt === undefined ? {} : { sentAt: new Date(sentAt) }),
     };
-    const { maxInProcessAttempts, maxReceiveCount } = this.deps.config;
+    const { maxInProcessAttempts } = this.deps.config;
     let failures = 0;
     for (;;) {
       const attemptStartedAt = this.clock.now().getTime();
@@ -354,21 +361,33 @@ export class SqsConsumerLoop {
         await this.settle(message, outcome);
         return SETTLED;
       }
-      const ready = await this.probeReadiness();
-      if (ready) failures += 1;
+      const counted = await this.probeReadiness();
+      if (counted) failures += 1;
       if (failures >= maxInProcessAttempts) {
-        if (message.receiveCount < maxReceiveCount) return this.handBack(message);
-        const detail = `${failures} attempts on receive ${message.receiveCount} of ${maxReceiveCount}: ${failure}`;
+        const detail = `failed ${failures} times in a row (receive ${message.receiveCount}): ${failure}`;
         await this.settle(message, MessageOutcome.deadLetter(DeadLetterReason.RETRIES_EXHAUSTED, detail));
         return SETTLED;
       }
-      if (this.loop.isStopping) return this.handBack(message);
-      const waitMs = ready
-        ? (outcome.delayMs ?? this.backoff.nextDelayMs(failures))
-        : Math.max(this.deps.config.errorDelayMs, this.breaker.remainingOpenMs());
-      await pause(waitMs, this.stopAbort.signal);
+      if (!(await this.untilReady())) return this.handBack(message);
+      if (counted) await pause(outcome.delayMs ?? this.backoff.nextDelayMs(failures), this.stopAbort.signal);
       if (this.loop.isStopping) return this.handBack(message);
     }
+  }
+
+  /**
+   * Waits, without calling the handler, until the readiness probe passes (true) or the consumer stops (false).
+   * While the breaker is open nothing is probed; half-open lets one probe through.
+   */
+  private async untilReady(): Promise<boolean> {
+    while (!this.loop.isStopping) {
+      if (!this.breaker.canAttempt()) {
+        await pause(Math.max(1, this.breaker.remainingOpenMs()), this.stopAbort.signal);
+        continue;
+      }
+      if (await this.probeReadiness()) return true;
+      await pause(this.deps.config.errorDelayMs, this.stopAbort.signal);
+    }
+    return false;
   }
 
   private async attempt(

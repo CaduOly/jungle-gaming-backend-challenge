@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REGION="${AWS_DEFAULT_REGION:-us-east-1}"
-MAX_RECEIVE_COUNT="${SQS_MAX_RECEIVE_COUNT:-5}"
+MAX_RECEIVE_COUNT="${SQS_MAX_RECEIVE_COUNT:-100}"
 
 create_fifo() {
   awslocal sqs create-queue --region "$REGION" --queue-name "$1" \

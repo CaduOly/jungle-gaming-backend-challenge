@@ -96,39 +96,57 @@ describe('SqsConsumerLoop (stubbed SQS)', () => {
     expect(sqs.of(ChangeMessageVisibilityCommand.name)).toEqual([]);
   });
 
-  it('after the in-process ceiling hands the message back with backoff and the rest of its group with it', async () => {
+  it('dead-letters a message once it failed maxInProcessAttempts times itself, and goes on with its group', async () => {
     handled.length = 0;
-    const sqs = stubClient([sqsMessage('a1', 'A'), sqsMessage('a2', 'A'), sqsMessage('a3', 'A'), sqsMessage('b1', 'B')]);
+    const sqs = stubClient([sqsMessage('a1', 'A'), sqsMessage('a2', 'A'), sqsMessage('a3', 'A', '{"id":"a3"}', 50)]);
+    let tailFailures = 1;
     const loop = loopWith(
       sqs.client,
-      recordingHandler((m) => (m.sqsMessageId === 'a2' ? MessageOutcome.retry(1) : MessageOutcome.ack())),
+      recordingHandler((m) => {
+        if (m.sqsMessageId === 'a2') return MessageOutcome.retry(1);
+        if (m.sqsMessageId === 'a3' && tailFailures-- > 0) return MessageOutcome.retry(1);
+        return MessageOutcome.ack();
+      }),
     );
 
     await loop.pollOnce();
 
-    expect(handled.map((message) => message.sqsMessageId).sort()).toEqual(['a1', 'a2', 'a2', 'b1']);
-    expect(sqs.of(DeleteMessageCommand.name).map((entry) => entry.input.ReceiptHandle).sort()).toEqual(['rh-a1', 'rh-b1']);
-    expect(sqs.of(ChangeMessageVisibilityCommand.name).map((entry) => [entry.input.ReceiptHandle, entry.input.VisibilityTimeout])).toEqual([
-      ['rh-a2', 3],
-      ['rh-a3', 3],
+    expect(handled.map((message) => message.sqsMessageId)).toEqual(['a1', 'a2', 'a2', 'a3', 'a3']);
+    expect(sqs.of(SendMessageCommand.name).map((entry) => entry.input)).toEqual([
+      expect.objectContaining({
+        QueueUrl: 'http://sqs/dlq.fifo',
+        MessageDeduplicationId: 'a2',
+        MessageAttributes: expect.objectContaining({
+          'dead-letter-reason': { DataType: 'String', StringValue: 'retries_exhausted' },
+        }),
+      }),
     ]);
-  });
-
-  it('dead-letters with retries_exhausted when the ceiling is hit on the last receive allowed', async () => {
-    const sqs = stubClient([sqsMessage('x1', 'X', '{}', DEFAULT_SQS_CONSUMER_CONFIG.maxReceiveCount)]);
-    const loop = loopWith(sqs.client, { handle: async () => Promise.reject(transient()) }, { config: quickRetry });
-
-    await loop.pollOnce();
-
-    expect(sqs.of(SendMessageCommand.name)[0]?.input).toMatchObject({
-      QueueUrl: 'http://sqs/dlq.fifo',
-      MessageAttributes: { 'dead-letter-reason': { DataType: 'String', StringValue: 'retries_exhausted' } },
-    });
-    expect(sqs.of(DeleteMessageCommand.name)).toHaveLength(1);
+    expect(sqs.of(DeleteMessageCommand.name).map((entry) => entry.input.ReceiptHandle)).toEqual(['rh-a1', 'rh-a2', 'rh-a3']);
     expect(sqs.of(ChangeMessageVisibilityCommand.name)).toEqual([]);
   });
 
-  it('does not count a failure as an attempt while the readiness probe fails, and feeds the breaker', async () => {
+  it('on stop during a retry wait hands the message back with backoff and the rest of its group with it', async () => {
+    handled.length = 0;
+    const sqs = stubClient([sqsMessage('a1', 'A'), sqsMessage('a2', 'A')]);
+    const loop = loopWith(sqs.client, recordingHandler(() => MessageOutcome.retry()), { config: { maxInProcessAttempts: 5 } });
+
+    loop.start();
+    while (handled.length === 0) await Bun.sleep(5);
+    await Bun.sleep(20);
+    const startedAt = Date.now();
+    expect(await loop.stop(1_000)).toEqual({ graceful: true });
+
+    expect(Date.now() - startedAt).toBeLessThan(500);
+    expect(handled.map((message) => message.sqsMessageId)).toEqual(['a1']);
+    expect(sqs.of(ChangeMessageVisibilityCommand.name).map((entry) => [entry.input.ReceiptHandle, entry.input.VisibilityTimeout])).toEqual([
+      ['rh-a1', 3],
+      ['rh-a2', 3],
+    ]);
+    expect(sqs.of(SendMessageCommand.name)).toEqual([]);
+  });
+
+
+  it('while readiness fails neither counts the failure nor calls the handler again, and feeds the breaker', async () => {
     const sqs = stubClient([sqsMessage('d1', 'D')]);
     let probes = 0;
     let calls = 0;
@@ -137,25 +155,28 @@ describe('SqsConsumerLoop (stubbed SQS)', () => {
       {
         handle: async () => {
           calls += 1;
-          if (calls <= 4) throw transient();
+          if (calls === 1) throw transient();
           return MessageOutcome.ack();
         },
       },
       {
-        config: quickRetry,
+        config: { ...quickRetry, maxInProcessAttempts: 1, circuitBreaker: { failureThreshold: 2, openMs: 5 } },
         readiness: async () => {
           probes += 1;
-          if (probes >= 2 && probes <= 4) throw new Error('PostgreSQL is down');
+          if (probes >= 2 && probes <= 6) throw new Error('PostgreSQL is down');
         },
       },
     );
 
     await loop.pollOnce();
 
-    expect(calls).toBe(5);
+    expect(calls).toBe(2);
+    expect(probes).toBeGreaterThanOrEqual(7);
+    expect(sqs.of(SendMessageCommand.name)).toEqual([]);
     expect(sqs.of(DeleteMessageCommand.name)).toHaveLength(1);
-    expect(sqs.of(ChangeMessageVisibilityCommand.name)).toEqual([]);
+    expect(loop.isCircuitOpen).toBe(false);
   });
+
 
   it('reports every entry SQS refused to extend in the heartbeat', async () => {
     const sqs = stubClient([sqsMessage('h1', 'H')], (name) =>
@@ -232,7 +253,7 @@ describe('SqsConsumerLoop (stubbed SQS)', () => {
     });
   });
 
-  it('classifies a thrown error and never deletes before the handler resolved', async () => {
+  it('retries an unrecognised error, dead-letters it after its own attempts and never deletes before the handler resolved', async () => {
     handled.length = 0;
     const sqs = stubClient([sqsMessage('e1', 'E')]);
     const loop = loopWith(
@@ -243,13 +264,13 @@ describe('SqsConsumerLoop (stubbed SQS)', () => {
           throw new Error('unknown');
         },
       },
-      { config: { ...quickRetry, maxReceiveCount: 2 } },
+      { config: quickRetry },
     );
 
     await loop.pollOnce();
 
-    expect(sqs.of(DeleteMessageCommand.name)).toEqual([]);
-    expect(sqs.of(ChangeMessageVisibilityCommand.name)).toHaveLength(1);
+    expect(sqs.sent.map((entry) => entry.name).slice(1)).toEqual([SendMessageCommand.name, DeleteMessageCommand.name]);
+    expect(sqs.of(ChangeMessageVisibilityCommand.name)).toEqual([]);
   });
 
   it('crashes between the ack and the delete when crash_after_commit_before_ack is active', async () => {

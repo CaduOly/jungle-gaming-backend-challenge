@@ -7,11 +7,10 @@ export interface SqsConsumerConfig {
   readonly maxMessages: number;
   readonly visibilityTimeoutSeconds: number;
   readonly heartbeatIntervalMs: number;
-  /** Same value as the queue's redrive policy; also the attempt ceiling of the retry backoff. */
-  readonly maxReceiveCount: number;
   /**
-   * Attempts a received message gets inside the process (backoff + heartbeat, never handed back) before it
-   * goes back to SQS with a visibility delay. Each hand back costs one receive of maxReceiveCount.
+   * The retry limit: consecutive failures of the message itself, retried inside the process (backoff +
+   * heartbeat), before it is dead-lettered as retries_exhausted. It is not the queue's redrive
+   * maxReceiveCount, which counts deliveries and must stay far above it (see SqsConsumerLoop).
    */
   readonly maxInProcessAttempts: number;
   readonly retry: { readonly baseMs: number; readonly capMs: number };
@@ -26,8 +25,7 @@ export const DEFAULT_SQS_CONSUMER_CONFIG: SqsConsumerConfig = {
   maxMessages: 10,
   visibilityTimeoutSeconds: 30,
   heartbeatIntervalMs: 10_000,
-  maxReceiveCount: 5,
-  maxInProcessAttempts: 5,
+  maxInProcessAttempts: 8,
   retry: { baseMs: 1_000, capMs: 60_000 },
   errorDelayMs: 1_000,
   shutdownTimeoutMs: 25_000,
@@ -63,7 +61,6 @@ export const readSqsConsumerConfig = (env: Env): SqsConsumerConfig => {
     maxMessages: bounded(env, 'SQS_CONSUMER_MAX_MESSAGES', d.maxMessages, 1, 10),
     visibilityTimeoutSeconds,
     heartbeatIntervalMs,
-    maxReceiveCount: positive(env, 'SQS_MAX_RECEIVE_COUNT', d.maxReceiveCount),
     maxInProcessAttempts: positive(env, 'SQS_CONSUMER_MAX_IN_PROCESS_ATTEMPTS', d.maxInProcessAttempts),
     retry: {
       baseMs: positive(env, 'SQS_CONSUMER_RETRY_BASE_MS', d.retry.baseMs),
