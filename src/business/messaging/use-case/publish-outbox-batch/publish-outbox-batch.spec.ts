@@ -19,7 +19,7 @@ describe('PublishOutboxBatch', () => {
   const useCase = (batchSize = 10) =>
     new PublishOutboxBatch(outbox, publisher, clock, backoff, { batchSize, leaseMs: LEASE_MS });
 
-  const enqueue = async (count: number, startMs = -count, aggregateOf = (index: number) => `wallet-${index}`) => {
+  const enqueue = async (count: number, startMs = count * -1, aggregateOf = (index: number) => `wallet-${index}`) => {
     const messages = Array.from({ length: count }, (_, index) =>
       OutboxMessage.fromEvent(
         aFakeEvent({

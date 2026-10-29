@@ -260,6 +260,35 @@ describe('outbox publisher against PostgreSQL and LocalStack SQS', () => {
     expect(wireOrder(collector, head.aggregateId)).toEqual(messages.map((message) => message.id));
   });
 
+  it('puts an aggregate on the wire in commit order, even when a later commit carries an earlier occurredAt', async () => {
+    const walletId = uuidv7();
+    const at = Date.now() - 60_000;
+    const event = (version: number, occurredAt: number) =>
+      OutboxMessage.fromEvent(
+        aFakeEvent({
+          eventId: uuidv7(),
+          aggregateId: walletId,
+          occurredAt: new Date(occurredAt),
+          data: { walletId, amount: '1.00', walletVersion: version },
+        }),
+      );
+    const committed = [event(1, at), event(2, at - 5), event(3, at - 10)];
+    for (const message of committed) await new OutboxRepository(db.orm.em.fork()).add([message]);
+    const worker = createOutboxPublisherWorker({
+      em: db.orm.em,
+      publisher: realPublisher(),
+      clock: new SystemClock(),
+      config: publisherConfig({ batchSize: 10 }),
+    });
+
+    for (let round = 0; round < 3; round++) expect(await worker.runOnce()).toMatchObject({ claimed: 1, published: 1 });
+
+    const collector = await new TestEventConsumer(queues.client, queues.events.url).drainUntilReceived(
+      committed.map((message) => message.id),
+    );
+    expect(wireOrder(collector, walletId)).toEqual(committed.map((message) => message.id));
+  });
+
   it('never lets another instance publish past a head that is still leased', async () => {
     const messages = await seed(db.orm, 1, 3);
     const [head] = messages;

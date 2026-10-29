@@ -21,7 +21,10 @@ import { testInfraConfig } from '../../support/infra-config';
 import { createTestQueues, type TestQueues } from '../../support/test-queues';
 import { uuidv7 } from '../../support/uuid';
 
-const MAX_RECEIVE_COUNT = 3;
+/** The retry limit of these tests: failures of the message itself. */
+const ATTEMPTS = 3;
+/** The redrive as configured in production: a crash net far above anything stops and deploys reach. */
+const REDRIVE_MAX_RECEIVE_COUNT = 100;
 const VISIBILITY_TIMEOUT_SECONDS = 2;
 const PROCESS_SCRIPT = new URL('./sqs-consumer-process.ts', import.meta.url).pathname;
 
@@ -30,7 +33,7 @@ const consumerConfig = (overrides: Partial<SqsConsumerConfig> = {}): SqsConsumer
   waitTimeSeconds: 1,
   visibilityTimeoutSeconds: VISIBILITY_TIMEOUT_SECONDS,
   heartbeatIntervalMs: 500,
-  maxReceiveCount: MAX_RECEIVE_COUNT,
+  maxInProcessAttempts: ATTEMPTS,
   retry: { baseMs: 1_000, capMs: 1_000 },
   errorDelayMs: 50,
   shutdownTimeoutMs: 5_000,
@@ -50,6 +53,8 @@ interface Call {
   readonly message: InboundMessage;
   readonly at: number;
 }
+
+const versionOf = (call: Call): string => (call.message.body as { version: string }).version;
 
 const recording = (decide: (message: InboundMessage, calls: Call[]) => Promise<MessageOutcome> | MessageOutcome) => {
   const calls: Call[] = [];
@@ -154,7 +159,7 @@ describe('SQS consumer loop against LocalStack', () => {
       SQS_COMMANDS_DLQ_URL: queues.commands.dlqUrl,
       SQS_CONSUMER_WAIT_TIME_SECONDS: '1',
       SQS_CONSUMER_HEARTBEAT_INTERVAL_MS: '500',
-      SQS_MAX_RECEIVE_COUNT: `${MAX_RECEIVE_COUNT}`,
+      SQS_CONSUMER_MAX_IN_PROCESS_ATTEMPTS: `${ATTEMPTS}`,
       ...extra,
     };
   };
@@ -171,7 +176,7 @@ describe('SQS consumer loop against LocalStack', () => {
 
   beforeEach(async () => {
     await ensureInfraUp();
-    queues = await createTestQueues({ maxReceiveCount: MAX_RECEIVE_COUNT, visibilityTimeoutSeconds: VISIBILITY_TIMEOUT_SECONDS });
+    queues = await createTestQueues({ maxReceiveCount: REDRIVE_MAX_RECEIVE_COUNT, visibilityTimeoutSeconds: VISIBILITY_TIMEOUT_SECONDS });
   });
 
   afterEach(async () => {
@@ -208,16 +213,16 @@ describe('SQS consumer loop against LocalStack', () => {
 
   it('retries a transient failure in the process with backoff, without spending a receive', async () => {
     const { handler, calls } = recording((_, done) => {
-      if (done.length < MAX_RECEIVE_COUNT) {
+      if (done.length < ATTEMPTS) {
         throw new TransientInfrastructureError('lock timeout', '55P03', { cause: undefined });
       }
       return MessageOutcome.ack();
     });
     await send({ messageId: 'msg-transient' });
-    const { loop } = consumer(handler, { config: { maxInProcessAttempts: MAX_RECEIVE_COUNT + 1 } });
+    const { loop } = consumer(handler, { config: { maxInProcessAttempts: ATTEMPTS + 1 } });
 
     loop.start();
-    await until(() => calls.length === MAX_RECEIVE_COUNT, 15_000, 'every retry');
+    await until(() => calls.length === ATTEMPTS, 15_000, 'every retry');
     await until(async () => (await queueDepth(queues.client, queues.commands.url)).inFlight === 0, 5_000, 'the ack');
     await loop.stop();
 
@@ -230,7 +235,7 @@ describe('SQS consumer loop against LocalStack', () => {
 
   it('holds a transient head failure in the process, so no message of its group burns receives or reaches the DLQ', async () => {
     const groupId = uuidv7();
-    let headFailures = MAX_RECEIVE_COUNT + 1;
+    let headFailures = ATTEMPTS + 1;
     const acked: string[] = [];
     const { handler, calls } = recording((message) => {
       const { version } = message.body as { version: string };
@@ -242,7 +247,7 @@ describe('SQS consumer loop against LocalStack', () => {
     });
     for (const version of ['v1', 'v2', 'v3']) await send({ version }, groupId);
     const { loop } = consumer(handler, {
-      config: { maxInProcessAttempts: MAX_RECEIVE_COUNT + 2, retry: { baseMs: 200, capMs: 400 } },
+      config: { maxInProcessAttempts: ATTEMPTS + 2, retry: { baseMs: 200, capMs: 400 } },
     });
 
     loop.start();
@@ -294,34 +299,35 @@ describe('SQS consumer loop against LocalStack', () => {
     expect(await queueDepth(queues.client, queues.commands.url)).toEqual({ visible: 0, inFlight: 0 });
   });
 
-  it('hands a message back after the in-process ceiling and dead-letters it explicitly on the last receive', async () => {
-    const { handler, calls } = recording(() => MessageOutcome.retry(0));
-    const sqsMessageId = await send({ messageId: 'msg-stuck' });
-    const { loop } = consumer(handler, { config: { maxInProcessAttempts: 2 } });
+  it('dead-letters a message once it failed the retry limit itself, on its first delivery, and the group goes on', async () => {
+    const groupId = uuidv7();
+    const acked: string[] = [];
+    const { handler, calls } = recording((message) => {
+      const { version } = message.body as { version: string };
+      if (version === 'v1') return MessageOutcome.retry(0);
+      acked.push(version);
+      return MessageOutcome.ack();
+    });
+    const ids: string[] = [];
+    for (const version of ['v1', 'v2', 'v3']) ids.push(await send({ version }, groupId));
+    const { loop } = consumer(handler);
 
     loop.start();
-    const deadLetters: Message[] = [];
-    await until(
-      async () => {
-        deadLetters.push(...(await receiveAll(queues.client, queues.commands.dlqUrl, 0)));
-        return deadLetters.length === 1;
-      },
-      20_000,
-      'the dead letter',
-    );
+    await until(() => acked.length === 2, 20_000, 'the rest of the group');
+    await until(async () => (await queueDepth(queues.client, queues.commands.url)).inFlight === 0, 5_000, 'the settles');
     await loop.stop();
 
-    expect(calls.map((call) => call.message.receiveCount)).toEqual([1, 1, 2, 2, 3, 3]);
-    const [deadLetter] = deadLetters;
-    expect(deadLetter?.MessageAttributes?.[DEAD_LETTER_ATTRIBUTES.sourceMessageId]?.StringValue).toBe(sqsMessageId);
-    expect(deadLetter?.MessageAttributes?.[DEAD_LETTER_ATTRIBUTES.reason]?.StringValue).toBe('retries_exhausted');
-    expect(deadLetter?.MessageAttributes?.[DEAD_LETTER_ATTRIBUTES.receiveCount]?.StringValue).toBe(`${MAX_RECEIVE_COUNT}`);
+    expect(calls.map((call) => `${versionOf(call)}@${call.message.receiveCount}`)).toEqual(['v1@1', 'v1@1', 'v1@1', 'v2@1', 'v3@1']);
+    expect(acked).toEqual(['v2', 'v3']);
+    const deadLetters = await receiveAll(queues.client, queues.commands.dlqUrl, 1);
+    expect(deadLetters.map((message) => message.MessageAttributes?.[DEAD_LETTER_ATTRIBUTES.sourceMessageId]?.StringValue)).toEqual([ids[0]]);
+    expect(deadLetters[0]?.MessageAttributes?.[DEAD_LETTER_ATTRIBUTES.reason]?.StringValue).toBe('retries_exhausted');
     expect(await queueDepth(queues.client, queues.commands.url)).toEqual({ visible: 0, inFlight: 0 });
   });
 
-  it('keeps the group order when a message in the middle is handed back to SQS', async () => {
+  it('keeps the group order with a retry in the middle of the group, all within one delivery', async () => {
     const groupId = uuidv7();
-    let middleFailures = 3;
+    let middleFailures = ATTEMPTS - 1;
     const acked: string[] = [];
     const { handler, calls } = recording((message) => {
       const { version } = message.body as { version: string };
@@ -332,7 +338,7 @@ describe('SQS consumer loop against LocalStack', () => {
       return MessageOutcome.ack();
     });
     for (const version of ['v1', 'v2', 'v3']) await send({ version }, groupId);
-    const { loop } = consumer(handler, { config: { maxInProcessAttempts: 2, retry: { baseMs: 200, capMs: 400 } } });
+    const { loop } = consumer(handler, { config: { retry: { baseMs: 200, capMs: 400 } } });
 
     loop.start();
     await until(() => acked.length === 3, 20_000, 'the whole group');
@@ -340,17 +346,109 @@ describe('SQS consumer loop against LocalStack', () => {
     await loop.stop();
 
     expect(acked).toEqual(['v1', 'v2', 'v3']);
-    const versionOf = (call: Call) => (call.message.body as { version: string }).version;
-    expect(calls.map((call) => `${versionOf(call)}@${call.message.receiveCount}`)).toEqual([
-      'v1@1',
-      'v2@1',
-      'v2@1',
-      'v2@2',
-      'v2@2',
-      'v3@2',
-    ]);
+    expect(calls.map((call) => `${versionOf(call)}@${call.message.receiveCount}`)).toEqual(['v1@1', 'v2@1', 'v2@1', 'v2@1', 'v3@1']);
     expect(await receiveAll(queues.client, queues.commands.dlqUrl, 0)).toEqual([]);
   });
+
+  describe('stops and deploys in the middle of a retry never send a valid command to the DLQ', () => {
+    /**
+     * Runs one consumer per stop: each one waits until the head failed once in it, then stops gracefully, which
+     * hands the head and the rest of the group back. Every stop costs every message of the group one receive.
+     */
+    const stopDuringRetries = async (stops: number, failing: { head: boolean }, handler: IMessageHandler, calls: Call[]) => {
+      for (let stop = 1; stop <= stops; stop++) {
+        const before = calls.length;
+        const { loop } = consumer(handler, { config: { retry: { baseMs: 1_000, capMs: 1_000 } } });
+        loop.start();
+        await until(() => calls.length > before, 15_000, `the head in consumer ${stop}`);
+        expect(await loop.stop()).toEqual({ graceful: true });
+      }
+      failing.head = false;
+    };
+
+    it('the tail handed back by stops past the old receive limit is processed, in order, and nothing is dead-lettered', async () => {
+      const groupId = uuidv7();
+      const failing = { head: true };
+      const acked: string[] = [];
+      const { handler, calls } = recording((message) => {
+        const { version } = message.body as { version: string };
+        if (version === 'v1' && failing.head) throw new TransientInfrastructureError('lock timeout', '55P03', { cause: undefined });
+        acked.push(`${version}@${message.receiveCount}`);
+        return MessageOutcome.ack();
+      });
+      for (const version of ['v1', 'v2', 'v3']) await send({ version }, groupId);
+
+      await stopDuringRetries(ATTEMPTS, failing, handler, calls);
+      const { loop } = consumer(handler);
+      loop.start();
+      await until(() => acked.length === 3, 20_000, 'the whole group');
+      await until(async () => (await queueDepth(queues.client, queues.commands.url)).inFlight === 0, 5_000, 'the acks');
+      await loop.stop();
+
+      expect(acked).toEqual([`v1@${ATTEMPTS + 1}`, `v2@${ATTEMPTS + 1}`, `v3@${ATTEMPTS + 1}`]);
+      expect(calls.filter((call) => versionOf(call) !== 'v1')).toHaveLength(2);
+      expect(await receiveAll(queues.client, queues.commands.dlqUrl, 1)).toEqual([]);
+    });
+
+    it('a tail that inherited the receives of its head gets its own full retry limit', async () => {
+      const groupId = uuidv7();
+      const failing = { head: true };
+      let tailFailures = ATTEMPTS - 1;
+      const acked: string[] = [];
+      const { handler, calls } = recording((message) => {
+        const { version } = message.body as { version: string };
+        if (version === 'v1' && failing.head) throw new TransientInfrastructureError('lock timeout', '55P03', { cause: undefined });
+        if (version === 'v2' && tailFailures-- > 0) throw new TransientInfrastructureError('lock timeout', '55P03', { cause: undefined });
+        acked.push(version);
+        return MessageOutcome.ack();
+      });
+      for (const version of ['v1', 'v2', 'v3']) await send({ version }, groupId);
+
+      await stopDuringRetries(ATTEMPTS - 1, failing, handler, calls);
+      const { loop } = consumer(handler, { config: { retry: { baseMs: 200, capMs: 400 } } });
+      loop.start();
+      await until(() => acked.length === 3, 20_000, 'the whole group');
+      await until(async () => (await queueDepth(queues.client, queues.commands.url)).inFlight === 0, 5_000, 'the acks');
+      await loop.stop();
+
+      expect(acked).toEqual(['v1', 'v2', 'v3']);
+      expect(calls.filter((call) => versionOf(call) === 'v2').map((call) => call.message.receiveCount)).toEqual(
+        Array.from({ length: ATTEMPTS }, () => ATTEMPTS),
+      );
+      expect(await receiveAll(queues.client, queues.commands.dlqUrl, 1)).toEqual([]);
+    });
+  });
+
+  it('while PostgreSQL is down it does not call the handler again, and nothing reaches the DLQ', async () => {
+    let down = false;
+    const { handler, calls } = recording(() => {
+      if (calls.length === 1) {
+        down = true;
+        setTimeout(() => {
+          down = false;
+        }, 2_000);
+        throw new TransientInfrastructureError('Connection terminated unexpectedly', undefined, { cause: undefined });
+      }
+      return MessageOutcome.ack();
+    });
+    await send({ messageId: 'msg-outage' });
+    const { loop } = consumer(handler, {
+      config: { maxInProcessAttempts: 1 },
+      readiness: async () => {
+        if (down) throw new Error('PostgreSQL is down');
+      },
+    });
+
+    loop.start();
+    await until(() => calls.length === 2, 15_000, 'the handler after the outage');
+    await until(async () => (await queueDepth(queues.client, queues.commands.url)).inFlight === 0, 5_000, 'the ack');
+    await loop.stop();
+
+    expect(calls[1]!.at - calls[0]!.at).toBeGreaterThanOrEqual(1_900);
+    expect(calls.map((call) => call.message.receiveCount)).toEqual([1, 1]);
+    expect(await receiveAll(queues.client, queues.commands.dlqUrl, 0)).toEqual([]);
+  });
+
 
   it('keeps a long-running message invisible with the heartbeat', async () => {
     const { handler, calls } = recording(async () => {
