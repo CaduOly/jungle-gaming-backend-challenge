@@ -1,7 +1,8 @@
 import type { Provider } from '@nestjs/common';
 import { ExponentialBackoff } from '../../../../../business/shared/policy/exponential-backoff';
-import { DevProviderIdentity } from '../../../../auth/dev-provider-identity';
+import { createProviderIdentity } from '../../../../auth/provider-identity.factory';
 import { SystemClock } from '../../../../clock/system-clock';
+import { readAuthConfig } from '../../../../config/auth-config';
 import { readPendingReferenceBackoff } from '../../../../config/pending-reference-config';
 import { Sha256PayloadHasher } from '../../../../hashing/sha256-payload-hasher';
 import { UuidV7IdGenerator } from '../../../../id/uuid-v7-id-generator';
@@ -13,7 +14,7 @@ export const coreProviders = (env: Readonly<Record<string, string | undefined>>)
   { provide: CLOCK, useClass: SystemClock },
   { provide: ID_GENERATOR, useClass: UuidV7IdGenerator },
   { provide: PAYLOAD_HASHER, useClass: Sha256PayloadHasher },
-  { provide: PROVIDER_IDENTITY, useClass: DevProviderIdentity },
+  { provide: PROVIDER_IDENTITY, useFactory: () => createProviderIdentity(readAuthConfig(env)) },
   { provide: HTTP_CONFIG, useValue: readHttpConfig(env) },
   {
     provide: PENDING_REFERENCE_BACKOFF,
