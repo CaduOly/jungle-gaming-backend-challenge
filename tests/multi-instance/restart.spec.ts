@@ -66,7 +66,10 @@ describe('kill -9 of every replica under a mixed load, then a restart', () => {
     expect(all.filter((command) => applied.get(command.externalTransactionId) !== 1)).toEqual([]);
     expect(applied.size).toBe(all.length);
     expect(await cluster.count(`wager_transactions WHERE status = 'PENDING_REFERENCE'`)).toBe(0);
-    expect(await cluster.count(`wager_transactions WHERE kind = 'ROLLBACK' AND status <> 'PROCESSED'`)).toBe(0);
+    const { rows: unsettled } = await cluster.sql.query(
+      `SELECT status, failure_code, attempts FROM wager_transactions WHERE kind = 'ROLLBACK' AND status <> 'PROCESSED'`,
+    );
+    expect(unsettled).toEqual([]);
     expect(await cluster.count('outbox_messages WHERE published_at IS NULL')).toBe(0);
     expect(await cluster.deadLetters()).toEqual([]);
 

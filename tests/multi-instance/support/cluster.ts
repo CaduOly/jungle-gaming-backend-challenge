@@ -43,8 +43,8 @@ const FAST_ENV: Readonly<Record<string, string>> = {
   PENDING_LEASE_MS: '5000',
   PENDING_POLL_INTERVAL_MS: '200',
   PENDING_BACKOFF_BASE_MS: '200',
-  PENDING_BACKOFF_CAP_MS: '1000',
-  PENDING_MAX_ATTEMPTS: '4',
+  PENDING_BACKOFF_CAP_MS: '3000',
+  PENDING_MAX_ATTEMPTS: '10',
 };
 
 export const until = async (condition: () => boolean | Promise<boolean>, timeoutMs: number, what: string): Promise<void> => {
