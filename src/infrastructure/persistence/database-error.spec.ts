@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { UniqueConstraintViolationError } from '../../business/shared/error/unique-constraint-violation-error';
 import { PermanentInfrastructureError } from '../error/permanent-infrastructure-error';
 import { TransientInfrastructureError } from '../error/transient-infrastructure-error';
 import { translateDatabaseError } from './database-error';
@@ -36,8 +37,45 @@ describe('translateDatabaseError', () => {
     expect((translated as PermanentInfrastructureError).sqlState).toBe('23001');
   });
 
-  it.each(['23505', '23503', '23514'])('leaves %s for the caller to interpret', (code) => {
+  it('maps a unique violation (23505) to UniqueConstraintViolationError carrying the constraint name', () => {
+    const original = Object.assign(sqlError('23505'), { constraint: 'wager_transactions_provider_idempotency_key_unique' });
+    const translated = translateDatabaseError(original);
+    expect(translated).toBeInstanceOf(UniqueConstraintViolationError);
+    expect((translated as UniqueConstraintViolationError).constraint).toBe('wager_transactions_provider_idempotency_key_unique');
+    expect((translated as Error).cause).toBe(original);
+  });
+
+  it('keeps a unique violation without a constraint name recognisable', () => {
+    const translated = translateDatabaseError(sqlError('23505'));
+    expect((translated as UniqueConstraintViolationError).constraint).toBe('unknown');
+  });
+
+  it.each(['23503', '23514', '23502'])('maps the schema guard %s to a permanent error naming the constraint', (code) => {
+    const translated = translateDatabaseError(Object.assign(sqlError(code), { constraint: 'some_constraint' }));
+    expect(translated).toBeInstanceOf(PermanentInfrastructureError);
+    expect((translated as PermanentInfrastructureError).sqlState).toBe(code);
+    expect((translated as Error).message).toContain('some_constraint');
+  });
+
+  it('does not wrap an already translated unique violation twice', () => {
+    const translated = translateDatabaseError(sqlError('23505'));
+    expect(translateDatabaseError(translated)).toBe(translated);
+  });
+
+  it.each([
+    ['22P02', 'invalid text representation (a non-uuid in a uuid column)'],
+    ['08P01', 'protocol violation (a NUL byte in a text parameter)'],
+    ['25006', 'read-only sql transaction (a write inside a snapshot)'],
+  ])('maps %s, %s, to a permanent error: retrying the same input never helps', (code) => {
     const original = sqlError(code);
+    const translated = translateDatabaseError(original);
+    expect(translated).toBeInstanceOf(PermanentInfrastructureError);
+    expect((translated as PermanentInfrastructureError).sqlState).toBe(code);
+    expect((translated as Error).cause).toBe(original);
+  });
+
+  it('leaves other SQL states (e.g. 42601) for the caller to interpret', () => {
+    const original = sqlError('42601');
     expect(translateDatabaseError(original)).toBe(original);
   });
 

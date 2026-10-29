@@ -111,7 +111,7 @@ export const createTestQueues = async (
   const suffix = uniqueSuffix();
   const created: string[] = [];
   try {
-    const commands = await createPairWithRedrive(client, 'wagering-commands', suffix, resolved, created);
+    const commands = await createPairWithRedrive(client, 'wager-transactions', suffix, resolved, created);
     const events = await createPairWithRedrive(client, 'wagering-events', suffix, resolved, created);
     return {
       suffix,

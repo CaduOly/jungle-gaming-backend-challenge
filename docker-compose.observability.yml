@@ -1,0 +1,38 @@
+# Prometheus and Grafana over the application stack (docker-compose.app.yml): they join the same network, Prometheus
+# scrapes every replica of `app` and Grafana comes up with the datasource and the dashboard provisioned.
+#   docker compose -f docker-compose.observability.yml up -d
+# Grafana: http://localhost:${GRAFANA_HOST_PORT:-3001} (anonymous viewer; admin/admin to edit).
+name: jungle-wagering-observability
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=2d
+    ports:
+      - "${PROMETHEUS_HOST_PORT:-9090}:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks: [infra]
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    depends_on: [prometheus]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/wagering.json
+    ports:
+      - "${GRAFANA_HOST_PORT:-3001}:3000"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks: [infra]
+
+networks:
+  infra:
+    name: jungle-wagering_default
+    external: true

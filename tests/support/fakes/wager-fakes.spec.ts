@@ -229,4 +229,9 @@ describe('FakePayloadHasher', () => {
     const hasher = new FakePayloadHasher();
     expect(hasher.hash({ ...payload, money: { amount: '10.01', currency: 'BRL' } })).not.toBe(hasher.hash(payload));
   });
+
+  it('treats a property holding undefined as absent', () => {
+    const hasher = new FakePayloadHasher();
+    expect(hasher.hash({ ...payload, extra: undefined } as typeof payload)).toBe(hasher.hash(payload));
+  });
 });

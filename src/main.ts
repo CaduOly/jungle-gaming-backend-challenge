@@ -1,14 +1,16 @@
 import 'reflect-metadata';
-import { NestFactory } from '@nestjs/core';
-import { readIntegerEnv } from './infrastructure/config/integer-env';
-import { AppModule } from './infrastructure/framework/nest/shared/app.module';
+import { readSqsConsumerConfig } from './infrastructure/config/sqs-consumer-config';
+import { installGracefulShutdown } from './infrastructure/process/graceful-shutdown';
+import { startApplication } from './infrastructure/runtime/application';
 
-export const bootstrap = async (): Promise<void> => {
-  const app = await NestFactory.create(AppModule);
-  app.enableShutdownHooks();
-  await app.listen(readIntegerEnv(process.env, 'PORT', 3000));
-};
-
+/**
+ * One image, any mix of roles: APP_ROLES=api,consumer,outbox,pending-worker (all by default). SIGTERM/SIGINT stop
+ * every role within SHUTDOWN_TIMEOUT_MS; run `bun run migrate` before the first replica starts.
+ */
 if (import.meta.main) {
-  await bootstrap();
+  const application = await startApplication(process.env);
+  installGracefulShutdown(() => application.stop(), {
+    timeoutMs: readSqsConsumerConfig(process.env).shutdownTimeoutMs + 2_000,
+    onError: (error) => console.error(error),
+  });
 }

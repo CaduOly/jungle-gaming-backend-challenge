@@ -18,7 +18,7 @@ import { FakePayloadHasher } from './fake-payload-hasher';
 import { FakeUnitOfWork } from './fake-unit-of-work';
 import { InMemoryWagerTransactionRepository } from './in-memory-wager-transaction-repository';
 import { InMemoryWalletRepository } from './in-memory-wallet-repository';
-import { SequentialIdGenerator } from './sequential-id-generator';
+import { SequentialUuidGenerator } from './sequential-id-generator';
 
 export interface FakeWageringAppOptions {
   readonly baseMs?: number;
@@ -26,12 +26,12 @@ export interface FakeWageringAppOptions {
   readonly maxAttempts?: number;
 }
 
-/** Every use case wired over one in-memory database, a fake clock, sequential ids and jitter-free backoff. */
+/** Every use case wired over one in-memory database, a fake clock, sequential UUID-shaped ids and jitter-free backoff. */
 export const createFakeWageringApp = (options: FakeWageringAppOptions = {}) => {
   const uow = new FakeUnitOfWork();
   const { db } = uow;
   const clock = new FakeClock();
-  const ids = new SequentialIdGenerator('id');
+  const ids = new SequentialUuidGenerator();
   const hasher = new FakePayloadHasher();
   const backoff = new ExponentialBackoff({
     baseMs: options.baseMs ?? 2_000,

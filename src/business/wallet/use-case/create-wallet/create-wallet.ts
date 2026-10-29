@@ -1,11 +1,11 @@
 import { OutboxMessage } from '../../../messaging/entity/outbox-message';
-import { DomainError } from '../../../shared/error/domain-error';
-import { InvalidRequestError } from '../../../shared/error/invalid-request-error';
 import { UniqueConstraintViolationError } from '../../../shared/error/unique-constraint-violation-error';
 import type { IClock } from '../../../shared/port/clock.port';
 import type { IIdGenerator } from '../../../shared/port/id-generator.port';
 import type { IUseCase } from '../../../shared/use-case';
-import { Money, type MoneyProps } from '../../../shared/value-object/money';
+import { requireUuid } from '../../../shared/validation/request-fields';
+import type { MoneyProps } from '../../../shared/value-object/money';
+import { parseMoneyInput } from '../../../shared/value-object/parse-money-input';
 import { WagerTransaction } from '../../../wagering/entity/wager-transaction';
 import { WagerKind } from '../../../wagering/enum/wager-kind';
 import type { IPayloadHasher } from '../../../wagering/port/payload-hasher.port';
@@ -22,7 +22,6 @@ export interface CreateWalletInput {
 }
 
 export const SYSTEM_PROVIDER_ID = 'system';
-const MAX_TEXT_LENGTH = 255;
 
 export const openingIdempotencyKey = (walletId: string): string => `opening:${walletId}`;
 
@@ -41,12 +40,8 @@ export class CreateWallet implements IUseCase<CreateWalletInput, WalletView> {
   ) {}
 
   async execute(input: CreateWalletInput): Promise<WalletView> {
-    const { playerId } = input;
-    if (typeof playerId !== 'string' || playerId.trim() === '' || playerId.length > MAX_TEXT_LENGTH) {
-      throw new InvalidRequestError('playerId', `must be a non-blank string of at most ${MAX_TEXT_LENGTH} characters`);
-    }
-    if (playerId.trim() !== playerId) throw new InvalidRequestError('playerId', 'must not start or end with whitespace');
-    const initialBalance = this.parseMoney(input.initialBalance);
+    const playerId = requireUuid('playerId', input.playerId);
+    const initialBalance = parseMoneyInput(input.initialBalance, 'initialBalance');
 
     try {
       return await this.unitOfWork.run(async (tx) => {
@@ -76,17 +71,6 @@ export class CreateWallet implements IUseCase<CreateWalletInput, WalletView> {
     } catch (error) {
       if (error instanceof UniqueConstraintViolationError) {
         throw new WalletAlreadyExistsError(playerId, initialBalance.currency);
-      }
-      throw error;
-    }
-  }
-
-  private parseMoney(money: MoneyProps): Money {
-    try {
-      return Money.from(money);
-    } catch (error) {
-      if (error instanceof DomainError || error instanceof TypeError) {
-        throw new InvalidRequestError('initialBalance', String(error));
       }
       throw error;
     }

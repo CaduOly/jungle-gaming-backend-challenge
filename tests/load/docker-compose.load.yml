@@ -1,0 +1,36 @@
+# Override of docker-compose.app.yml for `bun run test:load` (tests/load/run.ts). The runner starts it under a
+# project of its own (jungle-load-<suffix>), so nothing here clashes with an app stack that is already running:
+#   - the image gets its own tag;
+#   - nginx and the k6 container live on the project's `load` network only, so `app` resolves to these replicas
+#     and never to the replicas of another project on the shared infrastructure network;
+#   - nginx publishes an ephemeral loopback port (the runner reads it with `docker compose port`).
+# The database and the queues are created per run by the runner and passed in LOAD_* variables.
+
+x-load-env: &load-env
+  DATABASE_URL: ${LOAD_DATABASE_URL:?set by tests/load/run.ts}
+  SQS_COMMANDS_QUEUE_NAME: ${LOAD_COMMANDS_QUEUE:?set by tests/load/run.ts}
+  SQS_COMMANDS_DLQ_NAME: ${LOAD_COMMANDS_DLQ:?set by tests/load/run.ts}
+  SQS_EVENTS_QUEUE_NAME: ${LOAD_EVENTS_QUEUE:?set by tests/load/run.ts}
+
+services:
+  migrate:
+    image: jungle-wagering-app:load
+    environment: *load-env
+
+  app:
+    image: jungle-wagering-app:load
+    environment:
+      <<: *load-env
+    networks: [infra, load]
+
+  nginx:
+    networks: !override [load]
+    ports: !override ["127.0.0.1::80"]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 128M
+
+networks:
+  load: {}

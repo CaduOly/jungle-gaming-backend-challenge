@@ -126,7 +126,7 @@ export class Wallet {
     return this.apply(LedgerDirection.CREDIT, props, this._balance.add(props.amount));
   }
 
-  /** `insufficientFundsCode` lets the caller tell a plain bet apart from a reversal (README §7, rule 9). */
+  /** `insufficientFundsCode` lets the caller tell a plain bet apart from a reversal (CHALLENGE.md §7, rule 9). */
   debit(props: DebitProps): WalletLedgerEntry {
     this.assertSameCurrency(props.amount);
     if (props.amount.isGreaterThan(this._balance)) {

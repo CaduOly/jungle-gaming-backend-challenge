@@ -16,6 +16,7 @@ import { WagerTransaction } from '../../entity/wager-transaction';
 import { WagerKind } from '../../enum/wager-kind';
 import { IdempotencyConflictError } from '../../error/idempotency-conflict-error';
 import { ProviderIdentityMismatchError } from '../../error/provider-identity-mismatch-error';
+import { aPlayerId } from '../../../../../tests/support/fakes/sequential-id-generator';
 
 const SQS = (messageId: string) => ({ channel: 'SQS', consumerName: 'wager-consumer', messageId }) as const;
 
@@ -30,7 +31,7 @@ describe('ProcessWagerTransaction', () => {
     await assertEveryFakeWalletConsistent(app.db);
   });
 
-  const open = (balance = '1000.00', playerId = 'player-1'): Promise<WalletView> =>
+  const open = (balance = '1000.00', playerId = aPlayerId(1)): Promise<WalletView> =>
     app.createWallet.execute({ playerId, initialBalance: { amount: balance, currency: 'BRL' } });
   const submit = (wallet: WalletView, kind: string, ext: string, options: SubmissionOptions = {}) =>
     app.process.execute(aSubmission(wallet, kind, ext, options));
@@ -39,7 +40,7 @@ describe('ProcessWagerTransaction', () => {
   const wagerCount = (): number => app.db.wagers.all().filter((transaction) => !transaction.isOpening).length;
 
   describe('a new BET', () => {
-    it('debits, persists, emits Processed + WalletBalanceChanged and answers the README §9 payload', async () => {
+    it('debits, persists, emits Processed + WalletBalanceChanged and answers the CHALLENGE.md §9 payload', async () => {
       const wallet = await open();
       const result = await submit(wallet, 'BET', 'tx-123', { amount: '25.00' });
 
@@ -71,7 +72,7 @@ describe('ProcessWagerTransaction', () => {
         gameId: 'fortune-chimp',
         kind: 'BET',
         money: { amount: '25.00', currency: 'BRL' },
-        playerId: 'player-1',
+        playerId: aPlayerId(1),
         providerId: 'provider-a',
         referenceExternalTransactionId: null,
         roundId: 'round-1',
@@ -80,7 +81,7 @@ describe('ProcessWagerTransaction', () => {
     });
   });
 
-  describe('business rules (README §7) end to end', () => {
+  describe('business rules (CHALLENGE.md §7) end to end', () => {
     it('WIN credits, with the BET of the round as an optional reference', async () => {
       const wallet = await open('100.00');
       await submit(wallet, 'BET', 'bet', { amount: '10.00' });
@@ -139,7 +140,7 @@ describe('ProcessWagerTransaction', () => {
       ['a ROLLBACK of a WIN that would overdraw', 'ROLLBACK', { amount: '5.00', reference: 'win' }, 'REVERSAL_INSUFFICIENT_FUNDS'],
       ['a BET without funds', 'BET', { amount: '0.01' }, 'INSUFFICIENT_FUNDS'],
       ['another currency', 'BET', { amount: '1.00', currency: 'USD' }, 'CURRENCY_MISMATCH'],
-      ['another player', 'BET', { amount: '1.00', playerId: 'player-2' }, 'WALLET_PLAYER_MISMATCH'],
+      ['another player', 'BET', { amount: '1.00', playerId: aPlayerId(2) }, 'WALLET_PLAYER_MISMATCH'],
     ] as const)('rejects %s, auditable and without touching the balance', async (_name, kind, options, code) => {
       const wallet = await open('10.00');
       await submit(wallet, 'BET', 'bet', { amount: '10.00' });
@@ -157,7 +158,7 @@ describe('ProcessWagerTransaction', () => {
     });
 
     it.each([
-      ['another player', { playerId: 'player-2' }, 'WALLET_PLAYER_MISMATCH'],
+      ['another player', { playerId: aPlayerId(2) }, 'WALLET_PLAYER_MISMATCH'],
       ['another currency', { currency: 'USD' }, 'CURRENCY_MISMATCH'],
     ] as const)('rejects a dependent of %s at once instead of parking it as pending', async (_name, options, code) => {
       const wallet = await open('100.00');
@@ -181,10 +182,13 @@ describe('ProcessWagerTransaction', () => {
       ['an unknown kind', (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, kind: 'JACKPOT' } }), 'kind'],
       ['a blank idempotency key', (input: ReturnType<typeof aSubmission>) => ({ ...input, idempotencyKey: ' ' }), 'idempotencyKey'],
       ['a blank wallet id', (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, walletId: '' } }), 'walletId'],
+      ['a wallet id that is not a UUID', (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, walletId: 'wallet-x' } }), 'walletId'],
+      ['a player id that is not a UUID', (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, playerId: 'player-x' } }), 'playerId'],
+      ['a NUL byte in a text field', (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, roundId: 'round\u00001' } }), 'roundId'],
       [
         'an amount with one decimal',
         (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, money: { amount: '25.5', currency: 'BRL' } } }),
-        'money',
+        'money.amount',
       ],
       [
         'a JSON number amount',
@@ -192,7 +196,7 @@ describe('ProcessWagerTransaction', () => {
           ...input,
           payload: { ...input.payload, money: { amount: 25 as unknown as string, currency: 'BRL' } },
         }),
-        'money',
+        'money.amount',
       ],
       [
         'a missing money',
@@ -202,12 +206,17 @@ describe('ProcessWagerTransaction', () => {
       [
         'a REFUND without reference',
         (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, kind: 'REFUND' } }),
-        'payload',
+        'referenceExternalTransactionId',
       ],
       [
         'a BET with zero amount',
         (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, money: { amount: '0.00', currency: 'BRL' } } }),
-        'payload',
+        'money.amount',
+      ],
+      [
+        'a lowercase currency',
+        (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, money: { amount: '1.00', currency: 'brl' } } }),
+        'money.currency',
       ],
       [
         'an external id with surrounding whitespace',
@@ -234,6 +243,21 @@ describe('ProcessWagerTransaction', () => {
     });
   });
 
+  it.each([
+    ['BET 0.00', 'BET', { amount: '0.00' }, 'money.amount', 'AMOUNT_MUST_BE_POSITIVE'],
+    ['REFUND without reference', 'REFUND', {}, 'referenceExternalTransactionId', 'REFERENCE_REQUIRED'],
+    ['an amount with one decimal', 'BET', { amount: '1.5' }, 'money.amount', 'INVALID_MONEY_AMOUNT'],
+    ['a lowercase currency', 'BET', { currency: 'brl' }, 'money.currency', 'INVALID_CURRENCY'],
+    ['OPENING', 'OPENING', {}, 'kind', 'KIND_NOT_SUBMITTABLE'],
+    ['an unknown kind', 'JACKPOT', {}, 'kind', 'INVALID_KIND'],
+    ['a round id with surrounding whitespace', 'BET', { roundId: ' round-1' }, 'roundId', 'SURROUNDING_WHITESPACE'],
+  ] as const)('names the rule a request broke: %s', async (_name, kind, options, field, rule) => {
+    const wallet = await open();
+    const error = await app.process.execute(aSubmission(wallet, kind, 'tx', options)).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(InvalidRequestError);
+    expect(error).toMatchObject({ field, rule });
+  });
+
   describe('PROVIDER_IDENTITY_MISMATCH', () => {
     it('refuses a provider acting for another one and writes nothing under the victim namespace', async () => {
       const wallet = await open();
@@ -253,7 +277,7 @@ describe('ProcessWagerTransaction', () => {
 
   describe('WALLET_NOT_FOUND', () => {
     it('is raised without persisting anything, and the inbox stays unmarked for a later redelivery', async () => {
-      const ghost = { id: 'wallet-ghost', playerId: 'player-1', balance: { amount: '0.00', currency: 'BRL' }, version: 1 };
+      const ghost = { id: '00000000-0000-7000-8000-00000000dead', playerId: aPlayerId(1), balance: { amount: '0.00', currency: 'BRL' }, version: 1 };
       await expect(app.process.execute(aSubmission(ghost, 'BET', 'tx'))).rejects.toBeInstanceOf(WalletNotFoundError);
       const sqs = aSubmission(ghost, 'BET', 'tx', { source: SQS('msg-1') });
       await expect(app.process.execute(sqs)).rejects.toMatchObject({ failureCode: 'WALLET_NOT_FOUND' });
@@ -265,6 +289,21 @@ describe('ProcessWagerTransaction', () => {
   });
 
   describe('idempotency', () => {
+    it('normalizes the case of the wallet and player ids, so an upper-case redelivery is a replay, not a conflict', async () => {
+      const playerId = 'abcdef00-0000-4000-8000-00000000beef';
+      const wallet = await open('100.00', playerId);
+      const first = await app.process.execute(aSubmission(wallet, 'BET', 'tx', { source: SQS('msg-1') }));
+      const shouting = aSubmission({ id: wallet.id.toUpperCase(), playerId: playerId.toUpperCase() }, 'BET', 'tx', {
+        source: SQS('msg-2'),
+      });
+
+      const replay = await app.process.execute(shouting);
+
+      expect(first.status).toBe('PROCESSED');
+      expect(replay).toEqual({ ...first, idempotentReplay: true });
+      expect(balanceOf(wallet)).toBe('90.00');
+    });
+
     it('answers an identical request with the original result and idempotentReplay, without new effects', async () => {
       const wallet = await open();
       const first = await submit(wallet, 'BET', 'tx', { amount: '25.00' });
@@ -369,7 +408,7 @@ describe('ProcessWagerTransaction', () => {
       expect((await app.db.ledger.listAll(wallet.id)).filter((entry) => entry.direction === 'DEBIT')).toHaveLength(1);
     });
 
-    it('README §8: two 80.00 BETs over 100.00 → one PROCESSED, one REJECTED, 20.00 left, one debit', async () => {
+    it('CHALLENGE.md §8: two 80.00 BETs over 100.00 → one PROCESSED, one REJECTED, 20.00 left, one debit', async () => {
       const wallet = await open('100.00');
       const results = await Promise.all([
         submit(wallet, 'BET', 'bet-a', { amount: '80.00' }),
@@ -389,7 +428,7 @@ describe('ProcessWagerTransaction', () => {
     });
 
     it('different wallets progress in parallel without interfering', async () => {
-      const wallets = await Promise.all(Array.from({ length: 5 }, (_, i) => open('100.00', `player-${i}`)));
+      const wallets = await Promise.all(Array.from({ length: 5 }, (_, i) => open('100.00', aPlayerId(i))));
       await Promise.all(
         wallets.flatMap((wallet) =>
           Array.from({ length: 10 }, (_, i) => submit(wallet, 'BET', `${wallet.id}-bet-${i}`, { amount: '10.00' })),
@@ -399,7 +438,7 @@ describe('ProcessWagerTransaction', () => {
     });
 
     it('the same key on two wallets in parallel: one PROCESSED, the other IDEMPOTENCY_CONFLICT', async () => {
-      const [w1, w2] = await Promise.all([open('100.00', 'player-1'), open('100.00', 'player-2')]);
+      const [w1, w2] = await Promise.all([open('100.00', aPlayerId(1)), open('100.00', aPlayerId(2))]);
       const results = await Promise.allSettled([
         submit(w1!, 'BET', 'tx', { amount: '10.00' }),
         submit(w2!, 'BET', 'tx', { amount: '10.00' }),
@@ -459,7 +498,7 @@ describe('ProcessWagerTransaction', () => {
       });
 
       it('rolls back, re-reads and answers 409 when the winner has another payload', async () => {
-        const [w1, w2] = await Promise.all([open('100.00', 'player-1'), open('100.00', 'player-2')]);
+        const [w1, w2] = await Promise.all([open('100.00', aPlayerId(1)), open('100.00', aPlayerId(2))]);
         const input = await commitTwin(w1!, { amount: '10.00' }, w2!);
         await expect(app.process.execute(input)).rejects.toMatchObject({
           failureCode: 'IDEMPOTENCY_CONFLICT',
@@ -506,6 +545,34 @@ describe('ProcessWagerTransaction', () => {
         expect(balanceOf(wallet)).toBe('70.00');
       },
     );
+  });
+
+  it('rejects a WIN past the Money maximum with BALANCE_LIMIT_EXCEEDED, auditable and without touching the balance', async () => {
+    const wallet = await open('999999999999999999.99');
+    const win = await submit(wallet, 'WIN', 'win', { amount: '0.01' });
+    expect(win).toMatchObject({
+      status: 'REJECTED',
+      failureCode: 'BALANCE_LIMIT_EXCEEDED',
+      balance: { amount: '999999999999999999.99', currency: 'BRL' },
+    });
+    expect(balanceOf(wallet)).toBe('999999999999999999.99');
+    expect(app.db.wallets.read(wallet.id)?.version).toBe(1);
+    expect(app.db.outbox.all().at(-1)?.payload.data).toMatchObject({
+      transactionId: win.transactionId,
+      failureCode: 'BALANCE_LIMIT_EXCEEDED',
+    });
+  });
+
+  it('carries the HTTP correlation id on every event of the decision, without a causation id', async () => {
+    const wallet = await open();
+    const before = app.db.outbox.all().length;
+    await submit(wallet, 'BET', 'tx', { correlationId: 'req-1' });
+    const events = app.db.outbox.all().slice(before);
+    expect(events.map((message) => message.eventType)).toEqual(['WagerTransactionProcessed', 'WalletBalanceChanged']);
+    for (const message of events) {
+      expect(message.payload.correlationId).toBe('req-1');
+      expect(message.payload.causationId).toBeUndefined();
+    }
   });
 
   describe('SQS inbox', () => {

@@ -73,7 +73,7 @@ describe('test isolation helpers', () => {
       scope.track(createTestQueues(), destroyQueues),
     ]);
     expect(first.commands.url).not.toBe(second.commands.url);
-    expect(first.commands.url).toEndWith(`wagering-commands-${first.suffix}.fifo`);
+    expect(first.commands.url).toEndWith(`wager-transactions-${first.suffix}.fifo`);
     expect(first.events.dlqUrl).toEndWith(`wagering-events-dlq-${first.suffix}.fifo`);
 
     await settleAllOrThrow([first.destroy(), second.destroy()]);
@@ -81,7 +81,7 @@ describe('test isolation helpers', () => {
     const client = createSqsClient();
     try {
       await expect(
-        client.send(new GetQueueUrlCommand({ QueueName: `wagering-commands-${first.suffix}.fifo` })),
+        client.send(new GetQueueUrlCommand({ QueueName: `wager-transactions-${first.suffix}.fifo` })),
       ).rejects.toBeInstanceOf(QueueDoesNotExist);
     } finally {
       client.destroy();

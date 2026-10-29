@@ -114,6 +114,40 @@ describe('WagerTransaction', () => {
       );
     });
 
+    it.each([
+      ['BET 0.00', () => aWager(WagerKind.BET, 'ext', { money: brl('0.00') }), 'money.amount', 'AMOUNT_MUST_BE_POSITIVE'],
+      ['REFUND without reference', () => aWager(WagerKind.REFUND, 'ext'), 'referenceExternalTransactionId', 'REFERENCE_REQUIRED'],
+      [
+        'BET with a reference',
+        () => aWager(WagerKind.BET, 'ext', { referenceExternalTransactionId: 'ref' }),
+        'referenceExternalTransactionId',
+        'REFERENCE_NOT_ALLOWED',
+      ],
+      [
+        'a self reference',
+        () => aWager(WagerKind.REFUND, 'ext', { referenceExternalTransactionId: 'ext' }),
+        'referenceExternalTransactionId',
+        'SELF_REFERENCE',
+      ],
+      [
+        'a blank reference',
+        () => aWager(WagerKind.REFUND, 'ext', { referenceExternalTransactionId: ' ' }),
+        'referenceExternalTransactionId',
+        'BLANK',
+      ],
+      ['a blank roundId', () => WagerTransaction.create({ ...wagerProps(WagerKind.BET, 'ext'), roundId: ' ' }), 'roundId', 'BLANK'],
+      ['an unknown kind', () => aWager('JACKPOT' as WagerKind, 'ext'), 'kind', 'INVALID_KIND'],
+    ])('names the field and the rule for %s', (_case, build, field, rule) => {
+      let error: unknown;
+      try {
+        build();
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(InvalidWagerTransactionError);
+      expect(error).toMatchObject({ field, rule });
+    });
+
     it('rejects an unknown kind', () => {
       expect(() => aWager('JACKPOT' as WagerKind, 'ext')).toThrow(InvalidWagerTransactionError);
     });

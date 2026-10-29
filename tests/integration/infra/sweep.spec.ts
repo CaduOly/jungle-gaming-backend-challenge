@@ -18,10 +18,12 @@ describe('test resource sweep', () => {
   afterEach(() => scope.dispose());
 
   it.each([
-    'wagering-commands.fifo',
-    'wagering-commands-dlq.fifo',
+    'wager-transactions.fifo',
+    'wager-transactions-dlq.fifo',
     'wagering-events.fifo',
     'wagering-events-dlq.fifo',
+    'wagering-commands.fifo',
+    'wagering-commands-dlq.fifo',
     'wagering',
     'wagering_test_',
     'wagering_test_not-a-suffix',
@@ -33,10 +35,12 @@ describe('test resource sweep', () => {
     const suffix = uniqueSuffix();
     const names = [
       `wagering_test_${suffix}`,
-      `wagering-commands-${suffix}.fifo`,
-      `wagering-commands-dlq-${suffix}.fifo`,
+      `wager-transactions-${suffix}.fifo`,
+      `wager-transactions-dlq-${suffix}.fifo`,
       `wagering-events-${suffix}.fifo`,
       `wagering-events-dlq-${suffix}.fifo`,
+      `wagering-commands-${suffix}.fifo`,
+      `wagering-commands-dlq-${suffix}.fifo`,
     ];
     expect(names.map(testResourceSuffix)).toEqual(names.map(() => suffix));
   });
@@ -67,7 +71,7 @@ describe('test resource sweep', () => {
     });
 
     it('never sweeps a compose resource, whatever the age', () => {
-      for (const compose of ['wagering', 'wagering-events.fifo', 'wagering-commands-dlq.fifo']) {
+      for (const compose of ['wagering', 'wagering-events.fifo', 'wager-transactions-dlq.fifo']) {
         expect(isSweepable(compose, { minAgeMs: 0, now: Number.MAX_SAFE_INTEGER })).toBe(false);
       }
     });
@@ -87,8 +91,8 @@ describe('test resource sweep', () => {
     expect(report.databases).toEqual([database.name]);
     expect([...report.queues].sort()).toEqual(
       [
-        `wagering-commands-${queues.suffix}.fifo`,
-        `wagering-commands-dlq-${queues.suffix}.fifo`,
+        `wager-transactions-${queues.suffix}.fifo`,
+        `wager-transactions-dlq-${queues.suffix}.fifo`,
         `wagering-events-${queues.suffix}.fifo`,
         `wagering-events-dlq-${queues.suffix}.fifo`,
       ].sort(),

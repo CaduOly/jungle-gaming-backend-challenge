@@ -21,6 +21,7 @@ const INTEGRATION_HARNESS = `^tests/support/(${[
   'settle',
   'sweep-test-resources',
   'test-database',
+  'test-event-consumer',
   'test-queues',
   'uuid',
 ].join('|')})\\.ts$`;

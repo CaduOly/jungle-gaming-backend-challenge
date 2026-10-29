@@ -1,7 +1,7 @@
 import { Migration } from '@mikro-orm/migrations';
 
 /*
- * Wallets, wager transactions and the immutable ledger. Every invariant from README §5.9/§6 lives here,
+ * Wallets, wager transactions and the immutable ledger. Every invariant from CHALLENGE.md §5.9/§6 lives here,
  * so it holds even if application code is wrong or several instances race.
  *
  * Trigger violations raise SQLSTATE 23001 (restrict_violation) so the application can classify them as

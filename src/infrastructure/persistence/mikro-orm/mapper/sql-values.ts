@@ -1,3 +1,5 @@
+import { Money } from '../../../../business/shared/value-object/money';
+
 const PG_TIMESTAMP =
   /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)([+-]\d{2})(?::?(\d{2}))?(?::?(\d{2}))?$/;
 
@@ -31,3 +33,29 @@ export const toOptionalString = (value: unknown): string | undefined =>
   value === null || value === undefined ? undefined : String(value);
 
 export const toJsonObject = <T>(value: unknown): T => (typeof value === 'string' ? JSON.parse(value) : value) as T;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A uuid column compared with a non-uuid text raises 22P02; such an id simply matches no row. */
+export const isUuid = (value: string): boolean => UUID.test(value);
+
+/** numeric(20,2) arrives as text ("100.00") and goes straight into Money: it never becomes a JS number. */
+export const toMoney = (value: unknown, currency: string): Money => {
+  if (typeof value !== 'string') throw new Error(`Expected numeric as text, got ${typeof value}`);
+  return Money.from({ amount: value, currency });
+};
+
+export const toOptionalMoney = (value: unknown, currency: string): Money | undefined =>
+  value === null || value === undefined ? undefined : toMoney(value, currency);
+
+/** bigint/bigserial arrive as text; a bigint is accepted too in case a type parser is configured. */
+export const toBigInt = (value: unknown): bigint => {
+  if (typeof value === 'bigint') return value;
+  if (typeof value === 'string' && /^-?\d+$/.test(value)) return BigInt(value);
+  throw new Error(`Expected a bigint, got ${typeof value}`);
+};
+
+export const toText = (value: unknown, column: string): string => {
+  if (typeof value !== 'string') throw new Error(`Expected text in ${column}, got ${value === null ? 'null' : typeof value}`);
+  return value;
+};

@@ -8,6 +8,7 @@ import {
   type WalletView,
 } from '../../../../../tests/support/fakes/fake-wagering-app';
 import { FailureCode } from '../../../shared/error/failure-code';
+import { aPlayerId } from '../../../../../tests/support/fakes/sequential-id-generator';
 
 describe('RetryPendingReferences', () => {
   let app: FakeWageringApp;
@@ -20,7 +21,7 @@ describe('RetryPendingReferences', () => {
     await assertEveryFakeWalletConsistent(app.db);
   });
 
-  const open = (balance = '100.00', playerId = 'player-1'): Promise<WalletView> =>
+  const open = (balance = '100.00', playerId = aPlayerId(1)): Promise<WalletView> =>
     app.createWallet.execute({ playerId, initialBalance: { amount: balance, currency: 'BRL' } });
   const submit = (wallet: WalletView, kind: string, ext: string, options: SubmissionOptions = {}) =>
     app.process.execute(aSubmission(wallet, kind, ext, options));
@@ -54,6 +55,7 @@ describe('RetryPendingReferences', () => {
       failed: 0,
       skipped: 0,
       erroredIds: [],
+      unattemptedIds: [],
     });
 
     const settled = app.db.wagers.read(id)!;
@@ -118,17 +120,19 @@ describe('RetryPendingReferences', () => {
     expect(stateOf(winId)).toMatchObject({ status: 'PENDING_REFERENCE', attempts: 1 });
   });
 
-  it('moves the transaction to FAILED when settling breaks a domain invariant (credit over the Money maximum)', async () => {
+  it('rejects with BALANCE_LIMIT_EXCEEDED, like the main flow, when the credit would pass the Money maximum', async () => {
     const wallet = await open('999999999999999999.99');
     const id = (await submit(wallet, 'WIN', 'win', { amount: '1.00', reference: 'bet' })).transactionId;
     await submit(wallet, 'BET', 'bet', { amount: '0.50' });
-    const before = app.db.outbox.all().length;
 
-    expect(await runAt(1_000)).toMatchObject({ claimed: 1, failed: 1, processed: 0, erroredIds: [] });
+    expect(await runAt(1_000)).toMatchObject({ claimed: 1, rejected: 1, failed: 0, processed: 0, erroredIds: [] });
 
-    expect(stateOf(id)).toMatchObject({ status: 'FAILED', failureCode: 'REFERENCE_MISMATCH' });
+    expect(stateOf(id)).toMatchObject({ status: 'REJECTED', failureCode: FailureCode.BALANCE_LIMIT_EXCEEDED });
+    expect(app.db.wagers.read(id)?.observedBalance?.amount).toBe('999999999999999999.49');
     expect(balanceOf(wallet)).toBe('999999999999999999.49');
-    expect(app.db.outbox.all()).toHaveLength(before);
+    const event = app.db.outbox.all().at(-1);
+    expect(event?.eventType).toBe('WagerTransactionRejected');
+    expect(event?.payload.data).toMatchObject({ transactionId: id, failureCode: FailureCode.BALANCE_LIMIT_EXCEEDED });
     expect(await runAt(60_000)).toMatchObject({ claimed: 0 });
   });
 
@@ -194,6 +198,29 @@ describe('RetryPendingReferences', () => {
     expect(await runAt(1_000)).toMatchObject({ claimed: 1, skipped: 1 });
   });
 
+  it('skips an attempt another instance already counted after this claim (an expired lease is reclaimed)', async () => {
+    const wallet = await open();
+    const id = await pendingRollback(wallet);
+    app.uow.before(
+      'wallets.lockById',
+      async () => {
+        const other = new (app.uow.constructor as typeof import('../../../../../tests/support/fakes/fake-unit-of-work').FakeUnitOfWork)(app.db);
+        await other.run(async (tx) => {
+          await tx.wallets.lockById(wallet.id);
+          const transaction = (await tx.wagers.lockById(id))!;
+          transaction.scheduleNextAttempt(new Date(app.clock.now().getTime() + 4_000));
+          await tx.wagers.update(transaction);
+        });
+        // By the time this instance gets the lock, the other one's new attempt is due too: only the claim time
+        // tells that this attempt was already counted.
+        app.clock.advance(5_000);
+      },
+      1,
+    );
+    expect(await runAt(1_000)).toMatchObject({ claimed: 1, skipped: 1, rescheduled: 0 });
+    expect(stateOf(id)).toMatchObject({ status: 'PENDING_REFERENCE', attempts: 2 });
+  });
+
   it('moves the transaction to FAILED when its wallet is gone (permanent inconsistency)', async () => {
     const wallet = await open();
     const id = await pendingRollback(wallet);
@@ -218,8 +245,25 @@ describe('RetryPendingReferences', () => {
     expect(balanceOf(wallet)).toBe('100.00');
   });
 
+  it('stops between items when asked: the ones it did not reach keep their attempts and wait for the lease', async () => {
+    const wallets = await Promise.all(Array.from({ length: 3 }, (_, i) => open('100.00', aPlayerId(i))));
+    const ids: string[] = [];
+    for (const wallet of wallets) ids.push((await submit(wallet, 'ROLLBACK', `${wallet.id}-rb`, { amount: '30.00', reference: 'gone' })).transactionId);
+    let checks = 0;
+    app.clock.advance(1_000);
+
+    const output = await app.retry.execute({ shouldStop: () => ++checks > 1 });
+
+    expect(output).toMatchObject({ claimed: 3, rescheduled: 1, erroredIds: [] });
+    expect(output.unattemptedIds).toHaveLength(2);
+    expect(ids).toEqual(expect.arrayContaining([...output.unattemptedIds]));
+    for (const id of output.unattemptedIds) expect(stateOf(id)).toMatchObject({ status: 'PENDING_REFERENCE', attempts: 1 });
+    expect(await app.retry.execute()).toMatchObject({ claimed: 0 });
+    expect(await runAt(30_000)).toMatchObject({ claimed: 3, unattemptedIds: [] });
+  });
+
   it('two workers in parallel never process the same item twice', async () => {
-    const wallets = await Promise.all(Array.from({ length: 4 }, (_, i) => open('100.00', `player-${i}`)));
+    const wallets = await Promise.all(Array.from({ length: 4 }, (_, i) => open('100.00', aPlayerId(i))));
     for (const wallet of wallets) {
       await submit(wallet, 'REFUND', `${wallet.id}-refund`, { amount: '30.00', reference: `${wallet.id}-bet` });
       await submit(wallet, 'BET', `${wallet.id}-bet`, { amount: '30.00' });

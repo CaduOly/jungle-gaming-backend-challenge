@@ -19,10 +19,14 @@ describe('PublishOutboxBatch', () => {
   const useCase = (batchSize = 10) =>
     new PublishOutboxBatch(outbox, publisher, clock, backoff, { batchSize, leaseMs: LEASE_MS });
 
-  const enqueue = async (count: number, startMs = count * -1) => {
+  const enqueue = async (count: number, startMs = count * -1, aggregateOf = (index: number) => `wallet-${index}`) => {
     const messages = Array.from({ length: count }, (_, index) =>
       OutboxMessage.fromEvent(
-        aFakeEvent({ eventId: `evt-${index}`, occurredAt: new Date(clock.now().getTime() + startMs + index) }),
+        aFakeEvent({
+          eventId: `evt-${index}`,
+          aggregateId: aggregateOf(index),
+          occurredAt: new Date(clock.now().getTime() + startMs + index),
+        }),
       ),
     );
     await outbox.add(messages);
@@ -78,6 +82,18 @@ describe('PublishOutboxBatch', () => {
     expect(retried.lockedUntil).toBeUndefined();
   });
 
+  it('never lets an aggregate overtake a failed head, even one message per round', async () => {
+    await enqueue(3, -3, () => 'wallet-a');
+    publisher.failNext();
+
+    expect(await useCase(1).execute()).toMatchObject({ claimed: 1, published: 0, failed: 1 });
+    expect(await useCase(1).execute()).toMatchObject({ claimed: 0 });
+
+    clock.set((await outbox.findById('evt-0'))!.nextAttemptAt);
+    for (let round = 0; round < 3; round += 1) expect(await useCase(1).execute()).toMatchObject({ published: 1 });
+    expect(publisher.publishedIds()).toEqual(['evt-0', 'evt-1', 'evt-2']);
+  });
+
   it('publishes a failed message again once its backoff elapses', async () => {
     await enqueue(1);
     publisher.failNext();
@@ -109,7 +125,7 @@ describe('PublishOutboxBatch', () => {
 
   it('reports exhausted messages but keeps retrying them at the capped delay', async () => {
     const [message] = await enqueue(1);
-    const almostExhausted = OutboxMessage.rehydrate({ ...message!.toState(), id: 'evt-tired', attempts: 7 });
+    const almostExhausted = OutboxMessage.rehydrate({ ...message!.toState(), id: 'evt-tired', aggregateId: 'wallet-tired', attempts: 7 });
     await outbox.add([almostExhausted]);
     publisher.failWhen(() => true);
 
@@ -124,7 +140,7 @@ describe('PublishOutboxBatch', () => {
 
   it('reports exhaustion only once, when the ceiling is crossed', async () => {
     const [message] = await enqueue(1);
-    await outbox.add([OutboxMessage.rehydrate({ ...message!.toState(), id: 'evt-dead', attempts: 8 })]);
+    await outbox.add([OutboxMessage.rehydrate({ ...message!.toState(), id: 'evt-dead', aggregateId: 'wallet-dead', attempts: 8 })]);
     publisher.failWhen(() => true);
 
     expect(await useCase().execute()).toMatchObject({ failed: 2, exhausted: 0, exhaustedMessageIds: [] });

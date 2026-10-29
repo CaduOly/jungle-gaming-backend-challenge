@@ -17,9 +17,6 @@ const INSERT_COLUMNS =
   'event_id, aggregate_type, aggregate_id, event_type, payload, occurred_at, attempts, next_attempt_at, published_at';
 const INSERT_PLACEHOLDERS = '(?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?)';
 
-const byOccurrence = (a: OutboxMessage, b: OutboxMessage): number =>
-  a.occurredAt.getTime() - b.occurredAt.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-
 /** `now` always comes from the caller (IClock), never from the database clock. */
 export class OutboxRepository implements IOutboxRepository {
   constructor(
@@ -37,23 +34,55 @@ export class OutboxRepository implements IOutboxRepository {
     );
   }
 
+  /**
+   * Head-of-line in two steps, so a hot aggregate with a long backlog costs one index probe, not a scan:
+   * 1. `aggregates` walks the distinct aggregates with unpublished messages (a loose index scan over
+   *    outbox_messages_unpublished_by_aggregate) and `heads` takes the lowest seq of each;
+   * 2. only then the heads are filtered by next_attempt_at and the lease, ordered by seq, limited and locked
+   *    (SKIP LOCKED). A head that is leased or not due yet is filtered out and its aggregate yields nothing.
+   */
   async claimBatch(limit: number, leaseMs: number, now: Date): Promise<OutboxMessage[]> {
     const rows = await this.em.execute<OutboxMessageRow[]>(
-      `UPDATE outbox_messages
-          SET locked_until = ?, lease_token = gen_random_uuid()
-        WHERE event_id IN (
-                SELECT event_id
-                  FROM outbox_messages
-                 WHERE published_at IS NULL
-                   AND next_attempt_at <= ?
-                   AND (locked_until IS NULL OR locked_until <= ?)
-                 ORDER BY occurred_at, event_id
-                 LIMIT ?
-                   FOR UPDATE SKIP LOCKED)
-      RETURNING ${OUTBOX_COLUMNS}`,
+      `WITH RECURSIVE aggregates AS (
+         (SELECT aggregate_id FROM outbox_messages WHERE published_at IS NULL ORDER BY aggregate_id LIMIT 1)
+         UNION ALL
+         SELECT (SELECT n.aggregate_id
+                   FROM outbox_messages n
+                  WHERE n.published_at IS NULL AND n.aggregate_id > a.aggregate_id
+                  ORDER BY n.aggregate_id
+                  LIMIT 1)
+           FROM aggregates a
+          WHERE a.aggregate_id IS NOT NULL
+       ),
+       heads AS (
+         SELECT h.event_id
+           FROM aggregates a
+           CROSS JOIN LATERAL (
+                 SELECT p.event_id
+                   FROM outbox_messages p
+                  WHERE p.aggregate_id = a.aggregate_id AND p.published_at IS NULL
+                  ORDER BY p.seq
+                  LIMIT 1) h
+          WHERE a.aggregate_id IS NOT NULL
+       ),
+       claimed AS (
+         UPDATE outbox_messages
+            SET locked_until = ?, lease_token = gen_random_uuid()
+          WHERE event_id IN (
+                  SELECT o.event_id
+                    FROM outbox_messages o
+                   WHERE o.event_id IN (SELECT event_id FROM heads)
+                     AND o.published_at IS NULL
+                     AND o.next_attempt_at <= ?
+                     AND (o.locked_until IS NULL OR o.locked_until <= ?)
+                   ORDER BY o.seq
+                   LIMIT ?
+                     FOR UPDATE SKIP LOCKED)
+         RETURNING ${OUTBOX_COLUMNS}, seq)
+       SELECT ${OUTBOX_COLUMNS} FROM claimed ORDER BY seq`,
       [new Date(now.getTime() + leaseMs), now, now, limit],
     );
-    return rows.map(outboxMessageFromRow).sort(byOccurrence);
+    return rows.map(outboxMessageFromRow);
   }
 
   async markPublished(message: OutboxMessage): Promise<boolean> {
