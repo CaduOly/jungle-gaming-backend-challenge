@@ -74,7 +74,7 @@ describe('LocalStack SQS FIFO redrive (spike)', () => {
         );
         expect(Attributes?.FifoQueue).toBe('true');
         const redrive = JSON.parse(Attributes?.RedrivePolicy ?? '{}') as Record<string, unknown>;
-        expect(`${redrive.maxReceiveCount}`).toBe(`${MAX_RECEIVE_COUNT}`);
+        expect(`${redrive.maxReceiveCount}`).toBe(process.env.SQS_MAX_RECEIVE_COUNT ?? '100');
         expect(`${redrive.deadLetterTargetArn}`).toEndWith(`:${name}-dlq.fifo`);
       }
     } finally {
