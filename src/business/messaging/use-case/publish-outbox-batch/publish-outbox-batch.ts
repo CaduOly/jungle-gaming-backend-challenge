@@ -14,11 +14,6 @@ export interface PublishOutboxBatchOutput {
   readonly claimed: number;
   readonly published: number;
   readonly failed: number;
-  /**
-   * Messages handed back without an attempt because an earlier message of the same aggregate failed in this
-   * run: they wait for its retry time, so they never go on the wire ahead of it.
-   */
-  readonly deferred: number;
   /** Failures whose retry was fenced off because the lease expired and another publisher took the message. */
   readonly leaseLost: number;
   /**
@@ -29,6 +24,10 @@ export interface PublishOutboxBatchOutput {
   readonly exhaustedMessageIds: readonly string[];
 }
 
+/**
+ * One publishing round. The claim hands out at most the head of each aggregate (see IOutboxRepository
+ * .claimBatch), so publishing the claimed messages in any order never reorders an aggregate on the wire.
+ */
 export class PublishOutboxBatch implements IUseCase<void, PublishOutboxBatchOutput> {
   constructor(
     private readonly outbox: IOutboxRepository,
@@ -43,17 +42,9 @@ export class PublishOutboxBatch implements IUseCase<void, PublishOutboxBatchOutp
     let published = 0;
     let failed = 0;
     let leaseLost = 0;
-    let deferred = 0;
     const exhaustedMessageIds: string[] = [];
-    const blockedUntil = new Map<string, Date>();
 
     for (const message of claimed) {
-      const blocked = blockedUntil.get(message.aggregateId);
-      if (blocked !== undefined) {
-        if (await this.outbox.defer(message, blocked)) deferred += 1;
-        else leaseLost += 1;
-        continue;
-      }
       if (await this.tryPublish(message)) {
         message.markPublished(this.clock.now());
         await this.outbox.markPublished(message);
@@ -62,7 +53,6 @@ export class PublishOutboxBatch implements IUseCase<void, PublishOutboxBatchOutp
       }
       const wasExhausted = this.backoff.isExhausted(message.attempts);
       message.scheduleRetry(this.clock.now(), this.backoff.nextDelayMs(message.attempts + 1));
-      blockedUntil.set(message.aggregateId, message.nextAttemptAt);
       failed += 1;
       if (!(await this.outbox.scheduleRetry(message))) {
         leaseLost += 1;
@@ -75,7 +65,6 @@ export class PublishOutboxBatch implements IUseCase<void, PublishOutboxBatchOutp
       claimed: claimed.length,
       published,
       failed,
-      deferred,
       leaseLost,
       exhausted: exhaustedMessageIds.length,
       exhaustedMessageIds,

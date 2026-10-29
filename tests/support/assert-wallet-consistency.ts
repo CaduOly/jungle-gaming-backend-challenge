@@ -17,7 +17,16 @@ export class WalletConsistencyError extends Error {
  *   wallets(id, balance numeric, version int)
  *   wallet_ledger_entries(wallet_id, seq bigserial, direction 'CREDIT'|'DEBIT', amount numeric,
  *                         balance_before numeric, balance_after numeric, wallet_version int)
- * All arithmetic runs in SQL on numeric, so no monetary value ever becomes a JS number.
+ *
+ * Versioning contract:
+ *   - Wallet.open with balance > 0 writes an OPENING entry (a CREDIT) with wallet_version = 1;
+ *   - Wallet.open with balance 0 writes no entry and leaves version = 1;
+ *   - every debit/credit bumps version by exactly 1 and writes exactly one entry with the new version.
+ * So entries carry consecutive versions starting at 1 (opened with funds) or 2 (opened empty),
+ * and the last one equals wallets.version. Neither wallets.balance nor any balance_after is negative.
+ *
+ * All arithmetic runs in SQL on numeric (no monetary value becomes a JS number), and every
+ * comparison uses IS DISTINCT FROM so a NULL never hides a violation.
  */
 const CONSISTENCY_SQL = `
 WITH wallet AS (
@@ -38,32 +47,48 @@ totals AS (
   FROM entries
 )
 SELECT format('balance %s differs from ledger sum %s', w.balance, t.net) AS violation
-  FROM wallet w, totals t WHERE w.balance <> t.net
+  FROM wallet w, totals t WHERE w.balance IS DISTINCT FROM t.net
+UNION ALL
+SELECT format('wallet.balance %s is negative', w.balance)
+  FROM wallet w WHERE w.balance IS NULL OR w.balance < 0
+UNION ALL
+SELECT format('seq %s balance_after %s is negative', e.seq, e.balance_after)
+  FROM entries e WHERE e.balance_after < 0
+UNION ALL
+SELECT format('seq %s wallet_version 1 must be a CREDIT (OPENING), got %s', e.seq, e.direction)
+  FROM entries e WHERE e.wallet_version = 1 AND e.direction IS DISTINCT FROM 'CREDIT'
 UNION ALL
 SELECT format('wallet.version %s with no ledger entries (expected 1)', w.version)
-  FROM wallet w, totals t WHERE t.entry_count = 0 AND w.version <> 1
+  FROM wallet w, totals t WHERE t.entry_count = 0 AND w.version IS DISTINCT FROM 1
 UNION ALL
 SELECT format('seq %s has unknown direction %s', e.seq, e.direction)
-  FROM entries e WHERE e.direction NOT IN ('CREDIT', 'DEBIT')
+  FROM entries e WHERE e.direction IS NULL OR e.direction NOT IN ('CREDIT', 'DEBIT')
+UNION ALL
+SELECT format('seq %s amount %s must be positive', e.seq, e.amount)
+  FROM entries e WHERE e.amount IS NULL OR e.amount <= 0
 UNION ALL
 SELECT format('seq %s arithmetic broken: %s %s %s <> %s', e.seq, e.balance_before, e.direction, e.amount, e.balance_after)
   FROM entries e
-  WHERE e.balance_after <> e.balance_before + CASE e.direction WHEN 'CREDIT' THEN e.amount ELSE -e.amount END
+  WHERE e.balance_after IS DISTINCT FROM
+        e.balance_before + CASE e.direction WHEN 'CREDIT' THEN e.amount WHEN 'DEBIT' THEN -e.amount END
 UNION ALL
 SELECT format('seq %s balance_before %s should be 0 for the first entry', e.seq, e.balance_before)
-  FROM entries e WHERE e.position = 1 AND e.balance_before <> 0
+  FROM entries e WHERE e.position = 1 AND e.balance_before IS DISTINCT FROM 0
+UNION ALL
+SELECT format('seq %s first wallet_version %s must be 1 (opened with funds) or 2 (opened empty)', e.seq, e.wallet_version)
+  FROM entries e WHERE e.position = 1 AND (e.wallet_version IS NULL OR e.wallet_version NOT IN (1, 2))
 UNION ALL
 SELECT format('seq %s balance_before %s does not chain from previous balance_after %s', e.seq, e.balance_before, e.previous_after)
-  FROM entries e WHERE e.position > 1 AND e.balance_before <> e.previous_after
+  FROM entries e WHERE e.position > 1 AND e.balance_before IS DISTINCT FROM e.previous_after
 UNION ALL
-SELECT format('seq %s wallet_version %s is not greater than previous %s', e.seq, e.wallet_version, e.previous_version)
-  FROM entries e WHERE e.position > 1 AND e.wallet_version <= e.previous_version
+SELECT format('seq %s wallet_version %s does not follow previous %s', e.seq, e.wallet_version, e.previous_version)
+  FROM entries e WHERE e.position > 1 AND e.wallet_version IS DISTINCT FROM e.previous_version + 1
 UNION ALL
 SELECT format('last wallet_version %s differs from wallet.version %s', e.wallet_version, w.version)
-  FROM entries e, wallet w WHERE e.position = e.total AND e.wallet_version <> w.version
+  FROM entries e, wallet w WHERE e.position = e.total AND e.wallet_version IS DISTINCT FROM w.version
 UNION ALL
 SELECT format('last balance_after %s differs from wallet.balance %s', e.balance_after, w.balance)
-  FROM entries e, wallet w WHERE e.position = e.total AND e.balance_after <> w.balance
+  FROM entries e, wallet w WHERE e.position = e.total AND e.balance_after IS DISTINCT FROM w.balance
 `;
 
 export const findWalletInconsistencies = async (client: SqlClient, walletId: string): Promise<string[]> => {
