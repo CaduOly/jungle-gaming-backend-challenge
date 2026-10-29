@@ -22,12 +22,12 @@ A 4.4.0 foi validada na prática: sobe e atende SQS sem token. A tag é fixa no
 
 - O container sobe com `SERVICES=sqs`, sem nenhuma variável de auth, e o log não menciona licença nem token.
 - O script `infra/localstack/init-sqs.sh` (hook `ready.d`) cria:
-  - `wagering-commands.fifo` → `wagering-commands-dlq.fifo`
+  - `wager-transactions.fifo` → `wager-transactions-dlq.fifo`
   - `wagering-events.fifo` → `wagering-events-dlq.fifo`
   - todas FIFO, `ContentBasedDeduplication=false`, redrive com `maxReceiveCount=5`.
 - O healthcheck do compose (`infra/localstack/healthcheck.sh`) só fica verde quando o init deu certo de verdade:
   - `/_localstack/init/ready` com `completed: true`, `init-sqs.sh` em `SUCCESSFUL` e nenhum script em `ERROR`;
-  - `wagering-commands.fifo` e `wagering-events.fifo` existem, com `RedrivePolicy` apontando para a DLQ certa.
+  - `wager-transactions.fifo` e `wagering-events.fifo` existem, com `RedrivePolicy` apontando para a DLQ certa.
 
   Só `completed: true` não basta. Num LocalStack descartável, com um init que termina em `exit 1`, o
   endpoint devolve `{"completed": true, "scripts": [{"name": "init-sqs.sh", "state": "ERROR"}]}`. O
@@ -50,8 +50,8 @@ Manual, contra as filas do compose:
 
 ```bash
 docker compose exec -T localstack bash -c '
-Q=$(awslocal sqs get-queue-url --queue-name wagering-commands.fifo --query QueueUrl --output text)
-D=$(awslocal sqs get-queue-url --queue-name wagering-commands-dlq.fifo --query QueueUrl --output text)
+Q=$(awslocal sqs get-queue-url --queue-name wager-transactions.fifo --query QueueUrl --output text)
+D=$(awslocal sqs get-queue-url --queue-name wager-transactions-dlq.fifo --query QueueUrl --output text)
 awslocal sqs send-message --queue-url $Q --message-body spike --message-group-id g1 --message-deduplication-id spike-$RANDOM
 for i in 1 2 3 4 5 6; do
   awslocal sqs receive-message --queue-url $Q --visibility-timeout 0 --attribute-names ApproximateReceiveCount \
