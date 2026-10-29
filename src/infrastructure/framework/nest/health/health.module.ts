@@ -1,5 +1,16 @@
-import { Module } from '@nestjs/common';
+import { type DynamicModule, Module } from '@nestjs/common';
+import type { IReadinessCheck } from '../../../health/readiness-check.port';
+import { ReadinessProbe } from '../../../health/readiness-probe';
+import { READINESS_PROBE } from '../shared/di/tokens';
 import { HealthController } from './health.controller';
 
-@Module({ controllers: [HealthController] })
-export class HealthModule {}
+@Module({})
+export class HealthModule {
+  static forRoot(checks: readonly IReadinessCheck[], timeoutMs: number): DynamicModule {
+    return {
+      module: HealthModule,
+      controllers: [HealthController],
+      providers: [{ provide: READINESS_PROBE, useValue: new ReadinessProbe(checks, timeoutMs) }],
+    };
+  }
+}

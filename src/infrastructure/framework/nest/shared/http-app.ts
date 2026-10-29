@@ -1,6 +1,6 @@
 import type { INestApplication, Provider } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
+import { AppModule, type AppModuleOptions } from './app.module';
 import { setupSwagger } from './swagger/setup-swagger';
 
 export interface HttpAppOptions {
@@ -8,6 +8,7 @@ export interface HttpAppOptions {
   readonly overrides?: readonly Provider[];
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly logger?: false;
+  readonly readinessChecks?: AppModuleOptions['readinessChecks'];
 }
 
 /** The one place that builds the HTTP app, so main.ts and the e2e suites run exactly the same wiring. */
@@ -17,6 +18,7 @@ export const createHttpApp = async (options: HttpAppOptions): Promise<INestAppli
       persistence: options.persistence,
       ...(options.overrides === undefined ? {} : { overrides: options.overrides }),
       ...(options.env === undefined ? {} : { env: options.env }),
+      ...(options.readinessChecks === undefined ? {} : { readinessChecks: options.readinessChecks }),
     }),
     options.logger === false ? { logger: false } : {},
   );

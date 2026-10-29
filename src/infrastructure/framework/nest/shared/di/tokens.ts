@@ -5,6 +5,7 @@ export const PAYLOAD_HASHER = Symbol('PAYLOAD_HASHER');
 export const PROVIDER_IDENTITY = Symbol('PROVIDER_IDENTITY');
 export const PENDING_REFERENCE_BACKOFF = Symbol('PENDING_REFERENCE_BACKOFF');
 export const HTTP_CONFIG = Symbol('HTTP_CONFIG');
+export const READINESS_PROBE = Symbol('READINESS_PROBE');
 /** The swappable persistence: in-memory today, PostgreSQL once T07b lands. */
 export const WAGERING_PERSISTENCE = Symbol('WAGERING_PERSISTENCE');
 

@@ -396,6 +396,46 @@ describe('HTTP API over the in-memory persistence', () => {
     });
   });
 
+  describe('readiness', () => {
+    const raw = async (base: string) => {
+      const response = await fetch(`${base}/health/ready`);
+      return { status: response.status, body: (await response.json()) as unknown };
+    };
+
+    it('answers 200, raw and without credentials, over the in-memory fakes (nothing to check)', async () => {
+      expect(await raw(http.baseUrl)).toEqual({ status: 200, body: { status: 'ready', checks: {} } });
+    });
+
+    it('answers 200 while every check is up and 503, still raw, when one is down or hangs', async () => {
+      let postgres: 'up' | 'down' | 'hang' = 'up';
+      const probed = await startInMemoryHttpApp({
+        readinessChecks: [
+          {
+            name: 'postgres',
+            check: () =>
+              postgres === 'up'
+                ? Promise.resolve()
+                : postgres === 'down'
+                  ? Promise.reject(new Error('connection refused'))
+                  : new Promise(() => undefined),
+          },
+          { name: 'sqs', check: () => Promise.resolve() },
+        ],
+      });
+      try {
+        expect(await raw(probed.baseUrl)).toEqual({ status: 200, body: { status: 'ready', checks: { postgres: 'up', sqs: 'up' } } });
+        postgres = 'down';
+        const down = { status: 503, body: { status: 'unavailable', checks: { postgres: 'down', sqs: 'up' } } };
+        expect(await raw(probed.baseUrl)).toEqual(down);
+        postgres = 'hang';
+        expect(await raw(probed.baseUrl)).toEqual(down);
+        expect((await call('GET', '/health/live', { provider: null })).status).toBe(200);
+      } finally {
+        await probed.close();
+      }
+    });
+  });
+
   describe('infrastructure failures', () => {
     it('answers 503 with Retry-After while the database is down, on every unit of work endpoint', async () => {
       const wallet = await openWallet('100.00');
