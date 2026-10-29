@@ -44,11 +44,11 @@ export class Money {
   }
 
   /** The format rule of Money.from for the amount alone, so an edge can report it apart from the currency. */
-  static isValidAmount(amount: unknown): boolean {
+  static isValidAmount(amount: unknown): amount is string {
     return typeof amount === 'string' && AMOUNT_PATTERN.test(amount);
   }
 
-  static isValidCurrency(currency: unknown): boolean {
+  static isValidCurrency(currency: unknown): currency is string {
     return typeof currency === 'string' && CURRENCY_PATTERN.test(currency);
   }
 
@@ -117,6 +117,6 @@ export class Money {
 
   private static assertCurrency(currency: unknown): string {
     if (!Money.isValidCurrency(currency)) throw new InvalidCurrencyError(currency);
-    return currency as string;
+    return currency;
   }
 }
