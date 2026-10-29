@@ -188,7 +188,7 @@ describe('ProcessWagerTransaction', () => {
       [
         'an amount with one decimal',
         (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, money: { amount: '25.5', currency: 'BRL' } } }),
-        'money',
+        'money.amount',
       ],
       [
         'a JSON number amount',
@@ -196,7 +196,7 @@ describe('ProcessWagerTransaction', () => {
           ...input,
           payload: { ...input.payload, money: { amount: 25 as unknown as string, currency: 'BRL' } },
         }),
-        'money',
+        'money.amount',
       ],
       [
         'a missing money',
@@ -206,12 +206,17 @@ describe('ProcessWagerTransaction', () => {
       [
         'a REFUND without reference',
         (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, kind: 'REFUND' } }),
-        'payload',
+        'referenceExternalTransactionId',
       ],
       [
         'a BET with zero amount',
         (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, money: { amount: '0.00', currency: 'BRL' } } }),
-        'payload',
+        'money.amount',
+      ],
+      [
+        'a lowercase currency',
+        (input: ReturnType<typeof aSubmission>) => ({ ...input, payload: { ...input.payload, money: { amount: '1.00', currency: 'brl' } } }),
+        'money.currency',
       ],
       [
         'an external id with surrounding whitespace',
@@ -236,6 +241,21 @@ describe('ProcessWagerTransaction', () => {
       expect(wagerCount()).toBe(0);
       expect(app.db.inbox.size()).toBe(0);
     });
+  });
+
+  it.each([
+    ['BET 0.00', 'BET', { amount: '0.00' }, 'money.amount', 'AMOUNT_MUST_BE_POSITIVE'],
+    ['REFUND without reference', 'REFUND', {}, 'referenceExternalTransactionId', 'REFERENCE_REQUIRED'],
+    ['an amount with one decimal', 'BET', { amount: '1.5' }, 'money.amount', 'INVALID_MONEY_AMOUNT'],
+    ['a lowercase currency', 'BET', { currency: 'brl' }, 'money.currency', 'INVALID_CURRENCY'],
+    ['OPENING', 'OPENING', {}, 'kind', 'KIND_NOT_SUBMITTABLE'],
+    ['an unknown kind', 'JACKPOT', {}, 'kind', 'INVALID_KIND'],
+    ['a round id with surrounding whitespace', 'BET', { roundId: ' round-1' }, 'roundId', 'SURROUNDING_WHITESPACE'],
+  ] as const)('names the rule a request broke: %s', async (_name, kind, options, field, rule) => {
+    const wallet = await open();
+    const error = await app.process.execute(aSubmission(wallet, kind, 'tx', options)).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(InvalidRequestError);
+    expect(error).toMatchObject({ field, rule });
   });
 
   describe('PROVIDER_IDENTITY_MISMATCH', () => {

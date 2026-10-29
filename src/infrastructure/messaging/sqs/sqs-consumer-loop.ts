@@ -10,7 +10,7 @@ import {
 import type { IClock } from '../../../business/shared/port/clock.port';
 import { ExponentialBackoff } from '../../../business/shared/policy/exponential-backoff';
 import { SystemClock } from '../../clock/system-clock';
-import { parseSafeInteger } from '../../config/integer-env';
+import { parseDecimalInteger } from '../../config/integer-env';
 import type { SqsQueueRef } from '../../config/sqs-config';
 import type { SqsConsumerConfig } from '../../config/sqs-consumer-config';
 import { FaultInjector } from '../../fault-injection/fault-injector';
@@ -283,7 +283,7 @@ export class SqsConsumerLoop {
             sqs: message,
             receiptHandle: message.ReceiptHandle,
             sqsMessageId: message.MessageId,
-            receiveCount: parseSafeInteger(message.Attributes?.ApproximateReceiveCount) ?? 1,
+            receiveCount: parseDecimalInteger(message.Attributes?.ApproximateReceiveCount) ?? 1,
             groupId: message.Attributes?.MessageGroupId,
             receivedAt,
           },
@@ -342,7 +342,7 @@ export class SqsConsumerLoop {
       return SETTLED;
     }
 
-    const sentAt = parseSafeInteger(message.sqs.Attributes?.SentTimestamp);
+    const sentAt = parseDecimalInteger(message.sqs.Attributes?.SentTimestamp);
     const inbound: InboundMessage = {
       body,
       rawBody,
@@ -519,7 +519,7 @@ export class SqsConsumerLoop {
         { abortSignal: AbortSignal.timeout(this.requestTimeoutMs) },
       );
       for (const failed of Failed) {
-        const message = messages[parseSafeInteger(failed.Id) ?? -1];
+        const message = messages[parseDecimalInteger(failed.Id) ?? -1];
         if (message !== undefined && this.leaving.has(message)) continue;
         const error = new VisibilityExtensionRejectedError(message?.sqsMessageId ?? `entry ${failed.Id}`, failed.Code, failed.Message);
         this.reportError(error, 'heartbeat');

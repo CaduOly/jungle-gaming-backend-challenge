@@ -62,7 +62,7 @@ describe('wallet use cases', () => {
         .execute({ playerId: ` ${aPlayerId(1)}`, initialBalance: brl('10.00') })
         .catch((reason: unknown) => reason);
       expect(error).toBeInstanceOf(InvalidRequestError);
-      expect((error as InvalidRequestError).field).toBe('playerId');
+      expect(error).toMatchObject({ field: 'playerId', rule: 'INVALID_UUID' });
     });
 
     it('opens at zero without OPENING, entry or event', async () => {
@@ -108,9 +108,10 @@ describe('wallet use cases', () => {
     it.each([
       ['a blank player', { playerId: ' ', initialBalance: brl('1.00') }, 'playerId'],
       ['a player id that is not a UUID', { playerId: 'player-x', initialBalance: brl('1.00') }, 'playerId'],
-      ['a malformed amount', { playerId: aPlayerId(1), initialBalance: brl('1.5') }, 'initialBalance'],
-      ['a negative amount', { playerId: aPlayerId(1), initialBalance: brl('-1.00') }, 'initialBalance'],
-      ['a bad currency', { playerId: aPlayerId(1), initialBalance: { amount: '1.00', currency: 'brl' } }, 'initialBalance'],
+      ['a malformed amount', { playerId: aPlayerId(1), initialBalance: brl('1.5') }, 'initialBalance.amount'],
+      ['a negative amount', { playerId: aPlayerId(1), initialBalance: brl('-1.00') }, 'initialBalance.amount'],
+      ['a bad currency', { playerId: aPlayerId(1), initialBalance: { amount: '1.00', currency: 'brl' } }, 'initialBalance.currency'],
+      ['no balance at all', { playerId: aPlayerId(1), initialBalance: undefined as never }, 'initialBalance'],
     ])('rejects %s as invalid input', async (_name, input, field) => {
       const error = await app.createWallet.execute(input).catch((reason: unknown) => reason);
       expect(error).toBeInstanceOf(InvalidRequestError);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { parseSafeInteger, readIntegerEnv } from './integer-env';
+import { parseDecimalInteger, readIntegerEnv } from './integer-env';
 
 describe('readIntegerEnv', () => {
   it('returns the fallback when the variable is missing or empty', () => {
@@ -16,13 +16,14 @@ describe('readIntegerEnv', () => {
   });
 });
 
-describe('parseSafeInteger', () => {
+describe('parseDecimalInteger', () => {
   it('parses plain non-negative integers, epoch millis included', () => {
-    expect(parseSafeInteger('3')).toBe(3);
-    expect(parseSafeInteger('1785337200000')).toBe(1_785_337_200_000);
+    expect(parseDecimalInteger('50')).toBe(50);
+    expect(parseDecimalInteger('0')).toBe(0);
+    expect(parseDecimalInteger('1785337200000')).toBe(1_785_337_200_000);
   });
 
-  it.each([undefined, '', '-1', '1.5', 'abc', '1234567890123456'])('returns undefined for %p', (raw) => {
-    expect(parseSafeInteger(raw)).toBeUndefined();
+  it.each([undefined, '', '-1', '1.5', '1e3', ' 5', 'abc', '1234567890123456'])('returns undefined for %p', (raw) => {
+    expect(parseDecimalInteger(raw)).toBeUndefined();
   });
 });

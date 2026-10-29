@@ -1,3 +1,4 @@
+import { InputRule } from '../error/input-rule';
 import { InvalidRequestError } from '../error/invalid-request-error';
 
 export const MAX_TEXT_LENGTH = 255;
@@ -10,10 +11,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  */
 export const requireText = (field: string, value: unknown): string => {
   if (typeof value !== 'string' || value.trim() === '' || value.length > MAX_TEXT_LENGTH) {
-    throw new InvalidRequestError(field, `must be a non-blank string of at most ${MAX_TEXT_LENGTH} characters`);
+    throw new InvalidRequestError(field, `must be a non-blank string of at most ${MAX_TEXT_LENGTH} characters`, InputRule.BLANK);
   }
-  if (value.trim() !== value) throw new InvalidRequestError(field, 'must not start or end with whitespace');
-  if (value.includes('\u0000')) throw new InvalidRequestError(field, 'must not contain a NUL character');
+  if (value.trim() !== value) throw new InvalidRequestError(field, 'must not start or end with whitespace', InputRule.SURROUNDING_WHITESPACE);
+  if (value.includes('\u0000')) throw new InvalidRequestError(field, 'must not contain a NUL character', InputRule.NUL_CHARACTER);
   return value;
 };
 
@@ -23,6 +24,6 @@ export const requireText = (field: string, value: unknown): string => {
  * whatever the channel (HTTP or SQS).
  */
 export const requireUuid = (field: string, value: unknown): string => {
-  if (typeof value !== 'string' || !UUID.test(value)) throw new InvalidRequestError(field, 'must be a UUID');
+  if (typeof value !== 'string' || !UUID.test(value)) throw new InvalidRequestError(field, 'must be a UUID', InputRule.INVALID_UUID);
   return value.toLowerCase();
 };

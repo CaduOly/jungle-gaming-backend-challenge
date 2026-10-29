@@ -1,4 +1,5 @@
 import type { FailureCode } from '../../shared/error/failure-code';
+import { InputRule } from '../../shared/error/input-rule';
 import { InvalidTransactionStateError } from '../../shared/error/invalid-transaction-state-error';
 import type { Money } from '../../shared/value-object/money';
 import type { WalletLedgerEntry } from '../../wallet/entity/wallet-ledger-entry';
@@ -294,24 +295,36 @@ export class WagerTransaction {
 
   private static validate(props: CreateWagerTransactionProps): void {
     for (const field of REQUIRED_TEXT_FIELDS) {
-      if (props[field].trim() === '') throw new InvalidWagerTransactionError(`${field} is required`);
+      if (props[field].trim() === '') {
+        throw new InvalidWagerTransactionError(`${field} is required`, { field, rule: InputRule.BLANK });
+      }
     }
     const { kind, money, referenceExternalTransactionId: reference } = props;
-    if (!Object.values(WagerKind).includes(kind)) throw new InvalidWagerTransactionError(`unknown kind ${kind}`);
+    const onReference = (rule: InputRule) => ({ field: 'referenceExternalTransactionId', rule });
+    if (!Object.values(WagerKind).includes(kind)) {
+      throw new InvalidWagerTransactionError(`unknown kind ${kind}`, { field: 'kind', rule: InputRule.INVALID_KIND });
+    }
     if (kind !== WagerKind.LOSS && !money.isPositive()) {
-      throw new InvalidWagerTransactionError(`${kind} amount must be greater than zero`);
+      throw new InvalidWagerTransactionError(`${kind} amount must be greater than zero`, {
+        field: 'money.amount',
+        rule: InputRule.AMOUNT_MUST_BE_POSITIVE,
+      });
     }
     if (reference !== undefined && reference.trim() === '') {
-      throw new InvalidWagerTransactionError('referenceExternalTransactionId cannot be empty');
+      throw new InvalidWagerTransactionError('referenceExternalTransactionId cannot be empty', onReference(InputRule.BLANK));
     }
     if (REFERENCE_REQUIRED.has(kind) && reference === undefined) {
-      throw new InvalidWagerTransactionError(`${kind} requires referenceExternalTransactionId`);
+      throw new InvalidWagerTransactionError(
+        `${kind} requires referenceExternalTransactionId`,
+        onReference(InputRule.REFERENCE_REQUIRED),
+      );
     }
     if (REFERENCE_FORBIDDEN.has(kind) && reference !== undefined) {
-      throw new InvalidWagerTransactionError(`${kind} cannot have a reference`);
+      throw new InvalidWagerTransactionError(`${kind} cannot have a reference`, onReference(InputRule.REFERENCE_NOT_ALLOWED));
     }
     if (reference === props.externalTransactionId) {
-      throw new InvalidWagerTransactionError('a transaction cannot reference itself');
+      throw new InvalidWagerTransactionError('a transaction cannot reference itself', onReference(InputRule.SELF_REFERENCE));
     }
   }
+
 }

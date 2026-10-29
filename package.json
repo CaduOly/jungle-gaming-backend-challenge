@@ -9,13 +9,14 @@
     "migrate:down": "bun run src/infrastructure/persistence/mikro-orm/migrate.ts down",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test ./src ./tests/support",
+    "test": "bun test ./src ./tests/support ./tests/e2e",
     "test:arch": "depcruise src tests/support --config .dependency-cruiser.cjs && bun test ./tests/arch",
     "test:integration": "bun test --timeout 60000 ./tests/integration",
     "test:concurrency": "bun test --timeout 120000 --rerun-each ${RERUN_EACH:-20} ./tests/concurrency",
     "test:sweep": "bun run tests/support/sweep-test-resources.ts",
     "infra:up": "docker compose up -d --wait postgres localstack",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "start:in-memory": "bun run tests/e2e/support/serve-in-memory.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "3.1157.0",
@@ -26,6 +27,9 @@
     "@nestjs/common": "12.3.2",
     "@nestjs/core": "12.3.2",
     "@nestjs/platform-express": "12.3.2",
+    "@nestjs/swagger": "12.0.2",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.15.1",
     "pg": "8.23.1",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2"

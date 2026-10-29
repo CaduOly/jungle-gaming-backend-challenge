@@ -246,7 +246,7 @@ describe('RetryPendingReferences', () => {
   });
 
   it('stops between items when asked: the ones it did not reach keep their attempts and wait for the lease', async () => {
-    const wallets = await Promise.all(Array.from({ length: 3 }, (_, i) => open('100.00', `player-${i}`)));
+    const wallets = await Promise.all(Array.from({ length: 3 }, (_, i) => open('100.00', aPlayerId(i))));
     const ids: string[] = [];
     for (const wallet of wallets) ids.push((await submit(wallet, 'ROLLBACK', `${wallet.id}-rb`, { amount: '30.00', reference: 'gone' })).transactionId);
     let checks = 0;
