@@ -1,19 +1,16 @@
 import 'reflect-metadata';
-import type { Provider } from '@nestjs/common';
-import { readHttpConfig } from './infrastructure/framework/nest/shared/http-config';
-import { createHttpApp } from './infrastructure/framework/nest/shared/http-app';
-import type { IReadinessCheck } from './infrastructure/health/readiness-check.port';
+import { readSqsConsumerConfig } from './infrastructure/config/sqs-consumer-config';
+import { installGracefulShutdown } from './infrastructure/process/graceful-shutdown';
+import { startApplication } from './infrastructure/runtime/application';
 
 /**
- * Starts the HTTP API over the given persistence binding (WAGERING_PERSISTENCE), with what /health/ready checks
- * (PostgresReadinessCheck and SqsReadinessCheck in production). The PostgreSQL binding
- * arrives with T07b; until then `bun run start:in-memory` serves the API over the in-memory fakes.
+ * One image, any mix of roles: APP_ROLES=api,consumer,outbox,pending-worker (all by default). SIGTERM/SIGINT stop
+ * every role within SHUTDOWN_TIMEOUT_MS; run `bun run migrate` before the first replica starts.
  */
-export const bootstrap = async (persistence: Provider, readinessChecks: readonly IReadinessCheck[]): Promise<void> => {
-  const app = await createHttpApp({ persistence, readinessChecks });
-  await app.listen(readHttpConfig(process.env).port);
-};
-
 if (import.meta.main) {
-  throw new Error('No persistence is wired yet (T07b). Use `bun run start:in-memory` for a local API over the fakes.');
+  const application = await startApplication(process.env);
+  installGracefulShutdown(() => application.stop(), {
+    timeoutMs: readSqsConsumerConfig(process.env).shutdownTimeoutMs + 2_000,
+    onError: (error) => console.error(error),
+  });
 }
