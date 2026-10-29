@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { FailureCode } from '../../../src/business/shared/error/failure-code';
+import { UniqueConstraintViolationError } from '../../../src/business/shared/error/unique-constraint-violation-error';
 import { WagerTransaction } from '../../../src/business/wagering/entity/wager-transaction';
 import { WagerKind } from '../../../src/business/wagering/enum/wager-kind';
 import { aProcessedWager, aWager, brl, T0 } from '../builders/wager-transaction.builder';
@@ -7,7 +8,6 @@ import { FakePayloadHasher } from './fake-payload-hasher';
 import {
   InMemoryWagerTransactionRepository,
   InMemoryWagerTransactionStore,
-  WagerConstraintError,
 } from './in-memory-wager-transaction-repository';
 
 const at = (seconds: number): Date => new Date(T0.getTime() + seconds * 1000);
@@ -74,7 +74,7 @@ describe('InMemoryWagerTransactionRepository', () => {
     const rollback = aWager(WagerKind.ROLLBACK, 'rb', { referenceExternalTransactionId: 'bet' });
     rollback.attachReference(bet);
     rollback.markProcessed(brl('1.00'), T0);
-    await expect(repository.insert(rollback)).rejects.toThrow(WagerConstraintError);
+    await expect(repository.insert(rollback)).rejects.toThrow(UniqueConstraintViolationError);
   });
 
   it('updates non-terminal rows and refuses to leave a terminal status', async () => {
@@ -181,6 +181,17 @@ describe('InMemoryWagerTransactionRepository', () => {
       expect(await repository.claimPendingBatch({ limit: 10, leaseMs: 5_000, now: at(1) })).toEqual(['id-a']);
       expect(await repository.claimPendingBatch({ limit: 10, leaseMs: 5_000, now: at(3) })).toEqual([]);
       expect(await repository.claimPendingBatch({ limit: 10, leaseMs: 5_000, now: at(6) })).toEqual(['id-a']);
+    });
+
+    it('an update releases the lease, so only nextAttemptAt gates the next claim', async () => {
+      const waiting = pending('a', 0);
+      await repository.insert(waiting);
+      expect(await repository.claimPendingBatch({ limit: 10, leaseMs: 60_000, now: at(1) })).toEqual(['id-a']);
+      await repository.lockById(waiting.id);
+      waiting.scheduleNextAttempt(at(2));
+      await repository.update(waiting);
+      await repository.releaseLocks();
+      expect(await repository.claimPendingBatch({ limit: 10, leaseMs: 60_000, now: at(2) })).toEqual(['id-a']);
     });
 
     it('skips row-locked rows (SKIP LOCKED)', async () => {

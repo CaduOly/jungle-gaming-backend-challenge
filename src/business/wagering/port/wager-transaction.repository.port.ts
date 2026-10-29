@@ -15,6 +15,7 @@ export interface IWagerTransactionRepository {
   lockById(id: string): Promise<WagerTransaction | null>;
   /** Unique (provider, idempotency key), (provider, external id) and one processed reversal per reference. */
   insert(transaction: WagerTransaction): Promise<void>;
+  /** Requires the row lock; also releases the claim lease (`locked_until = NULL`), so the next attempt is gated only by nextAttemptAt. */
   update(transaction: WagerTransaction): Promise<void>;
   /** True when a PROCESSED REFUND or ROLLBACK already points at this transaction. */
   isReversed(referenceTransactionId: string): Promise<boolean>;
