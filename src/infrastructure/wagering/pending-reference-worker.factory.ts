@@ -8,6 +8,8 @@ import type { PendingReferenceWorkerConfig } from '../config/pending-reference-w
 import { FaultInjector } from '../fault-injection/fault-injector';
 import { createTxRepositories } from '../persistence/mikro-orm/repository/wagering-repositories';
 import { MikroOrmUnitOfWork } from '../persistence/mikro-orm/unit-of-work';
+import { ObservedUnitOfWork } from '../observability/decorators/observed-unit-of-work';
+import type { WageringMetrics } from '../observability/metrics/wagering-metrics';
 import { PendingReferenceWorker, type PendingReferenceWorkerOptions } from './pending-reference-worker';
 
 export interface PendingReferenceWorkerDeps {
@@ -20,6 +22,8 @@ export interface PendingReferenceWorkerDeps {
   readonly random?: () => number;
   readonly onRound?: PendingReferenceWorkerOptions['onRound'];
   readonly onError?: PendingReferenceWorkerOptions['onError'];
+  /** Lock wait and lock conflicts of every item; nothing is measured when omitted (the tests). */
+  readonly metrics?: WageringMetrics;
 }
 
 /**
@@ -28,11 +32,12 @@ export interface PendingReferenceWorkerDeps {
  */
 export const createPendingReferenceWorker = (deps: PendingReferenceWorkerDeps): PendingReferenceWorker => {
   const faults = deps.faults ?? FaultInjector.none();
-  const unitOfWork = new MikroOrmUnitOfWork<TxRepositories>(
+  const ormUnitOfWork = new MikroOrmUnitOfWork<TxRepositories>(
     deps.em,
     (em) => createTxRepositories(em, { clock: deps.clock, faults }),
     { lockTimeoutMs: deps.lockTimeoutMs, faults },
   );
+  const unitOfWork = deps.metrics === undefined ? ormUnitOfWork : new ObservedUnitOfWork(ormUnitOfWork, deps.metrics);
   const backoff = new ExponentialBackoff({ ...deps.config.backoff, random: deps.random ?? Math.random });
   const retry = new RetryPendingReferences(unitOfWork, deps.clock, deps.ids, backoff, {
     batchSize: deps.config.batchSize,

@@ -5,6 +5,7 @@ import type {
   AuthenticatedProvider,
   IProviderIdentity,
 } from '../../../../../business/shared/port/provider-identity.port';
+import { bindLogContext } from '../../../../observability/logging/log-context';
 import { PROVIDER_IDENTITY } from '../di/tokens';
 import { IS_PUBLIC } from './public.decorator';
 
@@ -34,6 +35,7 @@ export class ProviderAuthGuard implements CanActivate {
     const devProvider = request.header(DEV_PROVIDER_HEADER);
     const credentials = request.header('Authorization') ?? (devProvider === undefined ? undefined : `Dev ${devProvider}`);
     request.provider = await this.identity.authenticate(credentials);
+    bindLogContext({ providerId: request.provider.providerId });
     return true;
   }
 }

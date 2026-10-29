@@ -22,7 +22,7 @@ import { createSqsClient } from '../messaging/sqs/sqs-client';
 import type { SqsConsumerLoop } from '../messaging/sqs/sqs-consumer-loop';
 import { SqsMessagePublisher } from '../messaging/sqs/sqs-message-publisher';
 import { SqsQueueUrl } from '../messaging/sqs/sqs-queue-url';
-import { createJsonLog, type Log } from '../observability/json-log';
+import { createObservability, type Observability } from '../observability/observability';
 import { createMikroOrmConfig } from '../persistence/mikro-orm/mikro-orm.config';
 import { createPostgresReadiness } from '../persistence/mikro-orm/postgres-readiness';
 import { createReadRepositories, createTxRepositories } from '../persistence/mikro-orm/repository/wagering-repositories';
@@ -48,12 +48,6 @@ interface Stoppable {
   stop(): Promise<unknown>;
 }
 
-const dataOf = (body: unknown): Record<string, unknown> => {
-  if (typeof body !== 'object' || body === null || !('data' in body)) return {};
-  const { data } = body as { data: unknown };
-  return typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
-};
-
 const sqsReadiness = (client: SQSClient, queue: SqsQueueUrl): IReadinessCheck => ({
   name: 'sqs',
   check: async () => new SqsReadinessCheck(client, await queue.get()).check(),
@@ -64,10 +58,13 @@ const sqsReadiness = (client: SQSClient, queue: SqsQueueUrl): IReadinessCheck =>
  * system clock, with only the roles in APP_ROLES started. Migrations are not run here: `bun run migrate` runs
  * once before the replicas start.
  */
-export const startApplication = async (env: Env, log?: Log): Promise<RunningApplication> => {
+export const startApplication = async (env: Env, observed?: Observability): Promise<RunningApplication> => {
   const roles = readAppRoles(env);
   const instanceId = readInstanceId(env);
-  const write = log ?? createJsonLog({ instanceId });
+  const base = observed ?? createObservability({ env });
+  const logger = base.logger.child({ instanceId });
+  const observability: Observability = { ...base, logger };
+  const { metrics, workers } = observability;
   const database = readDatabaseConfig(env);
   const http = readHttpConfig(env);
   const sqs = readSqsConfig(env);
@@ -81,8 +78,6 @@ export const startApplication = async (env: Env, log?: Log): Promise<RunningAppl
   const postgres = new PostgresReadinessCheck(orm.em);
   const pgReadiness = createPostgresReadiness(orm.em);
   const boundedPgReadiness = () => withTimeout({ name: 'postgres', check: pgReadiness }, http.readinessTimeoutMs);
-  const onError = (role: string) => (error: unknown, operation?: string) =>
-    write('worker.error', { role, ...(operation === undefined ? {} : { operation }), error });
 
   let consumer: SqsConsumerLoop | undefined;
   const stoppables: Stoppable[] = [];
@@ -99,19 +94,16 @@ export const startApplication = async (env: Env, log?: Log): Promise<RunningAppl
       ids,
       readiness: boundedPgReadiness,
       handler: {
-        onProcessed: (output, message) =>
-          write('wager.processed', {
-            channel: 'SQS',
-            sqsMessageId: message.sqsMessageId,
-            walletId: dataOf(message.body).walletId,
-            transactionId: output.transactionId,
-            status: output.status,
-            idempotentReplay: output.idempotentReplay,
-          }),
-        onPermanentFailure: (error, message) => write('wager.dead-lettered', { sqsMessageId: message.sqsMessageId, error }),
+        onPermanentFailure: (error, message) =>
+          logger.error(
+            { sqsMessageId: message.sqsMessageId, error: error.name, errorMessage: error.message, sqlState: error.sqlState },
+            'command dead-lettered by a permanent infrastructure failure',
+          ),
       },
-      onError: onError('consumer'),
-      onCircuitStateChange: (state) => write('circuit-breaker', { state }),
+      observability,
+      onOutcome: workers.consumerOutcome,
+      onError: workers.workerError('consumer'),
+      onCircuitStateChange: workers.circuitState('sqs_consumer'),
     });
     consumer = loop;
     stoppables.push({ name: 'consumer', stop: () => loop.stop(consumerConfig.shutdownTimeoutMs) });
@@ -123,10 +115,12 @@ export const startApplication = async (env: Env, log?: Log): Promise<RunningAppl
       clock,
       config: readOutboxPublisherConfig(env),
       faults,
+      metrics,
       onRound: (round) => {
-        if (round.claimed > 0) write('outbox.round', { ...round });
+        workers.outboxRound(round);
+        if (round.claimed > 0) logger.debug({ ...round }, 'outbox round');
       },
-      onError: onError('outbox'),
+      onError: workers.workerError('outbox'),
     });
     stoppables.push({ name: 'outbox', stop: () => worker.stop() });
     worker.start();
@@ -139,10 +133,12 @@ export const startApplication = async (env: Env, log?: Log): Promise<RunningAppl
       config: readPendingReferenceWorkerConfig(env, database),
       lockTimeoutMs: database.lockTimeoutMs,
       faults,
+      metrics,
       onRound: (round) => {
-        if (round.claimed > 0) write('pending.round', { ...round });
+        workers.pendingRound(round);
+        if (round.claimed > 0) logger.debug({ ...round }, 'pending reference round');
       },
-      onError: onError('pending-worker'),
+      onError: workers.workerError('pending-worker'),
     });
     stoppables.push({ name: 'pending-worker', stop: () => worker.stop() });
     worker.start();
@@ -170,26 +166,29 @@ export const startApplication = async (env: Env, log?: Log): Promise<RunningAppl
       }),
       instanceId,
       env,
+      observability,
     });
     const running = api;
     stoppables.unshift({ name: 'api', stop: () => running.close() });
   }
   consumer?.start();
-  write('started', { roles: [...roles], ...(api === undefined ? {} : { port: api.port }) });
+  logger.info({ roles: [...roles], ...(api === undefined ? {} : { port: api.port }) }, 'started');
 
   return {
     instanceId,
     roles,
     httpPort: api?.port,
     stop: async () => {
-      write('stopping', {});
+      logger.info('stopping');
       const results = await Promise.allSettled(stoppables.map((part) => part.stop()));
       results.forEach((result, index) => {
-        if (result.status === 'rejected') write('stop.error', { role: stoppables[index]?.name, error: result.reason });
+        if (result.status === 'rejected') {
+          workers.workerError(stoppables[index]?.name ?? 'unknown')(result.reason, 'stop');
+        }
       });
       await orm.close(true);
       client.destroy();
-      write('stopped', {});
+      logger.info('stopped');
     },
   };
 };

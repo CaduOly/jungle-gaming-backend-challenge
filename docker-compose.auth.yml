@@ -1,0 +1,38 @@
+# Keycloak, only with the `auth` profile, over the application stack's network. One confidential client per game
+# provider (client_credentials), each token carrying its `provider_id` claim and the `wagering-api` audience.
+#   docker compose -f docker-compose.auth.yml --profile auth up -d
+# The replicas then run with AUTH_MODE=jwks (see .env.example). KC_HOSTNAME pins the issuer to the URL the
+# providers use, so a token fetched from the host and one fetched inside the network carry the same `iss`.
+name: jungle-wagering-auth
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3.3
+    profiles: [auth]
+    command: [start-dev, --import-realm, --health-enabled=true]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-8081}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+    ports:
+      - "${KEYCLOAK_HOST_PORT:-8081}:8080"
+    volumes:
+      - ./infra/keycloak/wagering-realm.json:/opt/keycloak/data/import/wagering-realm.json:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"UP"' <&3
+      interval: 5s
+      timeout: 5s
+      start_period: 60s
+      retries: 30
+    networks: [infra]
+
+networks:
+  infra:
+    name: jungle-wagering_default
+    external: true

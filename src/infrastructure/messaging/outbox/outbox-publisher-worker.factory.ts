@@ -5,6 +5,8 @@ import type { IClock } from '../../../business/shared/port/clock.port';
 import { ExponentialBackoff } from '../../../business/shared/policy/exponential-backoff';
 import type { OutboxPublisherConfig } from '../../config/outbox-publisher-config';
 import { FaultInjector } from '../../fault-injection/fault-injector';
+import { ObservedMessagePublisher } from '../../observability/decorators/observed-message-publisher';
+import type { WageringMetrics } from '../../observability/metrics/wagering-metrics';
 import { OutboxRepository } from '../../persistence/mikro-orm/repository/outbox.repository';
 import { FaultInjectingMessagePublisher } from '../fault-injecting-message-publisher';
 import { TimeoutMessagePublisher } from '../timeout-message-publisher';
@@ -19,6 +21,8 @@ export interface OutboxPublisherWorkerDeps {
   readonly random?: () => number;
   readonly onRound?: OutboxPublisherWorkerOptions['onRound'];
   readonly onError?: OutboxPublisherWorkerOptions['onError'];
+  /** outbox_lag_seconds on every successful publish; nothing is measured when omitted (the tests). */
+  readonly metrics?: WageringMetrics;
 }
 
 /**
@@ -29,10 +33,11 @@ export interface OutboxPublisherWorkerDeps {
 export const createOutboxPublisherWorker = (deps: OutboxPublisherWorkerDeps): OutboxPublisherWorker => {
   const faults = deps.faults ?? FaultInjector.none();
   const backoff = new ExponentialBackoff({ ...deps.config.backoff, random: deps.random ?? Math.random });
-  const publisher = new FaultInjectingMessagePublisher(
+  const guarded = new FaultInjectingMessagePublisher(
     new TimeoutMessagePublisher(deps.publisher, deps.config.publishTimeoutMs),
     faults,
   );
+  const publisher = deps.metrics === undefined ? guarded : new ObservedMessagePublisher(guarded, deps.metrics, deps.clock);
   const batch = { batchSize: deps.config.batchSize, leaseMs: deps.config.leaseMs };
   return new OutboxPublisherWorker(
     () => new PublishOutboxBatch(new OutboxRepository(deps.em.fork(), faults), publisher, deps.clock, backoff, batch),

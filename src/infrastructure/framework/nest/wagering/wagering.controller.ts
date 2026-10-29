@@ -3,9 +3,15 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedProvider } from '../../../../business/shared/port/provider-identity.port';
 import { ProviderIdentityMismatchError } from '../../../../business/wagering/error/provider-identity-mismatch-error';
 import { WagerTransactionNotFoundError } from '../../../../business/wagering/error/wager-transaction-not-found-error';
-import type { GetWagerTransaction } from '../../../../business/wagering/use-case/get-wager-transaction/get-wager-transaction';
-import type { ProcessWagerTransactionOutput } from '../../../../business/wagering/use-case/process-wager-transaction/process-wager-transaction.dto';
-import type { ProcessWagerTransaction } from '../../../../business/wagering/use-case/process-wager-transaction/process-wager-transaction';
+import type { IUseCase } from '../../../../business/shared/use-case';
+import type {
+  GetWagerTransactionInput,
+  WagerTransactionView,
+} from '../../../../business/wagering/use-case/get-wager-transaction/get-wager-transaction';
+import type {
+  ProcessWagerTransactionInput,
+  ProcessWagerTransactionOutput,
+} from '../../../../business/wagering/use-case/process-wager-transaction/process-wager-transaction.dto';
 import { CurrentProvider } from '../shared/auth/current-provider.decorator';
 import { GET_WAGER_TRANSACTION, PROCESS_WAGER_TRANSACTION } from '../shared/di/tokens';
 import { detail } from '../shared/envelope/api-response';
@@ -13,6 +19,7 @@ import { HttpResult } from '../shared/envelope/http-result';
 import { JsonContentTypeGuard } from '../shared/http/json-content-type.guard';
 import { detailForFailureCode } from '../shared/i18n/catalog';
 import { InfraDetailMessage } from '../shared/i18n/infra.detail-message';
+import { CorrelationId } from '../shared/observability/correlation-id.decorator';
 import { WageringDetailMessage } from '../shared/i18n/wagering.detail-message';
 import { BodyWithIdempotencyKey, type KeyedBody } from '../shared/validation/keyed-body';
 import { TextParamPipe, UuidParamPipe } from '../shared/validation/params';
@@ -52,8 +59,9 @@ const ensureOwner = (actor: AuthenticatedProvider, providerId: string): void => 
 @Controller()
 export class WageringController {
   constructor(
-    @Inject(PROCESS_WAGER_TRANSACTION) private readonly processTransaction: ProcessWagerTransaction,
-    @Inject(GET_WAGER_TRANSACTION) private readonly getTransaction: GetWagerTransaction,
+    @Inject(PROCESS_WAGER_TRANSACTION)
+    private readonly processTransaction: IUseCase<ProcessWagerTransactionInput, ProcessWagerTransactionOutput>,
+    @Inject(GET_WAGER_TRANSACTION) private readonly getTransaction: IUseCase<GetWagerTransactionInput, WagerTransactionView>,
   ) {}
 
   @Post('wagering/transactions')
@@ -64,12 +72,14 @@ export class WageringController {
     @BodyWithIdempotencyKey(SubmitWagerTransactionRequestDto)
     { body, idempotencyKey }: KeyedBody<SubmitWagerTransactionRequestDto>,
     @CurrentProvider() actor: AuthenticatedProvider,
+    @CorrelationId() correlationId: string | undefined,
   ) {
     const money = { amount: body.money.amount, currency: body.money.currency };
     const output = await this.processTransaction.execute({
       actor,
       idempotencyKey,
       source: { channel: 'HTTP' },
+      ...(correlationId === undefined ? {} : { correlationId }),
       payload: { ...body, playerId: body.playerId.toLowerCase(), walletId: body.walletId.toLowerCase(), money },
     });
     return toResult(output);

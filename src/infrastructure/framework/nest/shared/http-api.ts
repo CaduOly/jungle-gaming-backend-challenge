@@ -1,4 +1,5 @@
 import type { IReadinessCheck } from '../../../health/readiness-check.port';
+import type { Observability } from '../../../observability/observability';
 import { WAGERING_PERSISTENCE } from './di/tokens';
 import type { WageringPersistence } from './di/wagering-persistence';
 import { createHttpApp } from './http-app';
@@ -10,6 +11,8 @@ export interface HttpApiOptions {
   readonly readinessDetails: () => Record<string, unknown>;
   readonly instanceId: string;
   readonly env: Readonly<Record<string, string | undefined>>;
+  /** The replica's logger and registry: /metrics also shows what the workers of this process counted. */
+  readonly observability: Observability;
 }
 
 export interface RunningHttpApi {
@@ -27,6 +30,7 @@ export const startHttpApi = async (options: HttpApiOptions): Promise<RunningHttp
     instanceId: options.instanceId,
     env: options.env,
     shutdownHooks: false,
+    observability: options.observability,
   });
   await app.listen(readHttpConfig(options.env).port, '0.0.0.0');
   const address = app.getHttpServer().address() as { port: number };

@@ -17,6 +17,9 @@ import { SqsConsumerLoop, type SqsConsumerLoopDeps } from '../messaging/sqs/sqs-
 import { createPostgresReadiness } from '../persistence/mikro-orm/postgres-readiness';
 import { createTxRepositories } from '../persistence/mikro-orm/repository/wagering-repositories';
 import { MikroOrmUnitOfWork } from '../persistence/mikro-orm/unit-of-work';
+import { ObservedUnitOfWork } from '../observability/decorators/observed-unit-of-work';
+import { type ObservabilityTools, observeUseCase } from '../observability/decorators/observe-use-case';
+import { processWagerTransactionObservation } from '../observability/decorators/use-case-observations';
 import { WagerCommandHandler, type WagerCommandHandlerOptions } from './wager-command-handler';
 
 export interface WagerCommandConsumerDeps {
@@ -37,6 +40,8 @@ export interface WagerCommandConsumerDeps {
   readonly onOutcome?: SqsConsumerLoopDeps['onOutcome'];
   readonly onError?: SqsConsumerLoopDeps['onError'];
   readonly onCircuitStateChange?: SqsConsumerLoopDeps['onCircuitStateChange'];
+  /** Logs and metrics around the use case and the unit of work; none when omitted (the tests). */
+  readonly observability?: ObservabilityTools;
 }
 
 /**
@@ -48,18 +53,22 @@ export const createWagerCommandConsumer = (deps: WagerCommandConsumerDeps): SqsC
   const faults = deps.faults ?? FaultInjector.none();
   const clock = deps.clock ?? new SystemClock();
   const random = deps.random ?? Math.random;
-  const unitOfWork = new MikroOrmUnitOfWork<TxRepositories>(
+  const observability = deps.observability;
+  const ormUnitOfWork = new MikroOrmUnitOfWork<TxRepositories>(
     deps.em,
     (em) => createTxRepositories(em, { clock, faults }),
     { lockTimeoutMs: deps.lockTimeoutMs, faults },
   );
-  const processWager = new ProcessWagerTransaction(
+  const unitOfWork = observability === undefined ? ormUnitOfWork : new ObservedUnitOfWork(ormUnitOfWork, observability.metrics);
+  const useCase = new ProcessWagerTransaction(
     unitOfWork,
     new Sha256PayloadHasher(),
     clock,
     deps.ids ?? new UuidV7IdGenerator(),
     new ExponentialBackoff({ ...deps.referenceBackoff, random }),
   );
+  const processWager =
+    observability === undefined ? useCase : observeUseCase(useCase, observability, processWagerTransactionObservation);
   const handler = new FaultInjectingMessageHandler(new WagerCommandHandler(processWager, deps.handler ?? {}), faults);
   return new SqsConsumerLoop({
     client: deps.client,
