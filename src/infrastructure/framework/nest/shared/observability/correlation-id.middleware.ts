@@ -8,6 +8,9 @@ export const CORRELATION_ID_HEADER = 'X-Correlation-Id';
 /** Anything else (too long, spaces, control characters) is replaced, never echoed back or logged. */
 const VALID_CORRELATION_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 
+/** Probes and scrapes hit every replica every few seconds: their access lines go to debug. */
+const QUIET_PATHS = /^\/(health|metrics)(\/|$)/;
+
 export type CorrelatedRequest = AuthenticatedRequest & { correlationId?: string };
 
 export const resolveCorrelationId = (received: string | undefined): string =>
@@ -27,12 +30,13 @@ export const correlationIdMiddleware =
     response.setHeader(CORRELATION_ID_HEADER, correlationId);
     const startedAt = performance.now();
     response.on('finish', () => {
-      logger.info(
+      const path = request.originalUrl.split('?')[0] ?? '';
+      logger[QUIET_PATHS.test(path) ? 'debug' : 'info'](
         {
           correlationId,
           providerId: correlated.provider?.providerId,
           method: request.method,
-          path: request.originalUrl.split('?')[0],
+          path,
           statusCode: response.statusCode,
           durationMs: Math.round((performance.now() - startedAt) * 1000) / 1000,
         },
