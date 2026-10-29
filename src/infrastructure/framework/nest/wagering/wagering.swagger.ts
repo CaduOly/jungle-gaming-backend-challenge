@@ -151,10 +151,13 @@ const lookupResponses = (summary: string, invalidField: string) =>
           ),
         },
       },
-      forbidden,
+      ...(invalidField === 'transactionId' ? [] : [forbidden]),
       {
         status: 404,
-        description: 'No such transaction.',
+        description:
+          invalidField === 'transactionId'
+            ? "No such transaction, or it belongs to another provider (the API never confirms it exists)."
+            : 'No such transaction.',
         examples: { transactionNotFound: problem('Unknown transaction', WageringDetailMessage.TRANSACTION_NOT_FOUND) },
       },
       ...common,

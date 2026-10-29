@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Inject, Param, Post } from '@nestjs/co
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedProvider } from '../../../../business/shared/port/provider-identity.port';
 import { ProviderIdentityMismatchError } from '../../../../business/wagering/error/provider-identity-mismatch-error';
+import { WagerTransactionNotFoundError } from '../../../../business/wagering/error/wager-transaction-not-found-error';
 import type { GetWagerTransaction } from '../../../../business/wagering/use-case/get-wager-transaction/get-wager-transaction';
 import type { ProcessWagerTransactionOutput } from '../../../../business/wagering/use-case/process-wager-transaction/process-wager-transaction.dto';
 import type { ProcessWagerTransaction } from '../../../../business/wagering/use-case/process-wager-transaction/process-wager-transaction';
@@ -72,7 +73,7 @@ export class WageringController {
     return toResult(output);
   }
 
-  /** Only the transaction's own provider may read it. */
+  /** Another provider's transaction answers 404, exactly like a missing one: the API never confirms it exists. */
   @Get('wagering/transactions/:transactionId')
   @ApiGetWagerTransactionResponses()
   async get(
@@ -80,7 +81,7 @@ export class WageringController {
     @CurrentProvider() actor: AuthenticatedProvider,
   ) {
     const view = await this.getTransaction.execute({ transactionId });
-    ensureOwner(actor, view.providerId);
+    if (view.providerId !== actor.providerId) throw new WagerTransactionNotFoundError(transactionId);
     return HttpResult.ok(view);
   }
 

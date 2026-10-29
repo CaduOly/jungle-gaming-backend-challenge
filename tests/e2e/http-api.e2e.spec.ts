@@ -240,7 +240,7 @@ describe('HTTP API over the in-memory persistence', () => {
       );
     });
 
-    it('reads a transaction by id and by provider id, only for its own provider', async () => {
+    it('reads a transaction by id and by provider id; another provider gets 404 by id and 403 by its own path', async () => {
       const wallet = await openWallet('100.00');
       const body = submission(wallet);
       const { transactionId } = expectReply(await submit(body), 200).data;
@@ -253,9 +253,13 @@ describe('HTTP API over the in-memory persistence', () => {
       ).data;
       expect(byExternal.transactionId).toBe(transactionId);
 
-      expectReply(await call('GET', `/wagering/transactions/${transactionId}`, { provider: 'provider-b' }), 403, [
-        'PROVIDER_IDENTITY_MISMATCH',
+      const foreign = expectReply(await call('GET', `/wagering/transactions/${transactionId}`, { provider: 'provider-b' }), 404, [
+        'TRANSACTION_NOT_FOUND',
       ]);
+      const missing = expectReply(await call('GET', `/wagering/transactions/${NIL_UUID}`, { provider: 'provider-b' }), 404, [
+        'TRANSACTION_NOT_FOUND',
+      ]);
+      expect({ ...foreign, timestamp: 0 }).toEqual({ ...missing, timestamp: 0 });
       expectReply(
         await call('GET', `/providers/provider-a/wagering/transactions/${body.externalTransactionId}`, { provider: 'provider-b' }),
         403,

@@ -10,7 +10,7 @@ const STATUS_TABLE: Record<string, string[]> = {
   'get /wallets/{walletId}/ledger': ['200', '400', '404', ...COMMON],
   'post /wallets/{walletId}/reconciliation': ['200', '400', '404', ...COMMON],
   'post /wagering/transactions': ['200', '202', '400', '403', '404', '409', '422', ...COMMON],
-  'get /wagering/transactions/{transactionId}': ['200', '400', '403', '404', ...COMMON],
+  'get /wagering/transactions/{transactionId}': ['200', '400', '404', ...COMMON],
   'get /providers/{providerId}/wagering/transactions/{externalTransactionId}': ['200', '400', '403', '404', ...COMMON],
   'get /i18n': ['200', '500'],
 };
