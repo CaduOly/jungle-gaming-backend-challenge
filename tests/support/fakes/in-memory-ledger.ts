@@ -1,7 +1,9 @@
 import type { WalletLedgerEntry } from '../../../src/business/wallet/entity/wallet-ledger-entry';
 import type { ILedgerReader, LedgerPage, LedgerPageQuery } from '../../../src/business/wallet/port/ledger-reader.port';
 import type { ILedgerWriter } from '../../../src/business/wallet/port/ledger-writer.port';
+import { UniqueConstraintViolationError } from '../../../src/business/shared/error/unique-constraint-violation-error';
 import { LedgerCursor } from '../../../src/business/wallet/value-object/ledger-cursor';
+import type { UndoLog } from './undo-log';
 
 export class LedgerConstraintError extends Error {
   constructor(constraint: string) {
@@ -10,21 +12,24 @@ export class LedgerConstraintError extends Error {
   }
 }
 
-/** Insert-only ledger with the same uniqueness guarantees as the schema and a bigserial-like seq. */
+/**
+ * Insert-only ledger with the same uniqueness guarantees as the schema and a bigserial-like seq.
+ * Like a Postgres sequence, a rolled-back append still consumes its seq.
+ */
 export class InMemoryLedger implements ILedgerWriter, ILedgerReader {
   private readonly entries: WalletLedgerEntry[] = [];
   private lastSeq = 0n;
 
   async append(entry: WalletLedgerEntry): Promise<WalletLedgerEntry> {
     if (this.entries.some((existing) => existing.transactionId === entry.transactionId)) {
-      throw new LedgerConstraintError('UNIQUE(transaction_id)');
+      throw new UniqueConstraintViolationError('UNIQUE(transaction_id)');
     }
     if (
       this.entries.some(
         (existing) => existing.walletId === entry.walletId && existing.walletVersion === entry.walletVersion,
       )
     ) {
-      throw new LedgerConstraintError('UNIQUE(wallet_id, wallet_version)');
+      throw new UniqueConstraintViolationError('UNIQUE(wallet_id, wallet_version)');
     }
     if (!entry.isBalanced()) throw new LedgerConstraintError('CHECK arithmetic');
     this.lastSeq += 1n;
@@ -44,6 +49,24 @@ export class InMemoryLedger implements ILedgerWriter, ILedgerReader {
 
   async listAll(walletId: string): Promise<WalletLedgerEntry[]> {
     return this.entries.filter((entry) => entry.walletId === walletId);
+  }
+
+  /** View bound to a unit of work: a rollback removes what it appended. */
+  withUndo(undo: UndoLog): ILedgerWriter & ILedgerReader {
+    return {
+      append: async (entry) => {
+        const persisted = await this.append(entry);
+        undo.record(() => this.remove(persisted.transactionId));
+        return persisted;
+      },
+      page: (query) => this.page(query),
+      listAll: (walletId) => this.listAll(walletId),
+    };
+  }
+
+  private remove(transactionId: string): void {
+    const index = this.entries.findIndex((entry) => entry.transactionId === transactionId);
+    if (index >= 0) this.entries.splice(index, 1);
   }
 
   count(): number {

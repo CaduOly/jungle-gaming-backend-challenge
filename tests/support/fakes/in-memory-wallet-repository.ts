@@ -2,6 +2,7 @@ import { Wallet, type WalletState } from '../../../src/business/wallet/entity/wa
 import { WalletAlreadyExistsError } from '../../../src/business/wallet/error/wallet-already-exists-error';
 import type { IWalletRepository } from '../../../src/business/wallet/port/wallet.repository.port';
 import { KeyedMutex, type Release } from './keyed-mutex';
+import type { UndoLog } from './undo-log';
 
 export class StaleWalletVersionError extends Error {
   constructor(walletId: string, expected: number, actual: number) {
@@ -22,6 +23,16 @@ export class InMemoryWalletStore {
 
   write(wallet: Wallet): void {
     this.rows.set(wallet.id, wallet.toState());
+  }
+
+  /** Puts a row back as it was (or removes it when it did not exist): the rollback of a write. */
+  restore(id: string, state: WalletState | undefined): void {
+    if (state === undefined) this.rows.delete(id);
+    else this.rows.set(id, state);
+  }
+
+  snapshot(id: string): WalletState | undefined {
+    return this.rows.get(id);
   }
 
   has(id: string): boolean {
@@ -48,7 +59,10 @@ export class InMemoryWalletStore {
 export class InMemoryWalletRepository implements IWalletRepository {
   private readonly held = new Map<string, Promise<Release>>();
 
-  constructor(private readonly store: InMemoryWalletStore) {}
+  constructor(
+    private readonly store: InMemoryWalletStore,
+    private readonly undo?: UndoLog,
+  ) {}
 
   async lockById(id: string): Promise<Wallet | null> {
     if (!this.store.has(id)) return null;
@@ -74,6 +88,7 @@ export class InMemoryWalletRepository implements IWalletRepository {
     if (this.store.findByPlayerAndCurrency(wallet.playerId, wallet.currency) !== null) {
       throw new WalletAlreadyExistsError(wallet.playerId, wallet.currency);
     }
+    this.journal(wallet.id);
     this.store.write(wallet);
   }
 
@@ -84,7 +99,13 @@ export class InMemoryWalletRepository implements IWalletRepository {
     if (current.version !== expectedVersion) {
       throw new StaleWalletVersionError(wallet.id, expectedVersion, current.version);
     }
+    this.journal(wallet.id);
     this.store.write(wallet);
+  }
+
+  private journal(id: string): void {
+    const before = this.store.snapshot(id);
+    this.undo?.record(() => this.store.restore(id, before));
   }
 
   holdsLock(id: string): boolean {
