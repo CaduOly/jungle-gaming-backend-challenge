@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "bun run src/main.ts",
+    "migrate": "bun run src/infrastructure/persistence/mikro-orm/migrate.ts up",
+    "migrate:down": "bun run src/infrastructure/persistence/mikro-orm/migrate.ts down",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test ./src ./tests/support ./tests/e2e",

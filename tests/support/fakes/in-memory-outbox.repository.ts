@@ -33,10 +33,11 @@ export class InMemoryOutboxRepository implements IOutboxRepository {
     return claimed.map((row) => OutboxMessage.rehydrate(row));
   }
 
-  async markPublished(message: OutboxMessage): Promise<void> {
+  async markPublished(message: OutboxMessage): Promise<boolean> {
     const stored = this.require(message.id);
-    if (stored.publishedAt) return;
+    if (stored.publishedAt) return false;
     this.rows.set(message.id, { ...withoutLease(stored), publishedAt: message.publishedAt });
+    return true;
   }
 
   async scheduleRetry(message: OutboxMessage): Promise<boolean> {
