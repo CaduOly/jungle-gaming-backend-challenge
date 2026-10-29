@@ -11,7 +11,8 @@ import { uuidv7 } from '../../support/uuid';
 const MAIN = new URL('../../../src/main.ts', import.meta.url).pathname;
 const MIGRATE = new URL('../../../src/infrastructure/persistence/mikro-orm/migrate.ts', import.meta.url).pathname;
 
-export type LogEvent = Readonly<Record<string, unknown>> & { readonly event: string };
+/** One JSON log line of a replica; `message` is the pino message key. */
+export type LogEvent = Readonly<Record<string, unknown>> & { readonly message: string };
 
 /**
  * Short leases, visibility and backoffs, so crashes, restarts and outages resolve in seconds. Each value still
@@ -116,12 +117,12 @@ export class Instance {
     collectJsonLines(child.stdout, this.events);
     drainText(child.stderr, this.stderr);
     await until(
-      () => this.events.slice(from).some((event) => event.event === 'started') || child.exitCode !== null,
+      () => this.events.slice(from).some((event) => event.message === 'started') || child.exitCode !== null,
       30_000,
       `${this.id} to start`,
     );
     if (child.exitCode !== null) throw new Error(`${this.id} exited with ${child.exitCode}: ${this.stderr.join('')}`);
-    const started = this.events.slice(from).find((event) => event.event === 'started');
+    const started = this.events.slice(from).find((event) => event.message === 'started');
     this.port = Number.parseInt(String(started?.port), 10);
   }
 
@@ -144,7 +145,7 @@ export class Instance {
   }
 
   processed(): LogEvent[] {
-    return this.events.filter((event) => event.event === 'wager.processed');
+    return this.events.filter((event) => event.message === 'wager command processed');
   }
 }
 

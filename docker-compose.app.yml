@@ -2,7 +2,14 @@
 # stack's network and reaches PostgreSQL and LocalStack by their service names. Start the infrastructure first:
 #   docker compose up -d
 #   docker compose -f docker-compose.app.yml up -d --build
+# Prometheus and Grafana come with it (docker-compose.observability.yml). Keycloak only with the `auth` profile
+# (docker-compose.auth.yml), and then the replicas need AUTH_MODE=jwks:
+#   AUTH_MODE=jwks docker compose -f docker-compose.app.yml --profile auth up -d --build
 name: jungle-wagering-app
+
+include:
+  - docker-compose.observability.yml
+  - docker-compose.auth.yml
 
 x-app-env: &app-env
   DATABASE_URL: postgres://${POSTGRES_USER:-wagering}:${POSTGRES_PASSWORD:-wagering}@postgres:5432/${POSTGRES_DB:-wagering}
@@ -10,6 +17,11 @@ x-app-env: &app-env
   AWS_REGION: ${AWS_REGION:-us-east-1}
   AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
   AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  AUTH_MODE: ${AUTH_MODE:-noop}
+  AUTH_JWKS_URL: ${AUTH_JWKS_URL:-http://keycloak:8080/realms/wagering/protocol/openid-connect/certs}
+  AUTH_ISSUER: ${AUTH_ISSUER:-http://localhost:8081/realms/wagering}
+  AUTH_AUDIENCE: ${AUTH_AUDIENCE:-wagering-api}
 
 services:
   migrate:
