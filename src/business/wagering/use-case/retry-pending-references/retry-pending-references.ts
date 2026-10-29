@@ -41,7 +41,8 @@ export interface RetryPendingReferencesOutput {
  * Pending-reference worker, deadlock-free across instances:
  * 1. claims only ids, in a short unit of work (lease + SKIP LOCKED);
  * 2. runs each id in its own unit of work, locking wallet → transaction (the same order as the main flow),
- *    re-checking the status, then resolving and settling with the same domain services.
+ *    re-checking the status and that the attempt is still due, then resolving and settling with the same domain
+ *    services.
  * Attempts are capped by the backoff: when the last one still finds no reference the transaction is
  * REJECTED/REFERENCE_NOT_FOUND (REFERENCE_NOT_PROCESSED when the reference exists but never settled) and the
  * rejection event is published. A permanent inconsistency (no wallet, broken invariant) moves it to FAILED.
@@ -61,8 +62,9 @@ export class RetryPendingReferences implements IUseCase<void, RetryPendingRefere
   }
 
   async execute(): Promise<RetryPendingReferencesOutput> {
+    const claimedAt = this.clock.now();
     const ids = await this.unitOfWork.run((tx) =>
-      tx.wagers.claimPendingBatch({ limit: this.config.batchSize, leaseMs: this.config.leaseMs, now: this.clock.now() }),
+      tx.wagers.claimPendingBatch({ limit: this.config.batchSize, leaseMs: this.config.leaseMs, now: claimedAt }),
     );
     const counts: Record<RetryResult, number> = {
       processed: 0,
@@ -75,7 +77,7 @@ export class RetryPendingReferences implements IUseCase<void, RetryPendingRefere
     const erroredIds: string[] = [];
     for (const id of ids) {
       try {
-        counts[await this.unitOfWork.run((tx) => this.retry(tx, id))] += 1;
+        counts[await this.unitOfWork.run((tx) => this.retry(tx, id, claimedAt))] += 1;
       } catch {
         erroredIds.push(id);
       }
@@ -83,12 +85,16 @@ export class RetryPendingReferences implements IUseCase<void, RetryPendingRefere
     return { claimed: ids.length, ...counts, erroredIds };
   }
 
-  private async retry(tx: TxRepositories, id: string): Promise<RetryResult> {
+  private async retry(tx: TxRepositories, id: string, claimedAt: Date): Promise<RetryResult> {
     const peek = await tx.wagers.findById(id);
     if (peek === null) return 'skipped';
     const wallet = await tx.wallets.lockById(peek.walletId);
     const transaction = await tx.wagers.lockById(id);
     if (transaction === null || transaction.status !== WagerTransactionStatus.PENDING_REFERENCE) return 'skipped';
+    // The claim only picks attempts due at claimedAt. A later due date means this lease expired and another
+    // instance reclaimed the item and already counted this attempt: counting it again would burn the backoff.
+    const due = transaction.nextAttemptAt;
+    if (due !== undefined && due.getTime() > claimedAt.getTime()) return 'skipped';
     const now = this.clock.now();
 
     if (wallet === null) {

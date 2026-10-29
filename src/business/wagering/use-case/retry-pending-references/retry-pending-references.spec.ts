@@ -194,6 +194,26 @@ describe('RetryPendingReferences', () => {
     expect(await runAt(1_000)).toMatchObject({ claimed: 1, skipped: 1 });
   });
 
+  it('skips an attempt another instance already counted after this claim (an expired lease is reclaimed)', async () => {
+    const wallet = await open();
+    const id = await pendingRollback(wallet);
+    app.uow.before(
+      'wallets.lockById',
+      async () => {
+        const other = new (app.uow.constructor as typeof import('../../../../../tests/support/fakes/fake-unit-of-work').FakeUnitOfWork)(app.db);
+        await other.run(async (tx) => {
+          await tx.wallets.lockById(wallet.id);
+          const transaction = (await tx.wagers.lockById(id))!;
+          transaction.scheduleNextAttempt(new Date(app.clock.now().getTime() + 4_000));
+          await tx.wagers.update(transaction);
+        });
+      },
+      1,
+    );
+    expect(await runAt(1_000)).toMatchObject({ claimed: 1, skipped: 1, rescheduled: 0 });
+    expect(stateOf(id)).toMatchObject({ status: 'PENDING_REFERENCE', attempts: 2 });
+  });
+
   it('moves the transaction to FAILED when its wallet is gone (permanent inconsistency)', async () => {
     const wallet = await open();
     const id = await pendingRollback(wallet);
