@@ -269,6 +269,21 @@ describe('ProcessWagerTransaction', () => {
   });
 
   describe('idempotency', () => {
+    it('normalizes the case of the wallet and player ids, so an upper-case redelivery is a replay, not a conflict', async () => {
+      const playerId = 'abcdef00-0000-4000-8000-00000000beef';
+      const wallet = await open('100.00', playerId);
+      const first = await app.process.execute(aSubmission(wallet, 'BET', 'tx', { source: SQS('msg-1') }));
+      const shouting = aSubmission({ id: wallet.id.toUpperCase(), playerId: playerId.toUpperCase() }, 'BET', 'tx', {
+        source: SQS('msg-2'),
+      });
+
+      const replay = await app.process.execute(shouting);
+
+      expect(first.status).toBe('PROCESSED');
+      expect(replay).toEqual({ ...first, idempotentReplay: true });
+      expect(balanceOf(wallet)).toBe('90.00');
+    });
+
     it('answers an identical request with the original result and idempotentReplay, without new effects', async () => {
       const wallet = await open();
       const first = await submit(wallet, 'BET', 'tx', { amount: '25.00' });

@@ -13,7 +13,7 @@ export class SequentialIdGenerator implements IIdGenerator {
 }
 
 /**
- * Deterministic UUID-shaped ids (`00000000-0000-7000-8000-000000000001`, …) for the ids the use cases validate as
+ * Deterministic UUID-shaped ids (`00000000-0000-7000-a000-000000000001`, …) for the ids the use cases validate as
  * UUIDs (wallets): still readable by their last digits.
  */
 export class SequentialUuidGenerator implements IIdGenerator {
@@ -21,7 +21,7 @@ export class SequentialUuidGenerator implements IIdGenerator {
 
   generate(): string {
     this.next += 1;
-    return `00000000-0000-7000-8000-${this.next.toString().padStart(12, '0')}`;
+    return `00000000-0000-7000-a000-${this.next.toString().padStart(12, '0')}`;
   }
 }
 

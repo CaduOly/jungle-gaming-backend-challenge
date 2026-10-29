@@ -17,8 +17,12 @@ export const requireText = (field: string, value: unknown): string => {
   return value;
 };
 
-/** Wallet and player ids are uuid columns: anything else is refused here, before it reaches the schema. */
+/**
+ * Wallet and player ids are uuid columns: anything else is refused here, before it reaches the schema. The result
+ * is lower-cased, the form PostgreSQL returns, so the same id in another case hashes, compares and stores the same
+ * whatever the channel (HTTP or SQS).
+ */
 export const requireUuid = (field: string, value: unknown): string => {
   if (typeof value !== 'string' || !UUID.test(value)) throw new InvalidRequestError(field, 'must be a UUID');
-  return value;
+  return value.toLowerCase();
 };
