@@ -8,8 +8,9 @@ const MIGRATIONS = [
   'Migration20261027000000WageringSchema',
   'Migration20261027000100MessagingSchema',
   'Migration20261028000000OutboxHeadOfLine',
+  'Migration20261028000200OutboxCommitSequence',
 ] as const;
-const [WAGERING, MESSAGING, HEAD_OF_LINE] = MIGRATIONS;
+const [WAGERING, MESSAGING, HEAD_OF_LINE, COMMIT_SEQUENCE] = MIGRATIONS;
 const TABLES = ['inbox_messages', 'outbox_messages', 'wager_transactions', 'wallet_ledger_entries', 'wallets'];
 
 const SCHEMA_FINGERPRINT_SQL = `
@@ -60,6 +61,10 @@ describe('schema migrations', () => {
     const first = await fingerprint();
     expect((await migrateUp(database.url)).applied).toEqual([]);
 
+    expect((await migrateDown(database.url)).applied).toEqual([COMMIT_SEQUENCE]);
+    expect(await fingerprint()).not.toContainEqual(expect.stringContaining('outbox_messages.seq'));
+    expect(await fingerprint()).toContainEqual(expect.stringContaining('(aggregate_id, occurred_at, event_id)'));
+
     expect((await migrateDown(database.url)).applied).toEqual([HEAD_OF_LINE]);
     expect(await fingerprint()).not.toContainEqual(expect.stringContaining('outbox_messages_unpublished_by_aggregate'));
 
@@ -102,9 +107,7 @@ describe('schema migrations', () => {
     );
     const byName = new Map(rows.map((row) => [row.indexname, row.indexdef]));
     expect(byName.get('outbox_messages_unpublished')).toContain('WHERE (published_at IS NULL)');
-    expect(byName.get('outbox_messages_unpublished_by_aggregate')).toContain(
-      '(aggregate_id, occurred_at, event_id) WHERE (published_at IS NULL)',
-    );
+    expect(byName.get('outbox_messages_unpublished_by_aggregate')).toContain('(aggregate_id, seq) WHERE (published_at IS NULL)');
     expect(byName.get('outbox_messages_unpublished_by_occurrence')).toContain(
       '(occurred_at, event_id) WHERE (published_at IS NULL)',
     );
