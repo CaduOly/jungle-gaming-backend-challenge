@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'bun:test';
+import type { MikroORM } from '@mikro-orm/postgresql';
 import { Client } from 'pg';
 import type { RetryPendingReferencesOutput } from '../../../src/business/wagering/use-case/retry-pending-references/retry-pending-references';
 import {
@@ -44,9 +45,10 @@ describe('PendingReferenceWorker over the real PostgreSQL unit of work', () => {
   const workerWith = (
     config: Partial<PendingReferenceWorkerConfig> = {},
     observe: { outputs?: RetryPendingReferencesOutput[]; errors?: unknown[] } = {},
+    orm: MikroORM = db.orm,
   ): PendingReferenceWorker => {
     const worker = createPendingReferenceWorker({
-      em: db.orm.em,
+      em: orm.em,
       clock,
       ids: new UuidV7IdGenerator(),
       config: { ...DEFAULT_PENDING_REFERENCE_WORKER_CONFIG, pollIntervalMs: 5, ...config },
@@ -155,6 +157,35 @@ describe('PendingReferenceWorker over the real PostgreSQL unit of work', () => {
       clock.advance(60_000);
       expect(await worker.runOnce()).toMatchObject({ claimed: 1, processed: 1, erroredIds: [] });
       expect(await balanceOf(wallet)).toBe('100.00');
+    });
+
+    it('an expired lease reclaimed by another instance counts the attempt once', async () => {
+      const wallet = await open();
+      const bet = uuidv7();
+      const rollback = await submit(wallet, 'ROLLBACK', uuidv7(), { amount: '30.00', reference: bet });
+      const lease = { leaseMs: 5_000 };
+      const a = workerWith(lease);
+      const b = workerWith(lease, {}, await db.connect());
+      clock.advance(2_000);
+
+      const holder = await holdingWallet(wallet.id);
+      const roundA = a.runOnce();
+      await until(async () => (await lockWaiters()) === 1);
+      clock.advance(6_000);
+      const roundB = b.runOnce();
+      await until(async () => (await lockWaiters()) === 2);
+      await holder.release();
+      const [first, second] = await Promise.all([roundA, roundB]);
+
+      expect([first.claimed, second.claimed]).toEqual([1, 1]);
+      expect(first.rescheduled + second.rescheduled).toBe(1);
+      expect(first.skipped + second.skipped).toBe(1);
+      expect([...first.erroredIds, ...second.erroredIds]).toEqual([]);
+      expect(await transactionRow(rollback.transactionId)).toMatchObject({ status: 'PENDING_REFERENCE', attempts: 2 });
+
+      await submit(wallet, 'BET', bet, { amount: '30.00' });
+      clock.advance(60_000);
+      expect(await a.runOnce()).toMatchObject({ claimed: 1, processed: 1 });
     });
 
     it('BET first: the worker sees it committed and settles in the same round', async () => {

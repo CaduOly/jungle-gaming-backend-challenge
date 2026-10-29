@@ -11,6 +11,7 @@ const output = (claimed: number): RetryPendingReferencesOutput => ({
   failed: 0,
   skipped: 0,
   erroredIds: [],
+  unattemptedIds: [],
 });
 
 const until = async (condition: () => boolean, timeoutMs = 2_000): Promise<void> => {
@@ -113,6 +114,31 @@ describe('PendingReferenceWorker', () => {
 
     expect(outputs).toHaveLength(1);
     expect(rounds.rounds()).toBe(1);
+  });
+
+  it('tells the round in flight to stop between items once stop() is called', async () => {
+    let release: () => void = () => undefined;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const seen: boolean[] = [];
+    const round: RetryPendingRound = {
+      execute: async (input) => {
+        seen.push(input?.shouldStop?.() ?? false);
+        await blocked;
+        seen.push(input?.shouldStop?.() ?? false);
+        return output(1);
+      },
+    };
+    const worker = new PendingReferenceWorker(round, { batchSize: 10, pollIntervalMs: 60_000 });
+
+    worker.start();
+    await until(() => seen.length === 1);
+    const stopping = worker.stop();
+    release();
+    await stopping;
+
+    expect(seen).toEqual([false, true]);
   });
 
   it('runOnce runs a single round without starting the loop', async () => {

@@ -1,8 +1,11 @@
 import type { IUseCase } from '../../business/shared/use-case';
-import type { RetryPendingReferencesOutput } from '../../business/wagering/use-case/retry-pending-references/retry-pending-references';
+import type {
+  RetryPendingReferencesInput,
+  RetryPendingReferencesOutput,
+} from '../../business/wagering/use-case/retry-pending-references/retry-pending-references';
 import { PollingLoop } from '../worker/polling-loop';
 
-export type RetryPendingRound = IUseCase<void, RetryPendingReferencesOutput>;
+export type RetryPendingRound = IUseCase<RetryPendingReferencesInput | void, RetryPendingReferencesOutput>;
 
 export interface PendingReferenceWorkerOptions {
   /** A round that claimed this many items may have left more due ones behind, so the next starts right away. */
@@ -44,10 +47,13 @@ export class PendingReferenceWorker {
   }
 
   runOnce(): Promise<RetryPendingReferencesOutput> {
-    return this.round.execute();
+    return this.round.execute({ shouldStop: () => this.loop.isStopping });
   }
 
-  /** Stops polling and resolves once the round in flight, if any, has finished. */
+  /**
+   * Stops polling and resolves once the round in flight has finished the item it is on: the round checks between
+   * items, so the wait is one item (at worst its two lock waits), never a whole batch.
+   */
   stop(): Promise<void> {
     return this.loop.stop();
   }

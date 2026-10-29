@@ -55,6 +55,7 @@ describe('RetryPendingReferences', () => {
       failed: 0,
       skipped: 0,
       erroredIds: [],
+      unattemptedIds: [],
     });
 
     const settled = app.db.wagers.read(id)!;
@@ -210,6 +211,9 @@ describe('RetryPendingReferences', () => {
           transaction.scheduleNextAttempt(new Date(app.clock.now().getTime() + 4_000));
           await tx.wagers.update(transaction);
         });
+        // By the time this instance gets the lock, the other one's new attempt is due too: only the claim time
+        // tells that this attempt was already counted.
+        app.clock.advance(5_000);
       },
       1,
     );
@@ -239,6 +243,23 @@ describe('RetryPendingReferences', () => {
     expect(await runAt(1_000)).toMatchObject({ claimed: 0 });
     expect(await runAt(30_000)).toMatchObject({ claimed: 1, processed: 1 });
     expect(balanceOf(wallet)).toBe('100.00');
+  });
+
+  it('stops between items when asked: the ones it did not reach keep their attempts and wait for the lease', async () => {
+    const wallets = await Promise.all(Array.from({ length: 3 }, (_, i) => open('100.00', `player-${i}`)));
+    const ids: string[] = [];
+    for (const wallet of wallets) ids.push((await submit(wallet, 'ROLLBACK', `${wallet.id}-rb`, { amount: '30.00', reference: 'gone' })).transactionId);
+    let checks = 0;
+    app.clock.advance(1_000);
+
+    const output = await app.retry.execute({ shouldStop: () => ++checks > 1 });
+
+    expect(output).toMatchObject({ claimed: 3, rescheduled: 1, erroredIds: [] });
+    expect(output.unattemptedIds).toHaveLength(2);
+    expect(ids).toEqual(expect.arrayContaining([...output.unattemptedIds]));
+    for (const id of output.unattemptedIds) expect(stateOf(id)).toMatchObject({ status: 'PENDING_REFERENCE', attempts: 1 });
+    expect(await app.retry.execute()).toMatchObject({ claimed: 0 });
+    expect(await runAt(30_000)).toMatchObject({ claimed: 3, unattemptedIds: [] });
   });
 
   it('two workers in parallel never process the same item twice', async () => {
