@@ -21,6 +21,14 @@ export interface RetryPendingReferencesConfig {
   readonly leaseMs: number;
 }
 
+export interface RetryPendingReferencesInput {
+  /**
+   * Checked before each item: once it answers true the round ends there. The items it did not reach keep their lease
+   * and attempts untouched, so another instance retries them when the lease ends.
+   */
+  readonly shouldStop?: () => boolean;
+}
+
 export type RetryResult = 'processed' | 'rejected' | 'exhausted' | 'rescheduled' | 'failed' | 'skipped';
 
 export interface RetryPendingReferencesOutput {
@@ -35,6 +43,8 @@ export interface RetryPendingReferencesOutput {
   readonly skipped: number;
   /** Items whose unit of work threw (e.g. a transient database error); they are retried after the lease. */
   readonly erroredIds: readonly string[];
+  /** Claimed but not attempted because the round was asked to stop; retried after the lease. */
+  readonly unattemptedIds: readonly string[];
 }
 
 /**
@@ -47,7 +57,7 @@ export interface RetryPendingReferencesOutput {
  * REJECTED/REFERENCE_NOT_FOUND (REFERENCE_NOT_PROCESSED when the reference exists but never settled) and the
  * rejection event is published. A permanent inconsistency (no wallet, broken invariant) moves it to FAILED.
  */
-export class RetryPendingReferences implements IUseCase<void, RetryPendingReferencesOutput> {
+export class RetryPendingReferences implements IUseCase<RetryPendingReferencesInput | void, RetryPendingReferencesOutput> {
   private readonly settlement = new WagerSettlement();
   private readonly outcomeEvents: WagerOutcomeEvents;
 
@@ -61,7 +71,8 @@ export class RetryPendingReferences implements IUseCase<void, RetryPendingRefere
     this.outcomeEvents = new WagerOutcomeEvents(ids);
   }
 
-  async execute(): Promise<RetryPendingReferencesOutput> {
+  async execute(input: RetryPendingReferencesInput | void): Promise<RetryPendingReferencesOutput> {
+    const shouldStop = input?.shouldStop ?? (() => false);
     const claimedAt = this.clock.now();
     const ids = await this.unitOfWork.run((tx) =>
       tx.wagers.claimPendingBatch({ limit: this.config.batchSize, leaseMs: this.config.leaseMs, now: claimedAt }),
@@ -75,14 +86,17 @@ export class RetryPendingReferences implements IUseCase<void, RetryPendingRefere
       skipped: 0,
     };
     const erroredIds: string[] = [];
-    for (const id of ids) {
+    for (const [index, id] of ids.entries()) {
+      if (shouldStop()) {
+        return { claimed: ids.length, ...counts, erroredIds, unattemptedIds: ids.slice(index) };
+      }
       try {
         counts[await this.unitOfWork.run((tx) => this.retry(tx, id, claimedAt))] += 1;
       } catch {
         erroredIds.push(id);
       }
     }
-    return { claimed: ids.length, ...counts, erroredIds };
+    return { claimed: ids.length, ...counts, erroredIds, unattemptedIds: [] };
   }
 
   private async retry(tx: TxRepositories, id: string, claimedAt: Date): Promise<RetryResult> {
