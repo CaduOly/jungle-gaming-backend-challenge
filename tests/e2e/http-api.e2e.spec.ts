@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { FailureCode } from '../../src/business/shared/error/failure-code';
 import { assertEveryFakeWalletConsistent } from '../support/assertions/assert-fake-wallet-consistency';
+import { MAX_BODY_DEPTH } from '../../src/infrastructure/framework/nest/shared/validation/body-depth';
 import { client, expectEnvelope, type Reply } from './support/http-client';
 import { databaseDown, type InMemoryHttpApp, startInMemoryHttpApp } from './support/in-memory-http-app';
 
@@ -330,6 +331,26 @@ describe('HTTP API over the in-memory persistence', () => {
         400,
         ['MALFORMED_BODY'],
       );
+    });
+
+    const nested = (depth: number) => `{"a":${'['.repeat(depth - 1)}${']'.repeat(depth - 1)}}`;
+
+    it.each([10_000, 50_000])('rejects a body nested %i levels deep on both body routes', async (depth) => {
+      const headers = { 'Content-Type': 'application/json' };
+      expectReply(await call('POST', '/wallets', { rawBody: nested(depth), headers }), 400, ['MALFORMED_BODY']);
+      expectReply(
+        await call('POST', '/wagering/transactions', { rawBody: nested(depth), headers: { ...headers, 'Idempotency-Key': 'k' } }),
+        400,
+        ['MALFORMED_BODY'],
+      );
+    });
+
+    it(`reads a body nested exactly ${MAX_BODY_DEPTH} levels deep and refuses one level more`, async () => {
+      const headers = { 'Content-Type': 'application/json' };
+      const atLimit = await call('POST', '/wallets', { rawBody: nested(MAX_BODY_DEPTH), headers });
+      expect(atLimit.status).toBe(400);
+      expect(atLimit.body.detailsMessage.map((item) => item.code)).not.toContain('MALFORMED_BODY');
+      expectReply(await call('POST', '/wallets', { rawBody: nested(MAX_BODY_DEPTH + 1), headers }), 400, ['MALFORMED_BODY']);
     });
 
     it('reads a transaction by id and by provider id; another provider gets 404 by id and 403 by its own path', async () => {

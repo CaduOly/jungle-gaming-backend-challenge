@@ -60,6 +60,7 @@ Vale para sucesso e erro em todos os endpoints de negócio. Health (`/health/*`)
 | PENDING_REFERENCE | 202 | `REFERENCE_PENDING` (warning) |
 | Validação (DTO, Money, UUID, cursor, `Idempotency-Key` ausente, OPENING pela API, regra da entidade como BET `0.00` ou REFUND sem referência) | 400 | um item por campo, com `field` |
 | Chave `__proto__`, `constructor` ou `prototype` em qualquer nível do body | 400 | `FORBIDDEN_KEY`, com o caminho em `field` |
+| Body que não é JSON válido, ou que aninha objetos e arrays em mais de 32 níveis | 400 | `MALFORMED_BODY` |
 | URI com percent-encoding quebrado (`/wallets/%E0%A4%A`) | 400 | `MALFORMED_PATH`, com `field: "path"` |
 | Sem token / token inválido | 401 | `UNAUTHORIZED` |
 | `PROVIDER_IDENTITY_MISMATCH` (body ou path com outro `providerId`) | 403 | `PROVIDER_IDENTITY_MISMATCH` |
@@ -81,6 +82,7 @@ O replay devolve o mesmo status do original, com `data.idempotentReplay: true`.
 - Dinheiro chega como string. A regra de formato é do Money (`Money.isValidAmount` e `Money.isValidCurrency`, as mesmas que o `Money.from` usa), e o DTO aplica cada uma no seu campo. Amount e currency são conferidos de forma independente: `{ "amount": "1", "currency": "brl" }` devolve `money.amount` e `money.currency`.
 - Todos os campos inválidos saem numa resposta só. Os details do DTO e do Money vêm juntos, e o `POST /wagering/transactions` valida o body e o header `Idempotency-Key` no mesmo passo: faltando o header com o body também inválido, voltam os dois.
 - O que só a entidade sabe validar (BET `0.00`, REFUND/ROLLBACK sem referência, BET com referência, autorreferência) vem do domínio com o caminho do campo e uma `InputRule` estável, e vira detail com `field` (`money.amount`, `referenceExternalTransactionId`). Nada sai com `field: "payload"`.
+- O body é recusado com `MALFORMED_BODY` se aninhar objetos ou arrays em mais de 32 níveis. A conferência é iterativa e roda antes de qualquer etapa que percorra o body de forma recursiva (class-transformer, class-validator e a busca de chaves proibidas), então um body como `{"a":[[[…]]]}` com milhares de níveis não estoura a pilha.
 - O body é recusado com `FORBIDDEN_KEY` se tiver `__proto__`, `constructor` ou `prototype` em qualquer nível, antes de qualquer cópia para objeto (o `JSON.parse` mantém `__proto__` como chave própria).
 
 ## Health
