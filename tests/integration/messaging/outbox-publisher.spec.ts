@@ -13,7 +13,7 @@ import { OutboxRepository } from '../../../src/infrastructure/persistence/mikro-
 import { FakeClock } from '../../support/fakes/fake-clock';
 import { aFakeEvent } from '../../support/fakes/fake-integration-event';
 import { testInfraConfig } from '../../support/infra-config';
-import { TestEventConsumer } from '../../support/test-event-consumer';
+import { type EventCollector, TestEventConsumer } from '../../support/test-event-consumer';
 import { createTestQueues, type TestQueues } from '../../support/test-queues';
 import { uuidv7 } from '../../support/uuid';
 import { createOrmDatabase, type OrmDatabase } from '../persistence/messaging-orm';
@@ -71,6 +71,15 @@ const until = async (condition: () => Promise<boolean>, timeoutMs: number, what:
   }
 };
 
+/** Arrival order on the FIFO queue (one group per aggregate), first delivery of each event: the order on the wire. */
+const wireOrder = (collector: EventCollector, aggregateId: string): string[] => [
+  ...new Set(
+    collector.deliveries
+      .filter((delivery) => delivery.envelope.aggregateId === aggregateId)
+      .map((delivery) => delivery.envelope.eventId),
+  ),
+];
+
 const switchable = (initial: IMessagePublisher) => {
   let current = initial;
   return {
@@ -116,7 +125,7 @@ describe('outbox publisher against PostgreSQL and LocalStack SQS', () => {
   afterAll(() => db?.close());
 
   it('3 workers on separate pools publish every message at least once and leave nothing pending', async () => {
-    const messages = await seed(db.orm, 6, 10);
+    const messages = await seed(db.orm, 12, 5);
     const orms = await Promise.all([db.connect(), db.connect(), db.connect()]);
     const rounds: PublishOutboxBatchOutput[][] = orms.map(() => []);
     const errors: unknown[] = [];
@@ -152,7 +161,8 @@ describe('outbox publisher against PostgreSQL and LocalStack SQS', () => {
     }
     for (const aggregateId of new Set(messages.map((message) => message.aggregateId))) {
       const versions = collector.byAggregate(aggregateId).map((event) => (event.data as { walletVersion: number }).walletVersion);
-      expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      expect(versions).toEqual([1, 2, 3, 4, 5]);
+      expect(wireOrder(collector, aggregateId)).toEqual(collector.byAggregate(aggregateId).map((event) => event.eventId));
     }
   });
 
@@ -199,13 +209,13 @@ describe('outbox publisher against PostgreSQL and LocalStack SQS', () => {
       clock: new SystemClock(),
       config: publisherConfig({ leaseMs, batchSize: 10 }),
     });
-    const beforeExpiry = await worker.runOnce();
-    expect(beforeExpiry.published).toBe(2);
+    expect(await worker.runOnce()).toMatchObject({ claimed: 0 });
     expect((await new OutboxRepository(db.orm.em.fork()).findById(crashed.id))?.isPending()).toBe(true);
 
     await Bun.sleep(Math.max(0, (leased?.lockedUntil?.getTime() ?? 0) - Date.now()) + 50);
     const afterExpiry = await worker.runOnce();
     expect(afterExpiry).toMatchObject({ claimed: 1, published: 1, failed: 0 });
+    for (let round = 0; round < 2; round++) expect(await worker.runOnce()).toMatchObject({ claimed: 1, published: 1 });
     expect(await pendingCount(db.orm)).toBe(0);
 
     const collector = await new TestEventConsumer(queues.client, queues.events.url).drainUntilReceived(
@@ -216,6 +226,82 @@ describe('outbox publisher against PostgreSQL and LocalStack SQS', () => {
     expect(collector.byAggregate(crashed.aggregateId).map((event) => event.eventId)).toEqual(
       messages.map((message) => message.id),
     );
+    expect(wireOrder(collector, crashed.aggregateId)).toEqual(messages.map((message) => message.id));
+  });
+
+  it('keeps the wire order of an aggregate when its head fails, one message per round', async () => {
+    const clock = new FakeClock(new Date());
+    const messages = await seed(db.orm, 1, 3, clock.now());
+    const [head] = messages;
+    if (head === undefined) throw new Error('nothing seeded');
+    const real = realPublisher();
+    let headFailures = 1;
+    const worker = createOutboxPublisherWorker({
+      em: db.orm.em,
+      publisher: {
+        publish: async (message) => {
+          if (message.id === head.id && headFailures-- > 0) throw new Error('SQS throttled');
+          await real.publish(message);
+        },
+      },
+      clock,
+      random: () => 0.5,
+      config: publisherConfig({ batchSize: 1 }),
+    });
+
+    expect(await worker.runOnce()).toMatchObject({ claimed: 1, failed: 1 });
+    expect(await worker.runOnce()).toMatchObject({ claimed: 0 });
+    clock.set((await new OutboxRepository(db.orm.em.fork()).findById(head.id))!.nextAttemptAt);
+    for (let round = 0; round < 3; round++) expect(await worker.runOnce()).toMatchObject({ published: 1 });
+
+    const collector = await new TestEventConsumer(queues.client, queues.events.url).drainUntilReceived(
+      messages.map((message) => message.id),
+    );
+    expect(wireOrder(collector, head.aggregateId)).toEqual(messages.map((message) => message.id));
+  });
+
+  it('never lets another instance publish past a head that is still leased', async () => {
+    const messages = await seed(db.orm, 1, 3);
+    const [head] = messages;
+    if (head === undefined) throw new Error('nothing seeded');
+    const [ormA, ormB] = await Promise.all([db.connect(), db.connect()]);
+    const real = realPublisher();
+    let release: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let headInFlight = false;
+    const instanceA = createOutboxPublisherWorker({
+      em: ormA.em,
+      publisher: {
+        publish: async (message) => {
+          headInFlight = true;
+          await released;
+          await real.publish(message);
+        },
+      },
+      clock: new SystemClock(),
+      config: publisherConfig({ publishTimeoutMs: 5_000, leaseMs: 30_000 }),
+    });
+    const instanceB = createOutboxPublisherWorker({
+      em: ormB.em,
+      publisher: real,
+      clock: new SystemClock(),
+      config: publisherConfig(),
+    });
+
+    const roundA = instanceA.runOnce();
+    await until(async () => headInFlight, 5_000, 'instance A to hold the head');
+    for (let round = 0; round < 3; round++) expect(await instanceB.runOnce()).toMatchObject({ claimed: 0 });
+
+    release();
+    expect(await roundA).toMatchObject({ claimed: 1, published: 1 });
+    for (let round = 0; round < 2; round++) expect(await instanceB.runOnce()).toMatchObject({ claimed: 1, published: 1 });
+
+    const collector = await new TestEventConsumer(queues.client, queues.events.url).drainUntilReceived(
+      messages.map((message) => message.id),
+    );
+    expect(wireOrder(collector, head.aggregateId)).toEqual(messages.map((message) => message.id));
   });
 
   it('backs off while SQS is unreachable and publishes once it is back', async () => {
