@@ -6,11 +6,13 @@ import type {
 
 const canonical = (value: unknown): string => {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, item]) => item !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`;
 };
 
-/** Returns the canonical JSON itself (no digest), which keeps test failures readable. */
+/** Returns the canonical JSON itself (no digest), which keeps test failures readable. `undefined` counts as absent. */
 export class FakePayloadHasher implements IPayloadHasher {
   hash(payload: WagerPayload): string {
     return canonical(payload);
