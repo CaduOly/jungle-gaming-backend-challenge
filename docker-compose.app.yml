@@ -25,7 +25,10 @@ x-app-env: &app-env
 
 services:
   migrate:
-    build: .
+    build:
+      context: .
+      # bun install resolves the npm registry through the host's DNS (the default build bridge may not resolve it).
+      network: host
     image: jungle-wagering-app:local
     command: ["bun", "run", "migrate"]
     environment: *app-env
