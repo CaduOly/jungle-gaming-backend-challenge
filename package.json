@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test ./src ./tests/support ./tests/e2e ./tests/load/support",
-    "test:arch": "depcruise src tests/support --config .dependency-cruiser.cjs && bun test ./tests/arch",
+    "test:arch": "bun --bun x depcruise src tests/support --config .dependency-cruiser.cjs && bun test ./tests/arch",
     "test:integration": "bun test --timeout 60000 ./tests/integration",
     "test:concurrency": "bun test --timeout 120000 --rerun-each ${RERUN_EACH:-20} ./tests/concurrency",
     "test:multi": "bun test --timeout 180000 ./tests/multi-instance",
@@ -46,9 +46,10 @@
     "@types/bun": "1.4.4",
     "@types/express": "5.0.6",
     "@types/pg": "8.23.1",
+    "@typescript/native": "npm:typescript@7.0.2",
     "dependency-cruiser": "18.7.0",
     "eslint": "10.13.0",
-    "typescript": "6.0.3",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
     "typescript-eslint": "8.72.1"
   }
 }
