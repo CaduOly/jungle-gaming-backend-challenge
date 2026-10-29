@@ -19,7 +19,7 @@ const STATUS_TABLE: Record<string, string[]> = {
 const RAW_ROUTES = /^\/(docs|health)(\/|-|$)/;
 
 type MediaType = { schema?: { allOf?: Array<{ $ref?: string }> }; examples?: Record<string, { value: { code: number } }> };
-type ResponseObject = { content?: Record<string, MediaType> };
+type ResponseObject = { description?: string; content?: Record<string, MediaType> };
 type Operation = { responses: Record<string, ResponseObject>; parameters?: unknown[]; security?: unknown };
 type Doc = {
   paths: Record<string, Record<string, Operation>>;
@@ -95,6 +95,12 @@ describe('OpenAPI document', () => {
         type: 'string',
         pattern: '^(0|[1-9]\\d{0,17})\\.\\d{2}$',
       });
+    }
+  });
+
+  it('tells where the 413 limit comes from on every body route', () => {
+    for (const operation of [doc.paths['/wallets']?.post, doc.paths['/wagering/transactions']?.post]) {
+      expect(operation?.responses['413']?.description).toContain('HTTP_BODY_LIMIT');
     }
   });
 

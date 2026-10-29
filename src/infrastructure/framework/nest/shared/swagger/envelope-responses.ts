@@ -88,7 +88,7 @@ export const internalErrorResponse: EnvelopeResponse = {
 export const bodyResponses: EnvelopeResponse[] = [
   {
     status: 413,
-    description: 'The body is over the size limit (100 kB).',
+    description: 'The body is over the size limit (HTTP_BODY_LIMIT, 100kb by default).',
     examples: { payloadTooLarge: problem('Body too large', ValidationDetailMessage.PAYLOAD_TOO_LARGE) },
   },
   {

@@ -297,7 +297,20 @@ describe('HTTP API over the in-memory persistence', () => {
       expectReply(reply, 413, ['PAYLOAD_TOO_LARGE']);
     });
 
-    it.each(['text/plain', 'application/xml', 'application/x-www-form-urlencoded'])(
+    it('reads the body limit from HTTP_BODY_LIMIT', async () => {
+      const small = await startInMemoryHttpApp({ env: { HTTP_BODY_LIMIT: '1kb' } });
+      try {
+        const smallCall = client(small.baseUrl);
+        const fits = await smallCall('POST', '/wallets', { body: { playerId: 'x'.repeat(900) } });
+        expect(fits.status).toBe(400);
+        expect(fits.body.detailsMessage.map((item) => item.code)).not.toContain('PAYLOAD_TOO_LARGE');
+        expectReply(await smallCall('POST', '/wallets', { body: { playerId: 'x'.repeat(1_100) } }), 413, ['PAYLOAD_TOO_LARGE']);
+      } finally {
+        await small.close();
+      }
+    });
+
+    it.each(['text/plain', 'application/xml', 'application/x-www-form-urlencoded', 'application/merge-patch+json', 'application/vnd.api+json'])(
       'answers 415 for a %s body',
       async (contentType) => {
         const reply = await call('POST', '/wagering/transactions', {

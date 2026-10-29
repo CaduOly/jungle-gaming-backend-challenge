@@ -4,7 +4,7 @@ import { detail } from '../envelope/api-response';
 import { HttpProblem } from '../errors/http-problem';
 import { ValidationDetailMessage } from '../i18n/validation.detail-message';
 
-const JSON_TYPES = ['application/json', 'application/*+json'];
+const JSON_TYPE = 'application/json';
 
 const carriesBody = (request: Request): boolean => {
   if (request.headers['transfer-encoding'] !== undefined) return true;
@@ -21,7 +21,7 @@ const carriesBody = (request: Request): boolean => {
 export class JsonContentTypeGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
-    if (carriesBody(request) && !request.is(JSON_TYPES)) {
+    if (carriesBody(request) && !request.is(JSON_TYPE)) {
       throw new HttpProblem(415, [detail(ValidationDetailMessage.UNSUPPORTED_MEDIA_TYPE)]);
     }
     return true;

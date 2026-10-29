@@ -67,8 +67,8 @@ Vale para sucesso e erro em todos os endpoints de negócio. Health (`/health/*`)
 | Wallet ou transação inexistente | 404 | `WALLET_NOT_FOUND` / `TRANSACTION_NOT_FOUND` |
 | Transação de outro provider buscada por id (`GET /wagering/transactions/:id`) | 404 | `TRANSACTION_NOT_FOUND`. A resposta é idêntica à de um id inexistente: a API não confirma que a transação existe. |
 | `IDEMPOTENCY_CONFLICT`, `DUPLICATE_EXTERNAL_TRANSACTION`, wallet duplicada | 409 | o próprio código |
-| Body acima do limite (100 kB) | 413 | `PAYLOAD_TOO_LARGE` |
-| Body que não é JSON (`Content-Type` diferente de `application/json` ou `application/*+json`) | 415 | `UNSUPPORTED_MEDIA_TYPE`. Um POST sem body, como a reconciliação, passa. |
+| Body acima do limite (`HTTP_BODY_LIMIT`, padrão `100kb`) | 413 | `PAYLOAD_TOO_LARGE` |
+| Body que não é JSON (`Content-Type` diferente de `application/json`, com ou sem `charset`) | 415 | `UNSUPPORTED_MEDIA_TYPE`. O parser só lê `application/json`, então `application/merge-patch+json` e outros `application/*+json` também caem aqui. |
 | REJECTED (demais FailureCodes, incluindo `BALANCE_LIMIT_EXCEEDED`) | 422 | o FailureCode |
 | Transitório (DB fora, lock timeout, deadlock) | 503 + `Retry-After` | `INFRA_UNAVAILABLE` |
 | Erro desconhecido | 500 | `INTERNAL_ERROR`. Stack e mensagem interna não vazam para o corpo. |
