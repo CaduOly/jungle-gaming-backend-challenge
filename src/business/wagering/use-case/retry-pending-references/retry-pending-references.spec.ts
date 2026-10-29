@@ -8,6 +8,7 @@ import {
   type WalletView,
 } from '../../../../../tests/support/fakes/fake-wagering-app';
 import { FailureCode } from '../../../shared/error/failure-code';
+import { aPlayerId } from '../../../../../tests/support/fakes/sequential-id-generator';
 
 describe('RetryPendingReferences', () => {
   let app: FakeWageringApp;
@@ -20,7 +21,7 @@ describe('RetryPendingReferences', () => {
     await assertEveryFakeWalletConsistent(app.db);
   });
 
-  const open = (balance = '100.00', playerId = 'player-1'): Promise<WalletView> =>
+  const open = (balance = '100.00', playerId = aPlayerId(1)): Promise<WalletView> =>
     app.createWallet.execute({ playerId, initialBalance: { amount: balance, currency: 'BRL' } });
   const submit = (wallet: WalletView, kind: string, ext: string, options: SubmissionOptions = {}) =>
     app.process.execute(aSubmission(wallet, kind, ext, options));
@@ -219,7 +220,7 @@ describe('RetryPendingReferences', () => {
   });
 
   it('two workers in parallel never process the same item twice', async () => {
-    const wallets = await Promise.all(Array.from({ length: 4 }, (_, i) => open('100.00', `player-${i}`)));
+    const wallets = await Promise.all(Array.from({ length: 4 }, (_, i) => open('100.00', aPlayerId(i))));
     for (const wallet of wallets) {
       await submit(wallet, 'REFUND', `${wallet.id}-refund`, { amount: '30.00', reference: `${wallet.id}-bet` });
       await submit(wallet, 'BET', `${wallet.id}-bet`, { amount: '30.00' });
