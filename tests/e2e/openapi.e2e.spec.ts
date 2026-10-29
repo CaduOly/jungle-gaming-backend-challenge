@@ -16,7 +16,7 @@ const STATUS_TABLE: Record<string, string[]> = {
   'get /i18n': ['200', '500'],
 };
 
-const RAW_ROUTES = /^\/(docs|health)(\/|-|$)/;
+const RAW_ROUTES = /^\/(docs|health|metrics)(\/|-|$)/;
 
 type MediaType = { schema?: { allOf?: Array<{ $ref?: string }> }; examples?: Record<string, { value: { code: number } }> };
 type ResponseObject = { description?: string; content?: Record<string, MediaType> };

@@ -6,6 +6,10 @@ export const PROVIDER_IDENTITY = Symbol('PROVIDER_IDENTITY');
 export const PENDING_REFERENCE_BACKOFF = Symbol('PENDING_REFERENCE_BACKOFF');
 export const HTTP_CONFIG = Symbol('HTTP_CONFIG');
 export const READINESS_PROBE = Symbol('READINESS_PROBE');
+export const LOGGER = Symbol('LOGGER');
+export const METRICS = Symbol('METRICS');
+/** WAGERING_PERSISTENCE's unit of work behind ObservedUnitOfWork (lock wait and lock conflicts). */
+export const UNIT_OF_WORK = Symbol('UNIT_OF_WORK');
 /** The swappable persistence: in-memory today, PostgreSQL once T07b lands. */
 export const WAGERING_PERSISTENCE = Symbol('WAGERING_PERSISTENCE');
 

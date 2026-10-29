@@ -1,16 +1,19 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import type { IReadinessCheck } from '../../../health/readiness-check.port';
+import type { Observability } from '../../../observability/observability';
 import { HealthModule } from '../health/health.module';
 import { I18nController } from '../i18n/i18n.controller';
 import { WageringController } from '../wagering/wagering.controller';
 import { WalletController } from '../wallet/wallet.controller';
 import { ProviderAuthGuard } from './auth/provider-auth.guard';
 import { coreProviders } from './di/core.providers';
+import { LOGGER, METRICS } from './di/tokens';
 import { useCaseProviders } from './di/use-case.providers';
 import { EnvelopeInterceptor } from './envelope/envelope.interceptor';
 import { HttpExceptionFilter } from './errors/http-exception.filter';
 import { readHttpConfig } from './http-config';
+import { MetricsController } from './observability/metrics.controller';
 import { createValidationPipe } from './validation/validation.pipe';
 
 export interface AppModuleOptions {
@@ -21,6 +24,8 @@ export interface AppModuleOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** What /health/ready checks: PostgreSQL and SQS in production, nothing over the in-memory fakes. */
   readonly readinessChecks?: readonly IReadinessCheck[];
+  /** The process logger and metrics registry, built once by createHttpApp and shared with the workers. */
+  readonly observability: Observability;
 }
 
 @Module({})
@@ -30,8 +35,10 @@ export class AppModule {
     return {
       module: AppModule,
       imports: [HealthModule.forRoot(options.readinessChecks ?? [], readHttpConfig(env).readinessTimeoutMs)],
-      controllers: [WalletController, WageringController, I18nController],
+      controllers: [WalletController, WageringController, I18nController, MetricsController],
       providers: [
+        { provide: LOGGER, useValue: options.observability.logger },
+        { provide: METRICS, useValue: options.observability.metrics },
         ...coreProviders(env),
         ...(options.overrides ?? []),
         options.persistence,
