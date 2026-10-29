@@ -14,6 +14,10 @@ export class ValidationDetailMessage {
   static readonly INVALID_CURRENCY: IDetailMessage = error(NS, 'INVALID_CURRENCY');
   static readonly INVALID_KIND: IDetailMessage = error(NS, 'INVALID_KIND');
   static readonly KIND_NOT_SUBMITTABLE: IDetailMessage = error(NS, 'KIND_NOT_SUBMITTABLE');
+  static readonly AMOUNT_MUST_BE_POSITIVE: IDetailMessage = error(NS, 'AMOUNT_MUST_BE_POSITIVE');
+  static readonly REFERENCE_REQUIRED: IDetailMessage = error(NS, 'REFERENCE_REQUIRED');
+  static readonly REFERENCE_NOT_ALLOWED: IDetailMessage = error(NS, 'REFERENCE_NOT_ALLOWED');
+  static readonly SELF_REFERENCE: IDetailMessage = error(NS, 'SELF_REFERENCE');
   static readonly INVALID_CURSOR: IDetailMessage = error(NS, 'INVALID_CURSOR');
   static readonly INVALID_LIMIT: IDetailMessage = error(NS, 'INVALID_LIMIT');
   static readonly IDEMPOTENCY_KEY_REQUIRED: IDetailMessage = error(NS, 'IDEMPOTENCY_KEY_REQUIRED');

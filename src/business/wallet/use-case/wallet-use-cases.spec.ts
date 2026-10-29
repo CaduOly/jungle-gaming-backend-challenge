@@ -92,9 +92,10 @@ describe('wallet use cases', () => {
 
     it.each([
       ['a blank player', { playerId: ' ', initialBalance: brl('1.00') }, 'playerId'],
-      ['a malformed amount', { playerId: 'p', initialBalance: brl('1.5') }, 'initialBalance'],
-      ['a negative amount', { playerId: 'p', initialBalance: brl('-1.00') }, 'initialBalance'],
-      ['a bad currency', { playerId: 'p', initialBalance: { amount: '1.00', currency: 'brl' } }, 'initialBalance'],
+      ['a malformed amount', { playerId: 'p', initialBalance: brl('1.5') }, 'initialBalance.amount'],
+      ['a negative amount', { playerId: 'p', initialBalance: brl('-1.00') }, 'initialBalance.amount'],
+      ['a bad currency', { playerId: 'p', initialBalance: { amount: '1.00', currency: 'brl' } }, 'initialBalance.currency'],
+      ['no balance at all', { playerId: 'p', initialBalance: undefined as never }, 'initialBalance'],
     ])('rejects %s as invalid input', async (_name, input, field) => {
       const error = await app.createWallet.execute(input).catch((reason: unknown) => reason);
       expect(error).toBeInstanceOf(InvalidRequestError);

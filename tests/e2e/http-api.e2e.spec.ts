@@ -202,6 +202,16 @@ describe('HTTP API over the in-memory persistence', () => {
       expect(reply.detailsMessage[0]?.field).toBe(field);
     });
 
+    it.each([
+      ['a BET of 0.00', { money: { amount: '0.00', currency: 'BRL' } }, 'AMOUNT_MUST_BE_POSITIVE', 'money.amount'],
+      ['a REFUND without reference', { kind: 'REFUND' }, 'REFERENCE_REQUIRED', 'referenceExternalTransactionId'],
+      ['a BET with a reference', { referenceExternalTransactionId: 'bet-0' }, 'REFERENCE_NOT_ALLOWED', 'referenceExternalTransactionId'],
+    ])('answers 400 on the exact field for an entity rule: %s', async (_case, overrides, code, field) => {
+      const wallet = await openWallet('100.00');
+      const reply = expectReply(await submit(submission(wallet, overrides)), 400, [code]);
+      expect(reply.detailsMessage[0]).toMatchObject({ field, message: `VALIDATION.ERROR.${code}` });
+    });
+
     it('requires the Idempotency-Key header', async () => {
       const wallet = await openWallet('100.00');
       const reply = expectReply(await submit(submission(wallet), { key: null }), 400, ['IDEMPOTENCY_KEY_REQUIRED']);

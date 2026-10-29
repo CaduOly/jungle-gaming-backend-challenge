@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { FailureCode } from '../../../../../business/shared/error/failure-code';
-import { allDetailMessages, DETAIL_MESSAGE_CATALOGS, detailForFailureCode, findDetailMessage } from './catalog';
+import { InputRule } from '../../../../../business/shared/error/input-rule';
+import { allDetailMessages, DETAIL_MESSAGE_CATALOGS, detailForFailureCode, detailForInputRule, findDetailMessage } from './catalog';
 
 describe('detail message catalog', () => {
   it('has an entry for every FailureCode, whose code is the FailureCode itself', () => {
@@ -16,6 +17,14 @@ describe('detail message catalog', () => {
       message: 'WAGERING.ERROR.BALANCE_LIMIT_EXCEEDED',
       type: 'error',
     });
+  });
+
+  it('has a VALIDATION entry named after every InputRule, and INVALID_REQUEST when no rule is named', () => {
+    for (const rule of Object.values(InputRule)) {
+      expect(detailForInputRule(rule)).toEqual(findDetailMessage(rule)!);
+      expect(detailForInputRule(rule).message).toBe(`VALIDATION.ERROR.${rule}`);
+    }
+    expect(detailForInputRule(undefined).code).toBe('INVALID_REQUEST');
   });
 
   it('never repeats a code nor a message key', () => {

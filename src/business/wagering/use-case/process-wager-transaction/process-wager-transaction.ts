@@ -1,13 +1,14 @@
 import { InboxMessage } from '../../../messaging/entity/inbox-message';
 import { OutboxMessage } from '../../../messaging/entity/outbox-message';
 import { DomainError } from '../../../shared/error/domain-error';
+import { InputRule } from '../../../shared/error/input-rule';
 import { InvalidRequestError } from '../../../shared/error/invalid-request-error';
 import { UniqueConstraintViolationError } from '../../../shared/error/unique-constraint-violation-error';
 import type { ExponentialBackoff } from '../../../shared/policy/exponential-backoff';
 import type { IClock } from '../../../shared/port/clock.port';
 import type { IIdGenerator } from '../../../shared/port/id-generator.port';
 import type { IUseCase } from '../../../shared/use-case';
-import { Money } from '../../../shared/value-object/money';
+import { parseMoneyInput } from '../../../shared/value-object/parse-money-input';
 import type { Wallet } from '../../../wallet/entity/wallet';
 import type { WalletLedgerEntry } from '../../../wallet/entity/wallet-ledger-entry';
 import { WalletNotFoundError } from '../../../shared/error/wallet-not-found-error';
@@ -17,6 +18,7 @@ import { WagerSettlement } from '../../domain-service/wager-settlement';
 import { type CreateWagerTransactionProps, WagerTransaction } from '../../entity/wager-transaction';
 import { WagerKind } from '../../enum/wager-kind';
 import { IdempotencyConflictError } from '../../error/idempotency-conflict-error';
+import { InvalidWagerTransactionError } from '../../error/invalid-wager-transaction-error';
 import { ProviderIdentityMismatchError } from '../../error/provider-identity-mismatch-error';
 import type { IPayloadHasher, WagerPayload } from '../../port/payload-hasher.port';
 import type { IWageringUnitOfWork, TxRepositories } from '../../port/tx-repositories.port';
@@ -47,7 +49,7 @@ interface ParsedRequest {
 
 const requireText = (field: string, value: unknown): string => {
   if (typeof value !== 'string' || value.trim() === '' || value.length > MAX_TEXT_LENGTH) {
-    throw new InvalidRequestError(field, `must be a non-blank string of at most ${MAX_TEXT_LENGTH} characters`);
+    throw new InvalidRequestError(field, `must be a non-blank string of at most ${MAX_TEXT_LENGTH} characters`, InputRule.BLANK);
   }
   return value;
 };
@@ -95,8 +97,12 @@ export class ProcessWagerTransaction implements IUseCase<ProcessWagerTransaction
     const { payload, source } = input;
     const providerId = requireText('providerId', payload.providerId);
     const kind = requireText('kind', payload.kind);
-    if (kind === WagerKind.OPENING) throw new InvalidRequestError('kind', 'OPENING is internal and cannot be submitted');
-    if (!SUBMITTABLE_KINDS.has(kind)) throw new InvalidRequestError('kind', `must be one of ${[...SUBMITTABLE_KINDS].join(', ')}`);
+    if (kind === WagerKind.OPENING) {
+      throw new InvalidRequestError('kind', 'OPENING is internal and cannot be submitted', InputRule.KIND_NOT_SUBMITTABLE);
+    }
+    if (!SUBMITTABLE_KINDS.has(kind)) {
+      throw new InvalidRequestError('kind', `must be one of ${[...SUBMITTABLE_KINDS].join(', ')}`, InputRule.INVALID_KIND);
+    }
     const reference = payload.referenceExternalTransactionId ?? undefined;
     const props: Omit<CreateWagerTransactionProps, 'createdAt' | 'payloadHash'> = {
       id: this.ids.generate(),
@@ -108,7 +114,7 @@ export class ProcessWagerTransaction implements IUseCase<ProcessWagerTransaction
       roundId: requireText('roundId', payload.roundId),
       gameId: requireText('gameId', payload.gameId),
       kind: kind as WagerKind,
-      money: this.parseMoney(payload.money),
+      money: parseMoneyInput(payload.money, 'money'),
       ...(reference === undefined ? {} : { referenceExternalTransactionId: requireText('referenceExternalTransactionId', reference) }),
     };
     if (source.channel === 'SQS') {
@@ -132,6 +138,9 @@ export class ProcessWagerTransaction implements IUseCase<ProcessWagerTransaction
     try {
       WagerTransaction.create({ ...withHash, createdAt: this.clock.now() });
     } catch (error) {
+      if (error instanceof InvalidWagerTransactionError && error.field !== undefined) {
+        throw new InvalidRequestError(error.field, error.message, error.rule);
+      }
       if (error instanceof DomainError) throw new InvalidRequestError('payload', error.message);
       throw error;
     }
@@ -143,15 +152,6 @@ export class ProcessWagerTransaction implements IUseCase<ProcessWagerTransaction
       correlationId: input.correlationId ?? (source.channel === 'SQS' ? source.messageId : props.id),
       ...(source.channel === 'SQS' ? { causationId: source.messageId } : {}),
     };
-  }
-
-  private parseMoney(money: unknown): Money {
-    try {
-      return Money.from(money as Parameters<typeof Money.from>[0]);
-    } catch (error) {
-      if (error instanceof DomainError || error instanceof TypeError) throw new InvalidRequestError('money', String(error));
-      throw error;
-    }
   }
 
   /** Lock-free fast path for replays on a hot wallet: only already-committed decisions are answered here. */

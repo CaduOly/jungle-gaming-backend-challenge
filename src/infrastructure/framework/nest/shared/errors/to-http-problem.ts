@@ -10,7 +10,7 @@ import { WalletAlreadyExistsError } from '../../../../../business/wallet/error/w
 import { UnauthenticatedError } from '../../../../auth/dev-provider-identity';
 import { TransientInfrastructureError } from '../../../../error/transient-infrastructure-error';
 import { detail } from '../envelope/api-response';
-import { detailForFailureCode } from '../i18n/catalog';
+import { detailForFailureCode, detailForInputRule } from '../i18n/catalog';
 import { InfraDetailMessage } from '../i18n/infra.detail-message';
 import { ValidationDetailMessage } from '../i18n/validation.detail-message';
 import { WageringDetailMessage } from '../i18n/wagering.detail-message';
@@ -38,7 +38,7 @@ export const toHttpProblem = (error: unknown, options: HttpProblemOptions): Http
   if (error instanceof HttpProblem) return error;
   if (error instanceof UnauthenticatedError) return new HttpProblem(401, [detail(InfraDetailMessage.UNAUTHORIZED)]);
   if (error instanceof InvalidRequestError) {
-    return new HttpProblem(400, [detail(ValidationDetailMessage.INVALID_REQUEST, error.field)]);
+    return new HttpProblem(400, [detail(detailForInputRule(error.rule), error.field)]);
   }
   if (error instanceof InvalidLedgerCursorError) {
     return new HttpProblem(400, [detail(ValidationDetailMessage.INVALID_CURSOR, 'cursor')]);
