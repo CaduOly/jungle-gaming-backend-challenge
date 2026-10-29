@@ -18,11 +18,15 @@ const positive = (env: Readonly<Record<string, string | undefined>>, name: strin
   return value;
 };
 
-/** Backoff of a PENDING_REFERENCE transaction waiting for its reference; ExponentialBackoff validates the bounds. */
+/**
+ * Backoff of a PENDING_REFERENCE transaction waiting for its reference; ExponentialBackoff validates the bounds.
+ * The HTTP/SQS flow (first attempt) and the pending reference worker (the next ones) read the same PENDING_*
+ * variables, so the two can never schedule with different policies.
+ */
 export const readPendingReferenceBackoff = (
   env: Readonly<Record<string, string | undefined>>,
 ): PendingReferenceBackoffConfig => ({
-  baseMs: positive(env, 'PENDING_REFERENCE_BACKOFF_BASE_MS', DEFAULT_PENDING_REFERENCE_BACKOFF.baseMs),
-  capMs: positive(env, 'PENDING_REFERENCE_BACKOFF_CAP_MS', DEFAULT_PENDING_REFERENCE_BACKOFF.capMs),
-  maxAttempts: positive(env, 'PENDING_REFERENCE_MAX_ATTEMPTS', DEFAULT_PENDING_REFERENCE_BACKOFF.maxAttempts),
+  baseMs: positive(env, 'PENDING_BACKOFF_BASE_MS', DEFAULT_PENDING_REFERENCE_BACKOFF.baseMs),
+  capMs: positive(env, 'PENDING_BACKOFF_CAP_MS', DEFAULT_PENDING_REFERENCE_BACKOFF.capMs),
+  maxAttempts: positive(env, 'PENDING_MAX_ATTEMPTS', DEFAULT_PENDING_REFERENCE_BACKOFF.maxAttempts),
 });
