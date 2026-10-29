@@ -1,6 +1,6 @@
 # Épico — Distributed Wagering Processor
 
-Fonte: plano `verifique-o-readme-e-spicy-parrot.md` + enunciado no `README.md`.
+Fonte: plano `verifique-o-readme-e-spicy-parrot.md` + enunciado em `docs/CHALLENGE.md`.
 
 ## Objetivo
 

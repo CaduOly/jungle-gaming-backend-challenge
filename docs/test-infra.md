@@ -6,7 +6,7 @@ Todas as suítes de integração, concorrência e carga rodam contra o mesmo sta
 ## Isolamento
 
 - `createTestDatabase()` cria `wagering_test_<uuidv7>` e devolve `drop()`.
-- `createTestQueues()` cria `wagering-{commands,events}[-dlq]-<uuidv7>.fifo` com redrive e devolve `destroy()`.
+- `createTestQueues()` cria `wager-transactions[-dlq]-<uuidv7>.fifo` e `wagering-events[-dlq]-<uuidv7>.fifo` com redrive e devolve `destroy()`.
   Se uma das filas falhar no meio, as que já nasceram são apagadas.
 - `ResourceScope.track()` registra o cleanup no momento em que a criação começa. Um `dispose()` no
   `afterEach` derruba tudo, inclusive recurso que terminou de nascer depois de o teste falhar.
