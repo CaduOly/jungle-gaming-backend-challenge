@@ -31,6 +31,7 @@ export const detailForFailureCode = (code: FailureCode): IDetailMessage =>
 /** Every InputRule the domain can name has its message; a new rule without one does not compile. */
 const INPUT_RULE_MESSAGES: Readonly<Record<InputRule, IDetailMessage>> = {
   BLANK: ValidationDetailMessage.BLANK,
+  SURROUNDING_WHITESPACE: ValidationDetailMessage.SURROUNDING_WHITESPACE,
   INVALID_KIND: ValidationDetailMessage.INVALID_KIND,
   KIND_NOT_SUBMITTABLE: ValidationDetailMessage.KIND_NOT_SUBMITTABLE,
   INVALID_MONEY_AMOUNT: ValidationDetailMessage.INVALID_MONEY_AMOUNT,

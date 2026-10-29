@@ -47,16 +47,20 @@ interface ParsedRequest {
   readonly causationId?: string;
 }
 
+/** Surrounding whitespace is rejected, not trimmed: " tx-1" and "tx-1" would otherwise hash and store apart. */
 const requireText = (field: string, value: unknown): string => {
   if (typeof value !== 'string' || value.trim() === '' || value.length > MAX_TEXT_LENGTH) {
     throw new InvalidRequestError(field, `must be a non-blank string of at most ${MAX_TEXT_LENGTH} characters`, InputRule.BLANK);
+  }
+  if (value.trim() !== value) {
+    throw new InvalidRequestError(field, 'must not start or end with whitespace', InputRule.SURROUNDING_WHITESPACE);
   }
   return value;
 };
 
 /**
  * Orchestrates one submission (HTTP or SQS) in a single unit of work:
- * validate → normalized hash → lock-free idempotency pre-check → inbox (SQS) → wallet lock →
+ * validate → normalized hash → lock-free idempotency pre-check (HTTP) → inbox (SQS) → wallet lock →
  * IdempotencyCheck → ReferenceResolver → WagerSettlement → transaction, ledger, wallet, outbox and inbox.
  *
  * Not persisted, by design: invalid input (400), a provider acting for another one (no row is written under the
@@ -64,6 +68,10 @@ const requireText = (field: string, value: unknown): string => {
  * either, so a redelivery is processed once the wallet exists) and idempotency conflicts (409).
  * A unique violation means a concurrent commit won the race (e.g. the same key on another wallet, which the wallet
  * lock does not serialize): the unit is rolled back and the decision is re-read in a fresh one.
+ *
+ * The pre-check is HTTP only: on SQS the inbox comes first, so a messageId reused with another payload is always
+ * an InboxPayloadMismatchError (DLQ) and never a replay or a 409, and a new messageId for a committed decision is
+ * still recorded as processed. The wallet lock that path costs on a hot wallet is the price of that guarantee.
  */
 export class ProcessWagerTransaction implements IUseCase<ProcessWagerTransactionInput, ProcessWagerTransactionOutput> {
   private readonly settlement = new WagerSettlement();
@@ -82,8 +90,10 @@ export class ProcessWagerTransaction implements IUseCase<ProcessWagerTransaction
   async execute(input: ProcessWagerTransactionInput): Promise<ProcessWagerTransactionOutput> {
     const request = this.parse(input);
 
-    const replay = await this.unitOfWork.run((tx) => this.precheck(tx, request));
-    if (replay !== null) return replay;
+    if (request.source.channel === 'HTTP') {
+      const replay = await this.unitOfWork.run((tx) => this.precheck(tx, request));
+      if (replay !== null) return replay;
+    }
 
     try {
       return await this.unitOfWork.run((tx) => this.decide(tx, request));

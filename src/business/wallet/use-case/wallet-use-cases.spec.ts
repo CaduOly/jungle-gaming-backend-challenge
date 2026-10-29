@@ -50,6 +50,20 @@ describe('wallet use cases', () => {
       });
     });
 
+    it('carries the caller correlation id on WalletBalanceChanged, defaulting to the wallet id', async () => {
+      await app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('10.00'), correlationId: 'request-1' });
+      const defaulted = await app.createWallet.execute({ playerId: 'player-2', initialBalance: brl('10.00') });
+      expect(app.db.outbox.all().map((message) => message.payload.correlationId)).toEqual(['request-1', defaulted.id]);
+    });
+
+    it('rejects a playerId with surrounding whitespace', async () => {
+      const error = await app.createWallet
+        .execute({ playerId: ' player-1', initialBalance: brl('10.00') })
+        .catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(InvalidRequestError);
+      expect(error).toMatchObject({ field: 'playerId', rule: 'SURROUNDING_WHITESPACE' });
+    });
+
     it('opens at zero without OPENING, entry or event', async () => {
       const wallet = await app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('0.00') });
       expect(wallet).toMatchObject({ balance: brl('0.00'), version: 1 });

@@ -46,6 +46,9 @@ export class CreateWallet implements IUseCase<CreateWalletInput, WalletView> {
     if (typeof playerId !== 'string' || playerId.trim() === '' || playerId.length > MAX_TEXT_LENGTH) {
       throw new InvalidRequestError('playerId', `must be a non-blank string of at most ${MAX_TEXT_LENGTH} characters`, InputRule.BLANK);
     }
+    if (playerId.trim() !== playerId) {
+      throw new InvalidRequestError('playerId', 'must not start or end with whitespace', InputRule.SURROUNDING_WHITESPACE);
+    }
     const initialBalance = parseMoneyInput(input.initialBalance, 'initialBalance');
 
     try {
