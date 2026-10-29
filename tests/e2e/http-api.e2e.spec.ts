@@ -218,7 +218,7 @@ describe('HTTP API over the in-memory persistence', () => {
       expect(reply.detailsMessage[0]?.field).toBe('Idempotency-Key');
     });
 
-    it('reports every invalid field at once', async () => {
+    it('reports every invalid field at once, money format included', async () => {
       const reply = await submit({ kind: 'OPENING', money: { amount: '1', currency: 'BRL' } }, { key: 'k' });
       expect(reply.status).toBe(400);
       expect(reply.body.detailsMessage.map((item) => item.field)).toEqual([
@@ -229,7 +229,98 @@ describe('HTTP API over the in-memory persistence', () => {
         'roundId',
         'gameId',
         'kind',
+        'money.amount',
       ]);
+    });
+
+    it('checks amount and currency independently and joins them with the other fields', async () => {
+      const wallet = await openWallet('100.00');
+      const reply = expectReply(
+        await submit(submission(wallet, { roundId: '', money: { amount: '1', currency: 'brl' } })),
+        400,
+        ['BLANK', 'INVALID_MONEY_AMOUNT', 'INVALID_CURRENCY'],
+      );
+      expect(reply.detailsMessage.map((item) => item.field)).toEqual(['roundId', 'money.amount', 'money.currency']);
+    });
+
+    it('reports a missing Idempotency-Key together with an invalid body', async () => {
+      const wallet = await openWallet('100.00');
+      const reply = expectReply(await submit(submission(wallet, { walletId: 'nope' }), { key: null }), 400, [
+        'INVALID_UUID',
+        'IDEMPOTENCY_KEY_REQUIRED',
+      ]);
+      expect(reply.detailsMessage.map((item) => item.field)).toEqual(['walletId', 'Idempotency-Key']);
+    });
+
+    it('checks the wallet balance money independently too', async () => {
+      const reply = expectReply(
+        await call('POST', '/wallets', { body: { playerId: Bun.randomUUIDv7(), initialBalance: { amount: '1.5', currency: 'usd' } } }),
+        400,
+        ['INVALID_MONEY_AMOUNT', 'INVALID_CURRENCY'],
+      );
+      expect(reply.detailsMessage.map((item) => item.field)).toEqual(['initialBalance.amount', 'initialBalance.currency']);
+    });
+
+    it.each([
+      ['__proto__ at the top', '{"__proto__":{"polluted":true},"playerId":"PLAYER","initialBalance":{"amount":"1.00","currency":"BRL"}}', '__proto__'],
+      ['__proto__ nested', '{"playerId":"PLAYER","initialBalance":{"amount":"1.00","currency":"BRL","__proto__":{"polluted":true}}}', 'initialBalance.__proto__'],
+      ['constructor', '{"constructor":{"prototype":{"polluted":true}},"playerId":"PLAYER","initialBalance":{"amount":"1.00","currency":"BRL"}}', 'constructor'],
+      ['prototype', '{"playerId":"PLAYER","initialBalance":{"amount":"1.00","currency":"BRL"},"prototype":{}}', 'prototype'],
+    ])('rejects a body carrying %s and creates nothing', async (_case, raw, field) => {
+      const playerId = Bun.randomUUIDv7();
+      const reply = expectReply(
+        await call('POST', '/wallets', { rawBody: raw.replace('PLAYER', playerId), headers: { 'Content-Type': 'application/json' } }),
+        400,
+        ['FORBIDDEN_KEY'],
+      );
+      expect(reply.detailsMessage[0]?.field).toBe(field);
+      expect(http.fake.db.wallets.all().some((wallet) => wallet.playerId === playerId)).toBe(false);
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    });
+
+    it('rejects prototype keys on the wager route as well, next to a missing key', async () => {
+      const reply = expectReply(
+        await call('POST', '/wagering/transactions', {
+          rawBody: '{"__proto__":{"polluted":true}}',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        400,
+        ['FORBIDDEN_KEY', 'IDEMPOTENCY_KEY_REQUIRED'],
+      );
+      expect(reply.detailsMessage[0]?.field).toBe('__proto__');
+    });
+
+    it('answers 413 for a body over the limit', async () => {
+      const reply = await call('POST', '/wallets', { body: { playerId: 'x'.repeat(200_000) } });
+      expectReply(reply, 413, ['PAYLOAD_TOO_LARGE']);
+    });
+
+    it.each(['text/plain', 'application/xml', 'application/x-www-form-urlencoded'])(
+      'answers 415 for a %s body',
+      async (contentType) => {
+        const reply = await call('POST', '/wagering/transactions', {
+          rawBody: 'kind=BET',
+          headers: { 'Content-Type': contentType, 'Idempotency-Key': 'k' },
+        });
+        expectReply(reply, 415, ['UNSUPPORTED_MEDIA_TYPE']);
+      },
+    );
+
+    it('accepts JSON with a charset and a POST without any body', async () => {
+      const wallet = await openWallet('100.00');
+      expectReply(
+        await call('POST', '/wagering/transactions', {
+          rawBody: JSON.stringify(submission(wallet, { externalTransactionId: 'charset-tx' })),
+          headers: { 'Content-Type': 'application/json; charset=utf-8', 'Idempotency-Key': 'provider-a:charset-tx' },
+        }),
+        200,
+      );
+      expectReply(await call('POST', `/wallets/${wallet.id}/reconciliation`), 200);
+    });
+
+    it('answers 400 on the path for a malformed URI', async () => {
+      const reply = expectReply(await call('GET', '/wallets/%E0%A4%A'), 400, ['MALFORMED_PATH']);
+      expect(reply.detailsMessage[0]?.field).toBe('path');
     });
 
     it('rejects a malformed JSON body', async () => {

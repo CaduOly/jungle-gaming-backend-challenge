@@ -72,6 +72,36 @@ describe('Money', () => {
     });
   });
 
+  describe('isValidAmount / isValidCurrency', () => {
+    it.each(['0.00', '25.00', '999999999999999999.99'])('accepts the amount %s, exactly what from accepts', (amount) => {
+      expect(Money.isValidAmount(amount)).toBe(true);
+      expect(() => Money.from({ amount, currency: 'BRL' })).not.toThrow();
+    });
+
+    it.each(['1', '1.5', '1.005', '-1.00', '01.00', ' 1.00', '1e2', 25, null, undefined])(
+      'refuses the amount %p, exactly what from refuses',
+      (amount) => {
+        expect(Money.isValidAmount(amount)).toBe(false);
+        expect(() => Money.from({ amount: amount as string, currency: 'BRL' })).toThrow();
+      },
+    );
+
+    it.each([
+      ['BRL', true],
+      ['USD', true],
+      ['brl', false],
+      ['BR', false],
+      ['BRLL', false],
+      [1, false],
+      [undefined, false],
+    ])('judges the currency %p as %p, exactly as from does', (currency, valid) => {
+      expect(Money.isValidCurrency(currency)).toBe(valid);
+      const parse = () => Money.from({ amount: '1.00', currency: currency as string });
+      if (valid) expect(parse).not.toThrow();
+      else expect(parse).toThrow();
+    });
+  });
+
   describe('zero', () => {
     it('creates a zero amount in the given currency', () => {
       const zero = Money.zero('USD');

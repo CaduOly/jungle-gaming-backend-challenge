@@ -39,8 +39,17 @@ export class Money {
 
   static from(props: MoneyProps): Money {
     const { amount, currency } = props;
-    if (typeof amount !== 'string' || !AMOUNT_PATTERN.test(amount)) throw new InvalidMoneyAmountError(amount);
+    if (!Money.isValidAmount(amount)) throw new InvalidMoneyAmountError(amount);
     return new Money(BigInt(amount.replace('.', '')), Money.assertCurrency(currency));
+  }
+
+  /** The format rule of Money.from for the amount alone, so an edge can report it apart from the currency. */
+  static isValidAmount(amount: unknown): boolean {
+    return typeof amount === 'string' && AMOUNT_PATTERN.test(amount);
+  }
+
+  static isValidCurrency(currency: unknown): boolean {
+    return typeof currency === 'string' && CURRENCY_PATTERN.test(currency);
   }
 
   static zero(currency: string): Money {
@@ -107,7 +116,7 @@ export class Money {
   }
 
   private static assertCurrency(currency: unknown): string {
-    if (typeof currency !== 'string' || !CURRENCY_PATTERN.test(currency)) throw new InvalidCurrencyError(currency);
-    return currency;
+    if (!Money.isValidCurrency(currency)) throw new InvalidCurrencyError(currency);
+    return currency as string;
   }
 }
