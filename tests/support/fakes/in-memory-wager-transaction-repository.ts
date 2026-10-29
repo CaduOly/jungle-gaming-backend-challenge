@@ -184,7 +184,11 @@ export class InMemoryWagerTransactionRepository implements IWagerTransactionRepo
           (lockedUntil === null || lockedUntil <= now) &&
           !this.store.locks.isLocked(state.id),
       )
-      .sort((a, b) => (a.state.nextAttemptAt?.getTime() ?? 0) - (b.state.nextAttemptAt?.getTime() ?? 0))
+      .sort(
+        (a, b) =>
+          (a.state.nextAttemptAt?.getTime() ?? 0) - (b.state.nextAttemptAt?.getTime() ?? 0) ||
+          (a.state.id < b.state.id ? -1 : a.state.id > b.state.id ? 1 : 0),
+      )
       .slice(0, limit);
     const leaseEnd = new Date(now.getTime() + leaseMs);
     for (const row of due) {
