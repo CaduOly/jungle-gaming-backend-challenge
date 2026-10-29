@@ -16,8 +16,8 @@ export interface SqsConfig {
 }
 
 export const DEFAULT_EVENTS_QUEUE_NAME = 'wagering-events.fifo';
-export const DEFAULT_COMMANDS_QUEUE_NAME = 'wagering-commands.fifo';
-export const DEFAULT_COMMANDS_DLQ_NAME = 'wagering-commands-dlq.fifo';
+export const DEFAULT_COMMANDS_QUEUE_NAME = 'wager-transactions.fifo';
+export const DEFAULT_COMMANDS_DLQ_NAME = 'wager-transactions-dlq.fifo';
 
 const optional = (env: Env, name: string): string | undefined => {
   const value = env[name]?.trim();

@@ -61,13 +61,13 @@ describe('LocalStack SQS FIFO redrive (spike)', () => {
 
     const dead = await receiveOnce(client, commands.dlqUrl);
     expect(dead?.Body).toBe(body);
-    expect(dead?.Attributes?.DeadLetterQueueSourceArn).toEndWith(`:wagering-commands-${queues.suffix}.fifo`);
+    expect(dead?.Attributes?.DeadLetterQueueSourceArn).toEndWith(`:wager-transactions-${queues.suffix}.fifo`);
   });
 
   it('compose init created the shared FIFO queues with redrive to their DLQs', async () => {
     const client = createSqsClient();
     try {
-      for (const name of ['wagering-commands', 'wagering-events']) {
+      for (const name of ['wager-transactions', 'wagering-events']) {
         const { QueueUrl } = await client.send(new GetQueueUrlCommand({ QueueName: `${name}.fifo` }));
         const { Attributes } = await client.send(
           new GetQueueAttributesCommand({ QueueUrl, AttributeNames: ['FifoQueue', 'RedrivePolicy'] }),

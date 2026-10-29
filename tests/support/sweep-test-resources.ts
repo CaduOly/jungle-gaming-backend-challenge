@@ -5,7 +5,9 @@ import { createSqsClient } from './test-queues';
 
 const SUFFIX = '([0-9a-f]{32})';
 const TEST_DATABASE_PATTERN = new RegExp(`^wagering_test_${SUFFIX}$`);
-const TEST_QUEUE_PATTERN = new RegExp(`^wagering-(?:commands|events)(?:-dlq)?-${SUFFIX}\\.fifo$`);
+const TEST_QUEUE_PATTERN = new RegExp(
+  `^(?:wager-transactions|wagering-commands|wagering-events)(?:-dlq)?-${SUFFIX}\\.fifo$`,
+);
 const DEFAULT_MIN_AGE_MS = 30 * 60 * 1000;
 
 export interface SweepOptions {
@@ -63,7 +65,7 @@ const listQueueUrls = async (client: SQSClient): Promise<string[]> => {
   const urls: string[] = [];
   let NextToken: string | undefined;
   do {
-    const page = await client.send(new ListQueuesCommand({ QueueNamePrefix: 'wagering-', MaxResults: 1000, NextToken }));
+    const page = await client.send(new ListQueuesCommand({ QueueNamePrefix: 'wager', MaxResults: 1000, NextToken }));
     urls.push(...(page.QueueUrls ?? []));
     NextToken = page.NextToken;
   } while (NextToken !== undefined);
@@ -104,7 +106,8 @@ const minAgeFromArgs = (args: readonly string[]): number => {
 const USAGE = `Usage: bun run test:sweep [--older-than-minutes=N | --all | --help]
 
 Drops leaked test databases (wagering_test_<suffix>) and test queues
-(wagering-{commands,events}[-dlq]-<suffix>.fifo). The four compose queues are never touched.
+(wager-transactions[-dlq]-<suffix>.fifo, wagering-events[-dlq]-<suffix>.fifo and the legacy
+wagering-commands[-dlq]-<suffix>.fifo). The four compose queues are never touched.
 The age comes from the UUIDv7 timestamp in the suffix.
 
   --older-than-minutes=N  only resources created more than N minutes ago (default: 30)

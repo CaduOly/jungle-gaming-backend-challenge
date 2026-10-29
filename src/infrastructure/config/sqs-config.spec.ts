@@ -7,8 +7,8 @@ describe('readSqsConfig', () => {
       region: 'us-east-1',
       maxAttempts: 3,
       eventsQueue: { name: 'wagering-events.fifo' },
-      commandsQueue: { name: 'wagering-commands.fifo' },
-      commandsDeadLetterQueue: { name: 'wagering-commands-dlq.fifo' },
+      commandsQueue: { name: 'wager-transactions.fifo' },
+      commandsDeadLetterQueue: { name: 'wager-transactions-dlq.fifo' },
     });
   });
 
@@ -29,8 +29,8 @@ describe('readSqsConfig', () => {
       credentials: { accessKeyId: 'test', secretAccessKey: 'secret' },
       maxAttempts: 1,
       eventsQueue: { url: 'http://localhost:4566/000000000000/wagering-events-x.fifo' },
-      commandsQueue: { name: 'wagering-commands.fifo' },
-      commandsDeadLetterQueue: { name: 'wagering-commands-dlq.fifo' },
+      commandsQueue: { name: 'wager-transactions.fifo' },
+      commandsDeadLetterQueue: { name: 'wager-transactions-dlq.fifo' },
     });
   });
 

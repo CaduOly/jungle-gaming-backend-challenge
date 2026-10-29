@@ -27,5 +27,5 @@ create_with_dlq() {
   echo "created ${name}.fifo -> ${name}-dlq.fifo (maxReceiveCount=${MAX_RECEIVE_COUNT})"
 }
 
-create_with_dlq wagering-commands
+create_with_dlq wager-transactions
 create_with_dlq wagering-events
