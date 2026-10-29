@@ -8,6 +8,7 @@ import type { ExponentialBackoff } from '../../../shared/policy/exponential-back
 import type { IClock } from '../../../shared/port/clock.port';
 import type { IIdGenerator } from '../../../shared/port/id-generator.port';
 import type { IUseCase } from '../../../shared/use-case';
+import { requireText, requireUuid } from '../../../shared/validation/request-fields';
 import { parseMoneyInput } from '../../../shared/value-object/parse-money-input';
 import type { Wallet } from '../../../wallet/entity/wallet';
 import type { WalletLedgerEntry } from '../../../wallet/entity/wallet-ledger-entry';
@@ -30,7 +31,6 @@ import type {
 } from './process-wager-transaction.dto';
 import { WagerOutcomeEvents } from './wager-outcome-events';
 
-const MAX_TEXT_LENGTH = 255;
 const SUBMITTABLE_KINDS: ReadonlySet<string> = new Set([
   WagerKind.BET,
   WagerKind.WIN,
@@ -46,17 +46,6 @@ interface ParsedRequest {
   readonly correlationId: string;
   readonly causationId?: string;
 }
-
-/** Surrounding whitespace is rejected, not trimmed: " tx-1" and "tx-1" would otherwise hash and store apart. */
-const requireText = (field: string, value: unknown): string => {
-  if (typeof value !== 'string' || value.trim() === '' || value.length > MAX_TEXT_LENGTH) {
-    throw new InvalidRequestError(field, `must be a non-blank string of at most ${MAX_TEXT_LENGTH} characters`, InputRule.BLANK);
-  }
-  if (value.trim() !== value) {
-    throw new InvalidRequestError(field, 'must not start or end with whitespace', InputRule.SURROUNDING_WHITESPACE);
-  }
-  return value;
-};
 
 /**
  * Orchestrates one submission (HTTP or SQS) in a single unit of work:
@@ -119,8 +108,8 @@ export class ProcessWagerTransaction implements IUseCase<ProcessWagerTransaction
       providerId,
       idempotencyKey: requireText('idempotencyKey', input.idempotencyKey),
       externalTransactionId: requireText('externalTransactionId', payload.externalTransactionId),
-      playerId: requireText('playerId', payload.playerId),
-      walletId: requireText('walletId', payload.walletId),
+      playerId: requireUuid('playerId', payload.playerId),
+      walletId: requireUuid('walletId', payload.walletId),
       roundId: requireText('roundId', payload.roundId),
       gameId: requireText('gameId', payload.gameId),
       kind: kind as WagerKind,

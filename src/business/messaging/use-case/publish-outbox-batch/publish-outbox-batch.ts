@@ -24,6 +24,10 @@ export interface PublishOutboxBatchOutput {
   readonly exhaustedMessageIds: readonly string[];
 }
 
+/**
+ * One publishing round. The claim hands out at most the head of each aggregate (see IOutboxRepository
+ * .claimBatch), so publishing the claimed messages in any order never reorders an aggregate on the wire.
+ */
 export class PublishOutboxBatch implements IUseCase<void, PublishOutboxBatchOutput> {
   constructor(
     private readonly outbox: IOutboxRepository,

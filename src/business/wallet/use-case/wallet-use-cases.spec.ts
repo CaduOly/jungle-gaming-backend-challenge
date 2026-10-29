@@ -9,6 +9,7 @@ import { Wallet } from '../entity/wallet';
 import { WalletAlreadyExistsError } from '../error/wallet-already-exists-error';
 import { InvalidLedgerCursorError } from '../error/invalid-ledger-cursor-error';
 import { openingIdempotencyKey, SYSTEM_PROVIDER_ID } from './create-wallet/create-wallet';
+import { aPlayerId } from '../../../../tests/support/fakes/sequential-id-generator';
 
 const brl = (amount: string) => ({ amount, currency: 'BRL' });
 
@@ -25,9 +26,9 @@ describe('wallet use cases', () => {
 
   describe('CreateWallet', () => {
     it('opens with a balance: OPENING transaction, CREDIT entry at version 1 and WalletBalanceChanged, atomically', async () => {
-      const wallet = await app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('1000.00') });
+      const wallet = await app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: brl('1000.00') });
 
-      expect(wallet).toEqual({ id: expect.any(String), playerId: 'player-1', balance: brl('1000.00'), version: 1 });
+      expect(wallet).toEqual({ id: expect.any(String), playerId: aPlayerId(1), balance: brl('1000.00'), version: 1 });
       const [opening, ...others] = app.db.wagers.all();
       expect(others).toEqual([]);
       expect(opening?.toState()).toMatchObject({
@@ -51,21 +52,21 @@ describe('wallet use cases', () => {
     });
 
     it('carries the caller correlation id on WalletBalanceChanged, defaulting to the wallet id', async () => {
-      await app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('10.00'), correlationId: 'request-1' });
-      const defaulted = await app.createWallet.execute({ playerId: 'player-2', initialBalance: brl('10.00') });
+      await app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: brl('10.00'), correlationId: 'request-1' });
+      const defaulted = await app.createWallet.execute({ playerId: aPlayerId(2), initialBalance: brl('10.00') });
       expect(app.db.outbox.all().map((message) => message.payload.correlationId)).toEqual(['request-1', defaulted.id]);
     });
 
     it('rejects a playerId with surrounding whitespace', async () => {
       const error = await app.createWallet
-        .execute({ playerId: ' player-1', initialBalance: brl('10.00') })
+        .execute({ playerId: ` ${aPlayerId(1)}`, initialBalance: brl('10.00') })
         .catch((reason: unknown) => reason);
       expect(error).toBeInstanceOf(InvalidRequestError);
-      expect(error).toMatchObject({ field: 'playerId', rule: 'SURROUNDING_WHITESPACE' });
+      expect(error).toMatchObject({ field: 'playerId', rule: 'INVALID_UUID' });
     });
 
     it('opens at zero without OPENING, entry or event', async () => {
-      const wallet = await app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('0.00') });
+      const wallet = await app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: brl('0.00') });
       expect(wallet).toMatchObject({ balance: brl('0.00'), version: 1 });
       expect(app.db.wagers.all()).toEqual([]);
       expect(app.db.ledger.count()).toBe(0);
@@ -73,11 +74,11 @@ describe('wallet use cases', () => {
     });
 
     it('refuses a second wallet for the same player and currency, but not another currency', async () => {
-      await app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('10.00') });
+      await app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: brl('10.00') });
       await expect(
-        app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('5.00') }),
+        app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: brl('5.00') }),
       ).rejects.toBeInstanceOf(WalletAlreadyExistsError);
-      const usd = await app.createWallet.execute({ playerId: 'player-1', initialBalance: { amount: '1.00', currency: 'USD' } });
+      const usd = await app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: { amount: '1.00', currency: 'USD' } });
       expect(usd.balance).toEqual({ amount: '1.00', currency: 'USD' });
       expect(app.db.wallets.all()).toHaveLength(2);
       expect(app.db.outbox.all()).toHaveLength(2);
@@ -85,7 +86,7 @@ describe('wallet use cases', () => {
 
     it('lets exactly one of several concurrent creations win', async () => {
       const results = await Promise.allSettled(
-        Array.from({ length: 5 }, () => app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('10.00') })),
+        Array.from({ length: 5 }, () => app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: brl('10.00') })),
       );
       expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
       expect(
@@ -98,7 +99,7 @@ describe('wallet use cases', () => {
     it('maps a lost race on the unique constraint to the wallet conflict and keeps nothing', async () => {
       app.uow.failNext('ledger.append', new UniqueConstraintViolationError('UNIQUE(player_id, currency)'));
       await expect(
-        app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('10.00') }),
+        app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: brl('10.00') }),
       ).rejects.toBeInstanceOf(WalletAlreadyExistsError);
       expect(app.db.wallets.all()).toEqual([]);
       expect(app.db.wagers.all()).toEqual([]);
@@ -106,10 +107,11 @@ describe('wallet use cases', () => {
 
     it.each([
       ['a blank player', { playerId: ' ', initialBalance: brl('1.00') }, 'playerId'],
-      ['a malformed amount', { playerId: 'p', initialBalance: brl('1.5') }, 'initialBalance.amount'],
-      ['a negative amount', { playerId: 'p', initialBalance: brl('-1.00') }, 'initialBalance.amount'],
-      ['a bad currency', { playerId: 'p', initialBalance: { amount: '1.00', currency: 'brl' } }, 'initialBalance.currency'],
-      ['no balance at all', { playerId: 'p', initialBalance: undefined as never }, 'initialBalance'],
+      ['a player id that is not a UUID', { playerId: 'player-x', initialBalance: brl('1.00') }, 'playerId'],
+      ['a malformed amount', { playerId: aPlayerId(1), initialBalance: brl('1.5') }, 'initialBalance.amount'],
+      ['a negative amount', { playerId: aPlayerId(1), initialBalance: brl('-1.00') }, 'initialBalance.amount'],
+      ['a bad currency', { playerId: aPlayerId(1), initialBalance: { amount: '1.00', currency: 'brl' } }, 'initialBalance.currency'],
+      ['no balance at all', { playerId: aPlayerId(1), initialBalance: undefined as never }, 'initialBalance'],
     ])('rejects %s as invalid input', async (_name, input, field) => {
       const error = await app.createWallet.execute(input).catch((reason: unknown) => reason);
       expect(error).toBeInstanceOf(InvalidRequestError);
@@ -120,7 +122,7 @@ describe('wallet use cases', () => {
 
   describe('GetWallet', () => {
     it('returns the current state, or WALLET_NOT_FOUND', async () => {
-      const wallet = await app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('100.00') });
+      const wallet = await app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: brl('100.00') });
       await app.process.execute(aSubmission(wallet, 'BET', 'bet', { amount: '40.00' }));
       expect(await app.getWallet.execute({ walletId: wallet.id })).toEqual({ ...wallet, balance: brl('60.00'), version: 2 });
       await expect(app.getWallet.execute({ walletId: 'ghost' })).rejects.toBeInstanceOf(WalletNotFoundError);
@@ -129,7 +131,7 @@ describe('wallet use cases', () => {
 
   describe('GetLedger', () => {
     const seed = async (bets: number) => {
-      const wallet = await app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('100.00') });
+      const wallet = await app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: brl('100.00') });
       for (let index = 0; index < bets; index += 1) {
         await app.process.execute(aSubmission(wallet, 'BET', `bet-${index}`, { amount: '1.00' }));
       }
@@ -153,7 +155,7 @@ describe('wallet use cases', () => {
     it('defaults to 50 entries and returns an empty last page for a wallet without entries', async () => {
       const wallet = await seed(60);
       expect((await app.getLedger.execute({ walletId: wallet.id })).entries).toHaveLength(50);
-      const empty = await app.createWallet.execute({ playerId: 'player-2', initialBalance: brl('0.00') });
+      const empty = await app.createWallet.execute({ playerId: aPlayerId(2), initialBalance: brl('0.00') });
       expect(await app.getLedger.execute({ walletId: empty.id })).toEqual({ walletId: empty.id, entries: [], nextCursor: null });
     });
 
@@ -173,7 +175,7 @@ describe('wallet use cases', () => {
 
   describe('ReconcileWallet', () => {
     it('reports a consistent wallet', async () => {
-      const wallet = await app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('100.00') });
+      const wallet = await app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: brl('100.00') });
       await app.process.execute(aSubmission(wallet, 'BET', 'bet', { amount: '25.00' }));
       expect(await app.reconcile.execute({ walletId: wallet.id })).toEqual({
         walletId: wallet.id,
@@ -187,7 +189,7 @@ describe('wallet use cases', () => {
     });
 
     it('flags a divergence without correcting it', async () => {
-      const wallet = await app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('100.00') });
+      const wallet = await app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: brl('100.00') });
       const stored = app.db.wallets.snapshot(wallet.id)!;
       app.db.wallets.write(Wallet.rehydrate({ ...stored, balance: Money.from(brl('90.00')) }));
 
@@ -205,7 +207,7 @@ describe('wallet use cases', () => {
     });
 
     it('runs in a read-only snapshot and answers WALLET_NOT_FOUND for an unknown wallet', async () => {
-      const wallet = await app.createWallet.execute({ playerId: 'player-1', initialBalance: brl('1.00') });
+      const wallet = await app.createWallet.execute({ playerId: aPlayerId(1), initialBalance: brl('1.00') });
       await app.reconcile.execute({ walletId: wallet.id });
       expect(app.uow.modes.at(-1)).toBe('snapshot-read');
       await expect(app.reconcile.execute({ walletId: 'ghost' })).rejects.toBeInstanceOf(WalletNotFoundError);

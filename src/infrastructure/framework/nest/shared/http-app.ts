@@ -17,6 +17,14 @@ export interface HttpAppOptions {
   /** Logger and metrics to use; built from the env (LOG_LEVEL) when omitted. */
   readonly observability?: Observability;
   readonly readinessChecks?: AppModuleOptions['readinessChecks'];
+  readonly readinessDetails?: AppModuleOptions['readinessDetails'];
+  /** Sent as X-Instance-Id on every answer, so a caller behind the balancer knows which replica served it. */
+  readonly instanceId?: string;
+  /**
+   * Nest's own SIGTERM hooks (default). The process entry point turns them off: it owns the signals and closes
+   * the HTTP server together with the workers and the ORM.
+   */
+  readonly shutdownHooks?: boolean;
 }
 
 /**
@@ -35,12 +43,20 @@ export const createHttpApp = async (options: HttpAppOptions): Promise<INestAppli
       ...(options.overrides === undefined ? {} : { overrides: options.overrides }),
       ...(options.env === undefined ? {} : { env: options.env }),
       ...(options.readinessChecks === undefined ? {} : { readinessChecks: options.readinessChecks }),
+      ...(options.readinessDetails === undefined ? {} : { readinessDetails: options.readinessDetails }),
     }),
     { bodyParser: false, logger: new PinoNestLogger(observability.logger) },
   );
   app.use(correlationIdMiddleware(observability.logger));
+  const { instanceId } = options;
+  if (instanceId !== undefined) {
+    app.use((_request: unknown, response: { setHeader(name: string, value: string): void }, next: () => void) => {
+      response.setHeader('X-Instance-Id', instanceId);
+      next();
+    });
+  }
   app.useBodyParser('json', { type: 'application/json', limit: readHttpConfig(env).bodyLimit });
-  app.enableShutdownHooks();
+  if (options.shutdownHooks !== false) app.enableShutdownHooks();
   setupSwagger(app);
   return app;
 };

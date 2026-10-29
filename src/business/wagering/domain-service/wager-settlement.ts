@@ -1,6 +1,7 @@
 import { BusinessRuleError } from '../../shared/error/business-rule-error';
 import { FailureCode } from '../../shared/error/failure-code';
 import { InvalidTransactionStateError } from '../../shared/error/invalid-transaction-state-error';
+import { MoneyOverflowError } from '../../shared/error/money-overflow-error';
 import type { Wallet } from '../../wallet/entity/wallet';
 import type { WalletLedgerEntry } from '../../wallet/entity/wallet-ledger-entry';
 import type { WagerTransaction } from '../entity/wager-transaction';
@@ -26,7 +27,9 @@ type DebitKind = typeof WagerKind.BET | typeof WagerKind.ROLLBACK;
 
 /**
  * Applies a resolved transaction to its wallet and moves the transaction to PROCESSED or REJECTED,
- * recording the balance observed after the decision. Business rejections never touch the wallet.
+ * recording the balance observed after the decision. Business rejections never touch the wallet. A credit past
+ * the Money maximum is one of them (BALANCE_LIMIT_EXCEEDED): the wallet computes the new balance before changing
+ * anything, so it is left exactly as it was.
  */
 export class WagerSettlement {
   settle({ transaction, wallet, reference, at }: SettleCommand): SettlementOutcome {
@@ -49,6 +52,7 @@ export class WagerSettlement {
       return { type: 'Processed', entry };
     } catch (error) {
       if (error instanceof BusinessRuleError) return this.reject(transaction, wallet, error.failureCode, at);
+      if (error instanceof MoneyOverflowError) return this.reject(transaction, wallet, FailureCode.BALANCE_LIMIT_EXCEEDED, at);
       throw error;
     }
   }

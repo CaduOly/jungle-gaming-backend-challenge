@@ -17,9 +17,10 @@ describe('readIntegerEnv', () => {
 });
 
 describe('parseDecimalInteger', () => {
-  it('parses plain non-negative integers', () => {
+  it('parses plain non-negative integers, epoch millis included', () => {
     expect(parseDecimalInteger('50')).toBe(50);
     expect(parseDecimalInteger('0')).toBe(0);
+    expect(parseDecimalInteger('1785337200000')).toBe(1_785_337_200_000);
   });
 
   it.each([undefined, '', '-1', '1.5', '1e3', ' 5', 'abc', '1234567890123456'])('returns undefined for %p', (raw) => {

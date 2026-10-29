@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { type EntityManager, MikroORM } from '@mikro-orm/postgresql';
+import { Pool, type PoolClient } from 'pg';
 import { TransientInfrastructureError } from '../../../src/infrastructure/error/transient-infrastructure-error';
 import { createMikroOrmConfig } from '../../../src/infrastructure/persistence/mikro-orm/mikro-orm.config';
+import { guardPool } from '../../../src/infrastructure/persistence/mikro-orm/pool-guard';
 import { MikroOrmUnitOfWork } from '../../../src/infrastructure/persistence/mikro-orm/unit-of-work';
 import { createOrmDatabase, type OrmDatabase } from './messaging-orm';
 
@@ -107,5 +109,61 @@ describe('connection pool resilience', () => {
       release();
       await within(orm.close(true), 5_000, 'pool shutdown');
     }
+  });
+  describe('guarded pool', () => {
+    const guardedPool = (): Pool => {
+      const pool = new Pool({ connectionString: db.database.url, max: 1, connectionTimeoutMillis: 1_000 });
+      guardPool(pool);
+      return pool;
+    };
+
+    it('serves pool.query, which acquires through the callback form, without leaking the slot', async () => {
+      const pool = guardedPool();
+      try {
+        for (let query = 0; query < 3; query++) {
+          const result = await within(pool.query<{ one: number }>('SELECT 1 AS one'), 3_000, `pool.query ${query}`);
+          expect(result.rows[0]?.one).toBe(1);
+        }
+        expect(pool.idleCount).toBe(1);
+      } finally {
+        await within(pool.end(), 5_000, 'pool shutdown');
+      }
+    });
+
+    it('hands the callback form a guarded client and a done that frees the slot', async () => {
+      const pool = guardedPool();
+      try {
+        const acquire = () =>
+          new Promise<{ client: PoolClient; done: (error?: Error | boolean) => void }>((resolve, reject) => {
+            pool.connect((error, client, done) => {
+              if (error !== undefined && error !== null) reject(error);
+              else resolve({ client: client!, done });
+            });
+          });
+        const first = await within(acquire(), 3_000, 'first callback acquire');
+        first.done();
+        const second = await within(acquire(), 3_000, 'second callback acquire');
+        expect((await second.client.query<{ one: number }>('SELECT 1 AS one')).rows[0]?.one).toBe(1);
+        second.done();
+        expect(pool.idleCount).toBe(1);
+      } finally {
+        await within(pool.end(), 5_000, 'pool shutdown');
+      }
+    });
+
+    it('reports a failed acquire to the callback', async () => {
+      const pool = new Pool({ connectionString: 'postgres://nobody:nothing@127.0.0.1:1/none', max: 1, connectionTimeoutMillis: 500 });
+      guardPool(pool);
+      try {
+        const error = await within(
+          new Promise<unknown>((resolve) => pool.connect((failure) => resolve(failure))),
+          3_000,
+          'failed callback acquire',
+        );
+        expect(error).toBeInstanceOf(Error);
+      } finally {
+        await pool.end();
+      }
+    });
   });
 });

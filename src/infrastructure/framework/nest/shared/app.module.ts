@@ -14,6 +14,7 @@ import { EnvelopeInterceptor } from './envelope/envelope.interceptor';
 import { HttpExceptionFilter } from './errors/http-exception.filter';
 import { readHttpConfig } from './http-config';
 import { MetricsController } from './observability/metrics.controller';
+import { RequestTimeoutInterceptor } from './http/request-timeout.interceptor';
 import { createValidationPipe } from './validation/validation.pipe';
 
 export interface AppModuleOptions {
@@ -26,6 +27,8 @@ export interface AppModuleOptions {
   readonly readinessChecks?: readonly IReadinessCheck[];
   /** The process logger and metrics registry, built once by createHttpApp and shared with the workers. */
   readonly observability: Observability;
+  /** Merged into the /health/ready body: instance id, roles and breaker state of the running process. */
+  readonly readinessDetails?: () => Record<string, unknown>;
 }
 
 @Module({})
@@ -34,7 +37,13 @@ export class AppModule {
     const env = options.env ?? process.env;
     return {
       module: AppModule,
-      imports: [HealthModule.forRoot(options.readinessChecks ?? [], readHttpConfig(env).readinessTimeoutMs)],
+      imports: [
+        HealthModule.forRoot(
+          options.readinessChecks ?? [],
+          readHttpConfig(env).readinessTimeoutMs,
+          options.readinessDetails ?? (() => ({})),
+        ),
+      ],
       controllers: [WalletController, WageringController, I18nController, MetricsController],
       providers: [
         { provide: LOGGER, useValue: options.observability.logger },
@@ -44,6 +53,7 @@ export class AppModule {
         options.persistence,
         ...useCaseProviders,
         { provide: APP_GUARD, useClass: ProviderAuthGuard },
+        { provide: APP_INTERCEPTOR, useClass: RequestTimeoutInterceptor },
         { provide: APP_INTERCEPTOR, useClass: EnvelopeInterceptor },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
         { provide: APP_PIPE, useFactory: createValidationPipe },

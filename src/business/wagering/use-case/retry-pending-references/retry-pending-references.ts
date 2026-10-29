@@ -21,6 +21,14 @@ export interface RetryPendingReferencesConfig {
   readonly leaseMs: number;
 }
 
+export interface RetryPendingReferencesInput {
+  /**
+   * Checked before each item: once it answers true the round ends there. The items it did not reach keep their lease
+   * and attempts untouched, so another instance retries them when the lease ends.
+   */
+  readonly shouldStop?: () => boolean;
+}
+
 export type RetryResult = 'processed' | 'rejected' | 'exhausted' | 'rescheduled' | 'failed' | 'skipped';
 
 export interface RetryPendingReferencesOutput {
@@ -35,18 +43,21 @@ export interface RetryPendingReferencesOutput {
   readonly skipped: number;
   /** Items whose unit of work threw (e.g. a transient database error); they are retried after the lease. */
   readonly erroredIds: readonly string[];
+  /** Claimed but not attempted because the round was asked to stop; retried after the lease. */
+  readonly unattemptedIds: readonly string[];
 }
 
 /**
  * Pending-reference worker, deadlock-free across instances:
  * 1. claims only ids, in a short unit of work (lease + SKIP LOCKED);
  * 2. runs each id in its own unit of work, locking wallet → transaction (the same order as the main flow),
- *    re-checking the status, then resolving and settling with the same domain services.
+ *    re-checking the status and that the attempt is still due, then resolving and settling with the same domain
+ *    services.
  * Attempts are capped by the backoff: when the last one still finds no reference the transaction is
  * REJECTED/REFERENCE_NOT_FOUND (REFERENCE_NOT_PROCESSED when the reference exists but never settled) and the
  * rejection event is published. A permanent inconsistency (no wallet, broken invariant) moves it to FAILED.
  */
-export class RetryPendingReferences implements IUseCase<void, RetryPendingReferencesOutput> {
+export class RetryPendingReferences implements IUseCase<RetryPendingReferencesInput | void, RetryPendingReferencesOutput> {
   private readonly settlement = new WagerSettlement();
   private readonly outcomeEvents: WagerOutcomeEvents;
 
@@ -60,9 +71,11 @@ export class RetryPendingReferences implements IUseCase<void, RetryPendingRefere
     this.outcomeEvents = new WagerOutcomeEvents(ids);
   }
 
-  async execute(): Promise<RetryPendingReferencesOutput> {
+  async execute(input: RetryPendingReferencesInput | void): Promise<RetryPendingReferencesOutput> {
+    const shouldStop = input?.shouldStop ?? (() => false);
+    const claimedAt = this.clock.now();
     const ids = await this.unitOfWork.run((tx) =>
-      tx.wagers.claimPendingBatch({ limit: this.config.batchSize, leaseMs: this.config.leaseMs, now: this.clock.now() }),
+      tx.wagers.claimPendingBatch({ limit: this.config.batchSize, leaseMs: this.config.leaseMs, now: claimedAt }),
     );
     const counts: Record<RetryResult, number> = {
       processed: 0,
@@ -73,22 +86,29 @@ export class RetryPendingReferences implements IUseCase<void, RetryPendingRefere
       skipped: 0,
     };
     const erroredIds: string[] = [];
-    for (const id of ids) {
+    for (const [index, id] of ids.entries()) {
+      if (shouldStop()) {
+        return { claimed: ids.length, ...counts, erroredIds, unattemptedIds: ids.slice(index) };
+      }
       try {
-        counts[await this.unitOfWork.run((tx) => this.retry(tx, id))] += 1;
+        counts[await this.unitOfWork.run((tx) => this.retry(tx, id, claimedAt))] += 1;
       } catch {
         erroredIds.push(id);
       }
     }
-    return { claimed: ids.length, ...counts, erroredIds };
+    return { claimed: ids.length, ...counts, erroredIds, unattemptedIds: [] };
   }
 
-  private async retry(tx: TxRepositories, id: string): Promise<RetryResult> {
+  private async retry(tx: TxRepositories, id: string, claimedAt: Date): Promise<RetryResult> {
     const peek = await tx.wagers.findById(id);
     if (peek === null) return 'skipped';
     const wallet = await tx.wallets.lockById(peek.walletId);
     const transaction = await tx.wagers.lockById(id);
     if (transaction === null || transaction.status !== WagerTransactionStatus.PENDING_REFERENCE) return 'skipped';
+    // The claim only picks attempts due at claimedAt. A later due date means this lease expired and another
+    // instance reclaimed the item and already counted this attempt: counting it again would burn the backoff.
+    const due = transaction.nextAttemptAt;
+    if (due !== undefined && due.getTime() > claimedAt.getTime()) return 'skipped';
     const now = this.clock.now();
 
     if (wallet === null) {
@@ -102,8 +122,9 @@ export class RetryPendingReferences implements IUseCase<void, RetryPendingRefere
     try {
       decision = await this.decide(tx, transaction, wallet, now);
     } catch (error) {
-      // A domain invariant broke while settling (e.g. the credit would overflow the Money maximum): retrying can
-      // never succeed, so the transaction leaves the queue as FAILED with the closest of the persisted codes.
+      // A domain invariant broke while settling (a bug or corrupted data, not a business outcome: those, the
+      // Money maximum included, come back as rejections): retrying can never succeed, so the transaction leaves
+      // the queue as FAILED with the closest of the persisted codes.
       if (!(error instanceof DomainError) || error instanceof BusinessRuleError) throw error;
       const fresh = await tx.wagers.lockById(id);
       if (fresh === null) throw error;

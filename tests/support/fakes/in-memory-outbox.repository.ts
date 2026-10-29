@@ -3,30 +3,39 @@ import type { IOutboxRepository } from '../../../src/business/messaging/port/out
 import { uuidv7 } from '../uuid';
 import type { UndoLog } from './undo-log';
 
-const byOccurrence = (a: OutboxMessageState, b: OutboxMessageState): number =>
-  a.occurredAt.getTime() - b.occurredAt.getTime() || a.id.localeCompare(b.id);
-
 const withoutLease = ({ lockedUntil: _lockedUntil, leaseToken: _leaseToken, ...rest }: OutboxMessageState) => rest;
 
 /**
+ * Head-of-line like the real claim: only the first added (lowest seq) unpublished message of each aggregate is
+ * eligible. `seq` mirrors the bigserial column: it grows with every add, in commit order.
  * Single-threaded stand-in for `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED)`: every
  * method runs without awaiting in between, so a claim is atomic relative to other callers.
  */
 export class InMemoryOutboxRepository implements IOutboxRepository {
   private readonly rows = new Map<string, OutboxMessageState>();
+  private readonly seqs = new Map<string, number>();
+  private nextSeq = 0;
 
   async add(messages: readonly OutboxMessage[]): Promise<void> {
     for (const message of messages) {
       if (this.rows.has(message.id)) throw new Error(`Outbox message ${message.id} already exists`);
     }
-    for (const message of messages) this.rows.set(message.id, withoutLease(message.toState()));
+    for (const message of messages) {
+      this.rows.set(message.id, withoutLease(message.toState()));
+      this.seqs.set(message.id, (this.nextSeq += 1));
+    }
   }
 
   async claimBatch(limit: number, leaseMs: number, now: Date): Promise<OutboxMessage[]> {
     const lockedUntil = new Date(now.getTime() + leaseMs);
-    const claimed = [...this.rows.values()]
+    const heads = new Map<string, OutboxMessageState>();
+    const bySeq = (a: OutboxMessageState, b: OutboxMessageState): number => this.seqOf(a.id) - this.seqOf(b.id);
+    for (const row of [...this.rows.values()].filter((stored) => !stored.publishedAt).sort(bySeq)) {
+      if (!heads.has(row.aggregateId)) heads.set(row.aggregateId, row);
+    }
+    const claimed = [...heads.values()]
       .filter((row) => OutboxMessage.rehydrate(row).isDue(now))
-      .sort(byOccurrence)
+      .sort(bySeq)
       .slice(0, limit)
       .map((row) => ({ ...row, lockedUntil, leaseToken: uuidv7() }));
     for (const row of claimed) this.rows.set(row.id, row);
@@ -64,7 +73,10 @@ export class InMemoryOutboxRepository implements IOutboxRepository {
       add: async (messages) => {
         await this.add(messages);
         undo.record(() => {
-          for (const message of messages) this.rows.delete(message.id);
+          for (const message of messages) {
+            this.rows.delete(message.id);
+            this.seqs.delete(message.id);
+          }
         });
       },
     };
@@ -76,6 +88,10 @@ export class InMemoryOutboxRepository implements IOutboxRepository {
 
   pending(): OutboxMessage[] {
     return [...this.rows.values()].filter((row) => !row.publishedAt).map((row) => OutboxMessage.rehydrate(row));
+  }
+
+  private seqOf(id: string): number {
+    return this.seqs.get(id) ?? Number.MAX_SAFE_INTEGER;
   }
 
   private require(id: string): OutboxMessageState {

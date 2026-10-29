@@ -5,7 +5,11 @@ import { DomainError } from './domain-error';
  * Raised by persistence adapters; the transaction that hit it is already doomed and must be rolled back.
  */
 export class UniqueConstraintViolationError extends DomainError {
-  constructor(readonly constraint: string) {
+  constructor(
+    readonly constraint: string,
+    options?: { readonly cause?: unknown },
+  ) {
     super(`Unique constraint violated: ${constraint}`);
+    if (options !== undefined) this.cause = options.cause;
   }
 }

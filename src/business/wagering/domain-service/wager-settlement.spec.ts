@@ -53,6 +53,16 @@ describe('WagerSettlement', () => {
     expect(wallet.version).toBe(1);
   });
 
+  it('rejects a credit past the Money maximum with BALANCE_LIMIT_EXCEEDED and leaves the wallet untouched', () => {
+    const wallet = walletWith('999999999999999999.99');
+    const win = aWager(WagerKind.WIN, 'win', { money: brl('0.01') });
+    expect(settle(win, wallet)).toEqual({ type: 'Rejected', code: FailureCode.BALANCE_LIMIT_EXCEEDED });
+    expect(win.status).toBe('REJECTED');
+    expect(win.observedBalance).toEqual(brl('999999999999999999.99'));
+    expect(wallet.balance).toEqual(brl('999999999999999999.99'));
+    expect(wallet.version).toBe(1);
+  });
+
   it('WIN credits the wallet, with or without a reference', () => {
     const wallet = walletWith('10.00');
     const bet = aProcessedWager(WagerKind.BET, 'bet');

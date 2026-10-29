@@ -14,4 +14,10 @@ describe('readHttpConfig', () => {
   it.each(['0kb', '100', '1.5mb', '-1kb', '10gb', ' 1kb', 'abc'])('rejects the body limit %p', (raw) => {
     expect(() => readHttpConfig({ HTTP_BODY_LIMIT: raw })).toThrow('Invalid HTTP_BODY_LIMIT');
   });
+
+  it('bounds a request at 10s by default, configurable and never zero', () => {
+    expect(readHttpConfig({}).requestTimeoutMs).toBe(10_000);
+    expect(readHttpConfig({ HTTP_REQUEST_TIMEOUT_MS: '1500' }).requestTimeoutMs).toBe(1_500);
+    expect(() => readHttpConfig({ HTTP_REQUEST_TIMEOUT_MS: '0' })).toThrow('Invalid HTTP_REQUEST_TIMEOUT_MS');
+  });
 });

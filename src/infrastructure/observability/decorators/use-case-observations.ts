@@ -14,7 +14,8 @@ import type { WalletView } from '../../../business/wallet/use-case/wallet-view';
 import type { UseCaseObservation } from './observe-use-case';
 
 /**
- * Feeds wager_transactions_total (decisions only) or idempotent_duplicates_total (replays). The summary keeps the
+ * On SQS the message is both the correlation (unless the command brings its own) and the cause, as the use case
+ * records it in the events. Feeds wager_transactions_total (decisions only) or idempotent_duplicates_total (replays). The summary keeps the
  * decision (status, failureCode) and leaves the balance out.
  */
 export const processWagerTransactionObservation: UseCaseObservation<
@@ -22,12 +23,16 @@ export const processWagerTransactionObservation: UseCaseObservation<
   ProcessWagerTransactionOutput
 > = {
   operation: 'process_wager_transaction',
-  contextOf: (input) => ({
-    correlationId: input.correlationId,
-    providerId: input.actor.providerId,
-    walletId: input.payload.walletId,
-    messageId: input.source.channel === 'SQS' ? input.source.messageId : undefined,
-  }),
+  contextOf: (input) => {
+    const messageId = input.source.channel === 'SQS' ? input.source.messageId : undefined;
+    return {
+      correlationId: input.correlationId ?? messageId,
+      causationId: messageId,
+      messageId,
+      providerId: input.actor.providerId,
+      walletId: input.payload.walletId,
+    };
+  },
   summaryOf: (output) => ({
     transactionId: output.transactionId,
     kind: output.kind,

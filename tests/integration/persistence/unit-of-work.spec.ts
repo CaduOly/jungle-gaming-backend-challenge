@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'bun:test';
-import type { EntityManager } from '@mikro-orm/postgresql';
+import { type EntityManager, MikroORM } from '@mikro-orm/postgresql';
 import { Client } from 'pg';
 import { InboxMessage } from '../../../src/business/messaging/entity/inbox-message';
 import { OutboxMessage } from '../../../src/business/messaging/entity/outbox-message';
@@ -10,6 +10,7 @@ import {
   createMessagingRepositories,
   type MessagingRepositories,
 } from '../../../src/infrastructure/persistence/mikro-orm/repository/messaging-repositories';
+import { createMikroOrmConfig } from '../../../src/infrastructure/persistence/mikro-orm/mikro-orm.config';
 import { MikroOrmUnitOfWork } from '../../../src/infrastructure/persistence/mikro-orm/unit-of-work';
 import { aFakeEvent } from '../../support/fakes/fake-integration-event';
 import { uuidv7 } from '../../support/uuid';
@@ -61,6 +62,28 @@ describe('MikroOrmUnitOfWork', () => {
     });
 
     expect(settings).toEqual({ isolation: 'read committed', lock_timeout: '1500ms' });
+  });
+
+  it('leaves the pooled connection with the server lock_timeout once the unit ends', async () => {
+    const single = await MikroORM.init(createMikroOrmConfig(db.database.url, { max: 1 }));
+    const session = async (em: EntityManager) => {
+      const [row] = await em.execute<{ pid: number; lock_timeout: string }[]>(
+        "SELECT pg_backend_pid() AS pid, current_setting('lock_timeout') AS lock_timeout",
+      );
+      return row!;
+    };
+    try {
+      const outside = await session(single.em.fork());
+      const inside = await new MikroOrmUnitOfWork<Tx>(single.em, (em) => ({ em, ...createMessagingRepositories(em) }), {
+        lockTimeoutMs: 1_500,
+      }).run(({ em }) => session(em));
+      const after = await session(single.em.fork());
+
+      expect(inside).toEqual({ pid: outside.pid, lock_timeout: '1500ms' });
+      expect(after).toEqual(outside);
+    } finally {
+      await single.close(true);
+    }
   });
 
   it('commits inbox and outbox together', async () => {

@@ -19,10 +19,13 @@ export const databaseDown = (): TransientInfrastructureError =>
 /** A unit of work that can be made to fail, as a database outage (or a bug) would. */
 export class SwitchableUnitOfWork implements IUnitOfWork<TxRepositories> {
   failure: unknown = undefined;
+  /** Never settles, as a query to a paused database does not. */
+  hanging = false;
 
   constructor(private readonly inner: IUnitOfWork<TxRepositories>) {}
 
   run<T>(work: (tx: TxRepositories) => Promise<T>, options?: UnitOfWorkOptions): Promise<T> {
+    if (this.hanging) return new Promise<T>(() => undefined);
     if (this.failure !== undefined) return Promise.reject(this.failure);
     return this.inner.run(work, options);
   }
@@ -43,12 +46,16 @@ export interface InMemoryHttpAppOptions {
   readonly readinessChecks?: readonly IReadinessCheck[];
   /** The logger and metrics to assert on; a silent logger and a fresh registry otherwise. */
   readonly observability?: Observability;
+  readonly instanceId?: string;
+  readonly readinessDetails?: () => Record<string, unknown>;
 }
 
 export const startInMemoryHttpApp = async ({
   env = {},
   readinessChecks,
   observability,
+  instanceId,
+  readinessDetails,
 }: InMemoryHttpAppOptions = {}): Promise<InMemoryHttpApp> => {
   const fake = createFakeWageringApp();
   const uow = new SwitchableUnitOfWork(fake.uow);
@@ -68,6 +75,8 @@ export const startInMemoryHttpApp = async ({
     logger: false,
     ...(readinessChecks === undefined ? {} : { readinessChecks }),
     ...(observability === undefined ? {} : { observability }),
+    ...(instanceId === undefined ? {} : { instanceId }),
+    ...(readinessDetails === undefined ? {} : { readinessDetails }),
   });
   await app.listen(0, '127.0.0.1');
   const address = app.getHttpServer().address() as { port: number };

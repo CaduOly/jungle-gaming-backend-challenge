@@ -14,7 +14,7 @@ class ReadinessTimeoutError extends Error {
   }
 }
 
-const withTimeout = async (check: IReadinessCheck, timeoutMs: number): Promise<void> => {
+export const withTimeout = async (check: IReadinessCheck, timeoutMs: number): Promise<void> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new ReadinessTimeoutError(check.name, timeoutMs)), timeoutMs);

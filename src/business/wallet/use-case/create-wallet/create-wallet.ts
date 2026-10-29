@@ -1,10 +1,9 @@
 import { OutboxMessage } from '../../../messaging/entity/outbox-message';
-import { InputRule } from '../../../shared/error/input-rule';
-import { InvalidRequestError } from '../../../shared/error/invalid-request-error';
 import { UniqueConstraintViolationError } from '../../../shared/error/unique-constraint-violation-error';
 import type { IClock } from '../../../shared/port/clock.port';
 import type { IIdGenerator } from '../../../shared/port/id-generator.port';
 import type { IUseCase } from '../../../shared/use-case';
+import { requireUuid } from '../../../shared/validation/request-fields';
 import type { MoneyProps } from '../../../shared/value-object/money';
 import { parseMoneyInput } from '../../../shared/value-object/parse-money-input';
 import { WagerTransaction } from '../../../wagering/entity/wager-transaction';
@@ -23,7 +22,6 @@ export interface CreateWalletInput {
 }
 
 export const SYSTEM_PROVIDER_ID = 'system';
-const MAX_TEXT_LENGTH = 255;
 
 export const openingIdempotencyKey = (walletId: string): string => `opening:${walletId}`;
 
@@ -42,13 +40,7 @@ export class CreateWallet implements IUseCase<CreateWalletInput, WalletView> {
   ) {}
 
   async execute(input: CreateWalletInput): Promise<WalletView> {
-    const { playerId } = input;
-    if (typeof playerId !== 'string' || playerId.trim() === '' || playerId.length > MAX_TEXT_LENGTH) {
-      throw new InvalidRequestError('playerId', `must be a non-blank string of at most ${MAX_TEXT_LENGTH} characters`, InputRule.BLANK);
-    }
-    if (playerId.trim() !== playerId) {
-      throw new InvalidRequestError('playerId', 'must not start or end with whitespace', InputRule.SURROUNDING_WHITESPACE);
-    }
+    const playerId = requireUuid('playerId', input.playerId);
     const initialBalance = parseMoneyInput(input.initialBalance, 'initialBalance');
 
     try {

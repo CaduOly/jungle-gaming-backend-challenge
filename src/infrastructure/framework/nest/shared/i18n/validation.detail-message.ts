@@ -10,6 +10,7 @@ export class ValidationDetailMessage {
   static readonly TOO_LONG: IDetailMessage = error(NS, 'TOO_LONG');
   static readonly BLANK: IDetailMessage = error(NS, 'BLANK');
   static readonly SURROUNDING_WHITESPACE: IDetailMessage = error(NS, 'SURROUNDING_WHITESPACE');
+  static readonly NUL_CHARACTER: IDetailMessage = error(NS, 'NUL_CHARACTER');
   static readonly INVALID_UUID: IDetailMessage = error(NS, 'INVALID_UUID');
   static readonly INVALID_MONEY_AMOUNT: IDetailMessage = error(NS, 'INVALID_MONEY_AMOUNT');
   static readonly INVALID_CURRENCY: IDetailMessage = error(NS, 'INVALID_CURRENCY');
