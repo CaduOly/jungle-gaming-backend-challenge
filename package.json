@@ -9,7 +9,7 @@
     "migrate:down": "bun run src/infrastructure/persistence/mikro-orm/migrate.ts down",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test ./src ./tests/support ./tests/e2e",
+    "test": "bun test ./src ./tests/support ./tests/e2e ./tests/load/support",
     "test:arch": "depcruise src tests/support --config .dependency-cruiser.cjs && bun test ./tests/arch",
     "test:integration": "bun test --timeout 60000 ./tests/integration",
     "test:concurrency": "bun test --timeout 120000 --rerun-each ${RERUN_EACH:-20} ./tests/concurrency",
