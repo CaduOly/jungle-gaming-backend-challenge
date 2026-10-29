@@ -28,11 +28,11 @@ Eu desenhei a suíte em **modelo aberto** (`constant-arrival-rate` no k6 para os
 
 Cada um dos 4 cenários roda na mesma sequência:
 
-1. **Preparação**: criação das wallets do cenário com saldo inicial alto (`1000000.00` USD) para medir contenção de lock, banco e fila sem esbarrar em rejeição por saldo insuficiente logo nos primeiros segundos, além do snapshot inicial das métricas Prometheus (`/metrics`) das 3 réplicas e do timestamp SQL para recortar a janela da outbox.
-2. **Aquecimento (warm-up)**: **15 s a 20 req/s** (ou 20 cmd/s no SQS). Essa fase aquece o JIT do Bun, o pool de conexões do PostgreSQL e os sockets keep-alive do nginx, e **não entra** nos percentis de latência nem na contagem de requisições do cenário (os scripts do k6 marcam apenas o cenário `measure` com `scenario:measure`, e o produtor SQS separa `phase === 'measure'`).
+1. **Preparação**: criação das wallets do cenário com saldo inicial alto (`1000000.00` BRL) para medir contenção de lock, banco e fila sem esbarrar em rejeição por saldo insuficiente logo nos primeiros segundos, além do snapshot inicial das métricas Prometheus (`/metrics`) das 3 réplicas e do timestamp SQL para recortar a janela da outbox.
+2. **Aquecimento (warm-up)**: **15 s a 20 req/s** (ou 20 cmd/s no SQS). Essa fase aquece o JIT do Bun, o pool de conexões do PostgreSQL e os sockets keep-alive do nginx, e **não entra** nos percentis de latência nem na contagem de requisições do cenário (o k6 filtra as métricas pela tag `scenario:main`, descartando o estágio `warmup`, e o produtor SQS separa a fase `main` no `runSqsPath`).
 3. **Medição**: **60 s** na taxa nominal de cada cenário, com amostragem contínua de `docker stats` a cada 2 s nos 6 containers (`app-1`, `app-2`, `app-3`, `nginx`, `postgres`, `localstack`).
-4. **Drenagem e coleta**: ao final de cada cenário o runner aguarda a outbox esvaziar (`published_at IS NULL = 0`), recolhe o delta dos histogramas Prometheus (`wagering_wallet_lock_wait_ms`, `wagering_lock_timeouts_total`, `wagering_deadlocks_total`, `wagering_idempotent_replays_total`, `wagering_outbox_publish_lag_ms`) somado entre as 3 réplicas e calcula no SQL o lag exato `published_at - created_at` de cada evento gerado na janela.
-5. **Reconciliação final**: encerrados os 4 cenários, o runner reconcilia **todas as 1.301 wallets** utilizadas tanto pelo endpoint `POST /wallets/:id/reconciliation` quanto por consulta SQL direta no ledger (`assertLedgerSqlInvariants`).
+4. **Drenagem e coleta**: ao final de cada cenário o runner aguarda a outbox esvaziar (`published_at IS NULL = 0`), recolhe o delta das métricas Prometheus (`lock_wait_seconds`, `lock_conflicts_total` com `type="lock_timeout"` e `type="deadlock"`, `idempotent_duplicates_total`, `outbox_lag_seconds`) somado entre as 3 réplicas e calcula no SQL o lag exato `published_at - occurred_at` em `outbox_messages` de cada evento gerado na janela.
+5. **Reconciliação final**: encerrados os 4 cenários, o runner reconcilia **todas as 1.301 wallets** utilizadas tanto pelo endpoint `POST /wallets/:id/reconciliation` quanto por consulta SQL direta no ledger (`findWalletInconsistencies`).
 
 | Parâmetro | Valor |
 | --- | --- |
@@ -162,7 +162,7 @@ Carga mista a 300 req/s sobre 200 wallets, combinando submissões inéditas (~88
 
 ### 4. Caminho SQS (100 wallets, um `MessageGroupId` por wallet)
 
-Envio direto para a fila FIFO `wager-transactions-<suffix>.fifo` a 100 cmd/s (lotes `SendMessageBatch` de 10 mensagens a cada 100 ms), consumido pelas 3 réplicas da aplicação. A latência ponta a ponta é medida entre o timestamp de envio do produtor (`sentAt` gravado antes do `SendMessageBatch`) e o `created_at` gravado na transação pelo consumidor ao commitar no PostgreSQL.
+Envio direto para a fila FIFO `wager-transactions-<suffix>.fifo` a 100 cmd/s (lotes `SendMessageBatch` de 10 mensagens a cada 100 ms), consumido pelas 3 réplicas da aplicação. A latência ponta a ponta é medida entre o timestamp de envio do produtor (`sentAt` gravado antes do `SendMessageBatch`) e o `coalesce(processed_at, created_at)` gravado na transação pelo consumidor ao commitar no PostgreSQL.
 
 | Taxa ofertada (cmd/s) | Enviados | Aplicados | Faltando | Throughput (cmd/s) | p50 (ms) | p95 (ms) | p99 (ms) | Máx (ms) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -195,7 +195,7 @@ Envio direto para a fila FIFO `wager-transactions-<suffix>.fifo` a 100 cmd/s (lo
 Ao término dos 4 cenários (~48.000 transações na fase de medição mais o warm-up, totalizando mais de 84.000 eventos publicados na outbox):
 
 - **Via API (`POST /wallets/:id/reconciliation`)**: **1.301 de 1.301 wallets** retornaram `consistent: true`, com `ledgerBalance === currentBalance` e `version === entriesCount + 1`.
-- **Via SQL direto no ledger (`assertLedgerSqlInvariants`)**: **0 violações** — nenhuma wallet negativa, nenhuma lacuna ou duplicidade na sequência `wallet_version`, nenhum `previous_balance` desalinhado com o `balance_after` anterior e nenhuma divergência entre `wager_transactions.observed_balance` e `wallet_ledger_entries.balance_after`.
+- **Via SQL direto no ledger (`findWalletInconsistencies`)**: **0 violações** — nenhuma wallet negativa, nenhuma lacuna ou duplicidade na sequência `wallet_version`, nenhum `previous_balance` desalinhado com o `balance_after` anterior e nenhuma divergência entre `wager_transactions.observed_balance` e `wallet_ledger_entries.balance_after`.
 
 ---
 
@@ -205,7 +205,7 @@ Ao término dos 4 cenários (~48.000 transações na fase de medição mais o wa
 
 À primeira vista parece contraintuitivo que o cenário **Hot Wallet** (100 req/s numa única carteira) tenha apresentado `p50` de **6,7 ms** e `p95` de **8,6 ms**, menores que os **9,2 ms** (`p50`) e **18,5 ms** (`p95`) do cenário **Distribuído** (300 req/s em 1.000 carteiras). A explicação vem de dois fatores:
 
-1. **Taxa global de commits e I/O no PostgreSQL**: a 100 req/s o banco faz 3× menos `fsync` de WAL e as réplicas rodam a ~15% de CPU (contra ~45% de CPU por réplica e 142% no Postgres a 300 req/s). Como a seção crítica dentro da transação SQL é curta (~2,5 ms de `SELECT ... FOR UPDATE` + `INSERT` em `wager_transactions`, `wallet_ledger_entries` e `outbox_events` + `UPDATE` em `wallets`), a 100 req/s o intervalo médio de chegada é de 10 ms — maior que o tempo de serviço da transação. Por isso quase não se forma fila no lock da linha (`lock_wait p95 = 4,8 ms`, `0 lock timeouts`).
+1. **Taxa global de commits e I/O no PostgreSQL**: a 100 req/s o banco faz 3× menos `fsync` de WAL e as réplicas rodam a ~15% de CPU (contra ~45% de CPU por réplica e 142% no Postgres a 300 req/s). Como a seção crítica dentro da transação SQL é curta (~2,5 ms de `SELECT ... FOR UPDATE` + `INSERT` em `wager_transactions`, `wallet_ledger_entries` e `outbox_messages` + `UPDATE` em `wallets`), a 100 req/s o intervalo médio de chegada é de 10 ms — maior que o tempo de serviço da transação. Por isso quase não se forma fila no lock da linha (`lock_wait p95 = 4,8 ms`, `0 lock timeouts`).
 2. **Cauda máxima (`máx = 245,1 ms` na Hot Wallet vs. `164,0 ms` no Distribuído)**: quando rajadas pontuais enfileiram várias requisições simultâneas na mesma linha, a última da fila espera a soma das transações anteriores, o que aparece no pico máximo de 245,1 ms sem chegar perto do `DB_LOCK_TIMEOUT_MS` (2.000 ms).
 
 ### 2. O efeito do pre-check sem lock nos replays e conflitos (Cenário Mix)
@@ -218,10 +218,10 @@ Isso comprova na prática a decisão descrita em `ARCHITECTURE.md`: antes de abr
 
 O dado mais revelador do teste está na tabela de **outbox**:
 
-- A **100 cmd/s** (cenário SQS, gerando ~180 eventos/s na outbox, já que cada `BET` gera `wager.accepted` + `wallet.debited`), o lag de publicação da outbox ficou em **`p50 = 101,5 ms` e `p95 = 242 ms`** — praticamente o intervalo de polling do worker (`OUTBOX_POLL_INTERVAL_MS = 200 ms`).
+- A **100 cmd/s** (cenário SQS, gerando ~180 eventos/s na outbox, já que cada `BET` gera `WagerTransactionProcessed` e `WalletBalanceChanged`), o lag de publicação da outbox ficou em **`p50 = 101,5 ms` e `p95 = 242 ms`** — praticamente o intervalo de polling do worker (`OUTBOX_POLL_INTERVAL_MS = 200 ms`).
 - Já a **300 req/s** (cenários Distribuído e Mix, gerando ~500 a 560 eventos/s na outbox), o lag SQL subiu para **`18,2 s` (`p50`) / `24,1 s` (`p95`)** no Distribuído e **`4,5 s` (`p50`) / `6,8 s` (`p95`)** no Mix, embora **todos os eventos tenham sido entregues ao final (`não publicados ao fim = 0`)**.
 
-O motivo é mecânico: o `OutboxPublisherWorker` publica os eventos da fila `wagering-events.fifo` sequencialmente por lote (`OUTBOX_BATCH_SIZE = 10`, um `SendMessageCommand` por evento no LocalStack). Com 3 réplicas publicando em paralelo contra o LocalStack em container único (que bateu 142%–159% de CPU), a vazão máxima de chamadas `SendMessage` individuais fica em torno de ~380–420 eventos/s. Quando a entrada gera 550 eventos/s, a tabela `outbox_events` acumula uma fila que é drenada assim que a rajada termina, **sem impactar a latência HTTP do cliente (`p95 = 18,5 ms`)**. Esse resultado valida o desacoplamento via Transactional Outbox: a escrita síncrona não sofre com a latência do broker, e para escalar a vazão da outbox acima de 500 eventos/s bastaria trocar o envio unitário por `SendMessageBatch` (até 10 mensagens por round-trip HTTP ao SQS) ou aumentar `OUTBOX_BATCH_SIZE`.
+O motivo é mecânico: o `OutboxPublisherWorker` publica os eventos da fila `wagering-events.fifo` sequencialmente por lote (`OUTBOX_BATCH_SIZE = 10`, um `SendMessageCommand` por evento no LocalStack). Com 3 réplicas publicando em paralelo contra o LocalStack em container único (que bateu 142%–159% de CPU), a vazão máxima de chamadas `SendMessage` individuais fica em torno de ~380–420 eventos/s. Quando a entrada gera 550 eventos/s, a tabela `outbox_messages` acumula uma fila que é drenada assim que a rajada termina, **sem impactar a latência HTTP do cliente (`p95 = 18,5 ms`)**. Esse resultado valida o desacoplamento via Transactional Outbox: a escrita síncrona não sofre com a latência do broker, e para escalar a vazão da outbox acima de 500 eventos/s bastaria trocar o envio unitário por `SendMessageBatch` (até 10 mensagens por round-trip HTTP ao SQS) ou aumentar `OUTBOX_BATCH_SIZE`.
 
 ### 4. Latência ponta a ponta no Caminho SQS
 
