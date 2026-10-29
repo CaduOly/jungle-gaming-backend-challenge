@@ -17,6 +17,8 @@ export interface SqsConsumerConfig {
   /** Wait after a failed readiness probe or a failed receive. */
   readonly errorDelayMs: number;
   readonly shutdownTimeoutMs: number;
+  /** Upper bound of one handler attempt; past it the attempt is a transient failure (see TimeoutMessageHandler). */
+  readonly handlerTimeoutMs: number;
   readonly circuitBreaker: { readonly failureThreshold: number; readonly openMs: number };
 }
 
@@ -29,6 +31,7 @@ export const DEFAULT_SQS_CONSUMER_CONFIG: SqsConsumerConfig = {
   retry: { baseMs: 1_000, capMs: 60_000 },
   errorDelayMs: 1_000,
   shutdownTimeoutMs: 25_000,
+  handlerTimeoutMs: 15_000,
   circuitBreaker: { failureThreshold: 3, openMs: 5_000 },
 };
 
@@ -68,6 +71,7 @@ export const readSqsConsumerConfig = (env: Env): SqsConsumerConfig => {
     },
     errorDelayMs: positive(env, 'SQS_CONSUMER_ERROR_DELAY_MS', d.errorDelayMs),
     shutdownTimeoutMs: positive(env, 'SHUTDOWN_TIMEOUT_MS', d.shutdownTimeoutMs),
+    handlerTimeoutMs: positive(env, 'SQS_CONSUMER_HANDLER_TIMEOUT_MS', d.handlerTimeoutMs),
     circuitBreaker: {
       failureThreshold: positive(env, 'CIRCUIT_BREAKER_FAILURE_THRESHOLD', d.circuitBreaker.failureThreshold),
       openMs: positive(env, 'CIRCUIT_BREAKER_OPEN_MS', d.circuitBreaker.openMs),

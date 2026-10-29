@@ -18,6 +18,7 @@ describe('readSqsConsumerConfig', () => {
         SQS_CONSUMER_RETRY_CAP_MS: '900',
         SQS_CONSUMER_ERROR_DELAY_MS: '50',
         SHUTDOWN_TIMEOUT_MS: '3000',
+        SQS_CONSUMER_HANDLER_TIMEOUT_MS: '4000',
         CIRCUIT_BREAKER_FAILURE_THRESHOLD: '1',
         CIRCUIT_BREAKER_OPEN_MS: '200',
       }),
@@ -30,6 +31,7 @@ describe('readSqsConsumerConfig', () => {
       retry: { baseMs: 100, capMs: 900 },
       errorDelayMs: 50,
       shutdownTimeoutMs: 3_000,
+      handlerTimeoutMs: 4_000,
       circuitBreaker: { failureThreshold: 1, openMs: 200 },
     });
   });
@@ -40,6 +42,7 @@ describe('readSqsConsumerConfig', () => {
     ['SQS_CONSUMER_MAX_MESSAGES', '0'],
     ['SQS_CONSUMER_VISIBILITY_TIMEOUT_SECONDS', '43201'],
     ['SHUTDOWN_TIMEOUT_MS', '0'],
+    ['SQS_CONSUMER_HANDLER_TIMEOUT_MS', '0'],
     ['SQS_CONSUMER_MAX_IN_PROCESS_ATTEMPTS', '0'],
   ])('rejects %s=%s', (name, value) => {
     expect(() => readSqsConsumerConfig({ [name]: value })).toThrow(name);

@@ -13,6 +13,7 @@ import { FaultInjector } from '../fault-injection/fault-injector';
 import { Sha256PayloadHasher } from '../hashing/sha256-payload-hasher';
 import { UuidV7IdGenerator } from '../id/uuid-v7-id-generator';
 import { FaultInjectingMessageHandler } from '../messaging/sqs/fault-injecting-message-handler';
+import { TimeoutMessageHandler } from '../messaging/sqs/timeout-message-handler';
 import { SqsConsumerLoop, type SqsConsumerLoopDeps } from '../messaging/sqs/sqs-consumer-loop';
 import { createPostgresReadiness } from '../persistence/mikro-orm/postgres-readiness';
 import { createTxRepositories } from '../persistence/mikro-orm/repository/wagering-repositories';
@@ -69,7 +70,10 @@ export const createWagerCommandConsumer = (deps: WagerCommandConsumerDeps): SqsC
   );
   const processWager =
     observability === undefined ? useCase : observeUseCase(useCase, observability, processWagerTransactionObservation);
-  const handler = new FaultInjectingMessageHandler(new WagerCommandHandler(processWager, deps.handler ?? {}), faults);
+  const handler = new TimeoutMessageHandler(
+    new FaultInjectingMessageHandler(new WagerCommandHandler(processWager, deps.handler ?? {}), faults),
+    deps.config.handlerTimeoutMs,
+  );
   return new SqsConsumerLoop({
     client: deps.client,
     queue: deps.sqs.commandsQueue,
