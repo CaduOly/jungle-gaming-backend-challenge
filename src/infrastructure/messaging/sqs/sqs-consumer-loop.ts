@@ -100,12 +100,61 @@ const observe = (callback: () => unknown): void => {
 const isAbort = (error: unknown): boolean =>
   error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError');
 
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+/** Resolves after `ms`, or as soon as `signal` aborts. */
+const pause = (ms: number, signal: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const done = (): void => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener('abort', done, { once: true });
+  });
+
+/** Settled: acked or dead-lettered. Handed back: returned to SQS with a visibility delay, still unprocessed. */
+type Disposition = { readonly handedBack: false } | { readonly handedBack: true; readonly visibilitySeconds: number };
+
+const SETTLED: Disposition = { handedBack: false };
+
+/** Thrown into onError (operation `heartbeat`) for each entry SQS refused to extend. */
+export class VisibilityExtensionRejectedError extends Error {
+  override readonly name = 'VisibilityExtensionRejectedError';
+
+  constructor(
+    readonly sqsMessageId: string,
+    readonly code: string | undefined,
+    detail: string | undefined,
+  ) {
+    super(`SQS refused to extend the visibility of ${sqsMessageId}: ${code ?? 'unknown'} ${detail ?? ''}`.trim());
+  }
+}
+
 /**
  * Long-polls the commands queue and hands each message to the handler. Messages of one FIFO group are
  * handled in order, groups in parallel. Every message of the batch keeps its visibility extended by a
  * heartbeat until it is settled. Settling: ack → DeleteMessage (only after the handler resolved, i.e.
- * after its commit); retry → ChangeMessageVisibility with backoff, and the rest of the group in that batch
- * is handed back untouched to keep the order; dead letter → explicit SendMessage to the DLQ, then delete.
+ * after its commit); dead letter → explicit SendMessage to the DLQ, then delete.
+ *
+ * Retry stays in the process. A failed message is attempted again here, with backoff, while the heartbeat
+ * keeps it and the rest of its group invisible; nothing goes back to SQS, so no receive is spent. Each
+ * failure first probes readiness: while PostgreSQL is down the attempt does not count (the breaker is fed
+ * instead), so an outage never pushes valid commands towards the DLQ. Only after maxInProcessAttempts, or
+ * on stop, the message goes back to SQS with a backoff visibility, and the rest of its group in the batch
+ * goes back with the same visibility. On the last receive allowed by maxReceiveCount it is dead-lettered
+ * explicitly (retries_exhausted) instead; the redrive policy is left as the net for a consumer that dies
+ * before settling.
+ *
+ * FIFO order: on AWS a group with a message in flight delivers nothing else, so the tail can never pass
+ * the head. LocalStack does not honour that block: a message of a group can be received while an older one
+ * of the same group is still in flight. That is why the tail goes back with the head's visibility instead
+ * of 0, and why the order tests against LocalStack run a single consumer.
  */
 export class SqsConsumerLoop {
   readonly breaker: CircuitBreaker;
@@ -117,7 +166,10 @@ export class SqsConsumerLoop {
   private readonly clock: IClock;
   private readonly requestTimeoutMs: number;
   private receiveAbort: AbortController | undefined;
-  private readonly handlerAbort = new AbortController();
+  /** Messages whose final SQS call (delete, dead letter, hand back) has started: the heartbeat leaves them alone. */
+  private readonly leaving = new WeakSet<Received>();
+  private handlerAbort = new AbortController();
+  private stopAbort = new AbortController();
 
   constructor(private readonly deps: SqsConsumerLoopDeps) {
     const { config } = deps;
@@ -158,17 +210,23 @@ export class SqsConsumerLoop {
   }
 
   start(): void {
+    const wasRunning = this.loop.isRunning;
     this.loop.start();
+    if (wasRunning) return;
+    this.handlerAbort = new AbortController();
+    this.stopAbort = new AbortController();
   }
 
   /**
-   * Stops polling (aborting the long poll), lets the messages in flight finish, hands the received but not
-   * started ones back with visibility 0 and resolves. After `timeoutMs` it gives up waiting and aborts the
+   * Stops polling (aborting the long poll and any in-process retry wait), lets the handlers in flight finish,
+   * hands a message waiting for a retry back with its backoff visibility, the received but not started ones
+   * back with visibility 0, and resolves. After `timeoutMs` it gives up waiting and aborts the
    * handlers' signal; whatever is unsettled reappears once its visibility timeout expires.
    */
   async stop(timeoutMs: number = this.deps.config.shutdownTimeoutMs): Promise<StopResult> {
     const stopped = this.loop.stop();
     this.receiveAbort?.abort();
+    this.stopAbort.abort();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<false>((resolve) => {
       timer = setTimeout(() => resolve(false), timeoutMs);
@@ -252,19 +310,19 @@ export class SqsConsumerLoop {
     for (let index = 0; index < group.length; index++) {
       const message = group[index] as Received;
       if (this.loop.isStopping) {
-        await this.release(group.slice(index), settle);
+        await this.release(group.slice(index), settle, 0);
         return;
       }
-      const outcome = await this.process(message);
+      const disposition = await this.process(message);
       settle(message);
-      if (outcome.kind === 'retry') {
-        await this.release(group.slice(index + 1), settle);
+      if (disposition.handedBack) {
+        await this.release(group.slice(index + 1), settle, disposition.visibilitySeconds);
         return;
       }
     }
   }
 
-  private async process(message: Received): Promise<MessageOutcome> {
+  private async process(message: Received): Promise<Disposition> {
     const startedAt = this.clock.now().getTime();
     const rawBody = message.sqs.Body ?? '';
     let body: unknown;
@@ -274,7 +332,7 @@ export class SqsConsumerLoop {
       const outcome = MessageOutcome.deadLetter(DeadLetterReason.INVALID_JSON, (error as Error).message);
       await this.settle(message, outcome);
       this.reportOutcome({ sqsMessageId: message.sqsMessageId, receiveCount: message.receiveCount }, outcome, startedAt, false);
-      return outcome;
+      return SETTLED;
     }
 
     const sentAt = parseSafeInteger(message.sqs.Attributes?.SentTimestamp);
@@ -286,27 +344,74 @@ export class SqsConsumerLoop {
       ...(message.groupId === undefined ? {} : { messageGroupId: message.groupId }),
       ...(sentAt === undefined ? {} : { sentAt: new Date(sentAt) }),
     };
-    let outcome: MessageOutcome;
-    let transient = false;
-    try {
-      outcome = await this.deps.handler.handle(inbound, this.handlerAbort.signal);
-    } catch (error) {
-      ({ outcome, transient } = classifyMessageError(error));
+    const { maxInProcessAttempts, maxReceiveCount } = this.deps.config;
+    let failures = 0;
+    for (;;) {
+      const attemptStartedAt = this.clock.now().getTime();
+      const { outcome, transient, failure } = await this.attempt(inbound);
+      this.reportOutcome(inbound, outcome, attemptStartedAt, transient);
+      if (outcome.kind !== 'retry') {
+        await this.settle(message, outcome);
+        return SETTLED;
+      }
+      const ready = await this.probeReadiness();
+      if (ready) failures += 1;
+      if (failures >= maxInProcessAttempts) {
+        if (message.receiveCount < maxReceiveCount) return this.handBack(message);
+        const detail = `${failures} attempts on receive ${message.receiveCount} of ${maxReceiveCount}: ${failure}`;
+        await this.settle(message, MessageOutcome.deadLetter(DeadLetterReason.RETRIES_EXHAUSTED, detail));
+        return SETTLED;
+      }
+      if (this.loop.isStopping) return this.handBack(message);
+      const waitMs = ready
+        ? (outcome.delayMs ?? this.backoff.nextDelayMs(failures))
+        : Math.max(this.deps.config.errorDelayMs, this.breaker.remainingOpenMs());
+      await pause(waitMs, this.stopAbort.signal);
+      if (this.loop.isStopping) return this.handBack(message);
     }
-    await this.settle(message, outcome);
-    this.reportOutcome(inbound, outcome, startedAt, transient);
-    return outcome;
+  }
+
+  private async attempt(
+    inbound: InboundMessage,
+  ): Promise<{ readonly outcome: MessageOutcome; readonly transient: boolean; readonly failure: string }> {
+    try {
+      const outcome = await this.deps.handler.handle(inbound, this.handlerAbort.signal);
+      return { outcome, transient: false, failure: 'the handler asked for a retry' };
+    } catch (error) {
+      return { ...classifyMessageError(error), failure: messageOf(error) };
+    }
+  }
+
+  /** Feeds the breaker; false while a dependency such as PostgreSQL is not ready. */
+  private async probeReadiness(): Promise<boolean> {
+    try {
+      await this.deps.readiness();
+      this.breaker.recordSuccess();
+      return true;
+    } catch {
+      this.breaker.recordFailure();
+      return false;
+    }
+  }
+
+  private async handBack(message: Received): Promise<Disposition> {
+    const visibilitySeconds = toVisibilitySeconds(this.backoff.nextDelayMs(Math.max(1, message.receiveCount)));
+    this.leaving.add(message);
+    try {
+      await this.changeVisibility(message, visibilitySeconds);
+    } catch (error) {
+      this.reportError(error, 'hand-back');
+    }
+    return { handedBack: true, visibilitySeconds };
   }
 
   private async settle(message: Received, outcome: MessageOutcome): Promise<void> {
+    this.leaving.add(message);
     try {
       if (outcome.kind === 'ack') {
         this.faults.crash('crash_after_commit_before_ack');
         await this.delete(message);
-      } else if (outcome.kind === 'retry') {
-        const delayMs = outcome.delayMs ?? this.backoff.nextDelayMs(Math.max(1, message.receiveCount));
-        await this.changeVisibility(message, toVisibilitySeconds(delayMs));
-      } else {
+      } else if (outcome.kind === 'dead-letter') {
         await this.deadLetter(message, outcome.reason, outcome.detail);
         await this.delete(message);
       }
@@ -353,12 +458,13 @@ export class SqsConsumerLoop {
     );
   }
 
-  private async release(messages: Received[], settle: (message: Received) => void): Promise<void> {
+  private async release(messages: Received[], settle: (message: Received) => void, seconds: number): Promise<void> {
     await Promise.all(
       messages.map(async (message) => {
         settle(message);
+        this.leaving.add(message);
         try {
-          await this.changeVisibility(message, 0);
+          await this.changeVisibility(message, seconds);
         } catch (error) {
           this.reportError(error, 'release');
         }
@@ -370,13 +476,16 @@ export class SqsConsumerLoop {
    * Sets the visibility to visibilityTimeout plus the time already spent since the receive. On AWS that only
    * holds the message a little longer after a crash; on LocalStack it is required, because LocalStack
    * expires the receipt handle at receive time + the last visibility set, so a plain extension would make
-   * the final DeleteMessage fail with "The receipt handle has expired".
+   * the final DeleteMessage fail with "The receipt handle has expired". A message whose final call already
+   * started is skipped, and so is a refusal that raced with it (the message is gone, nothing to report);
+   * any other refused entry goes to onError as VisibilityExtensionRejectedError.
    */
-  private async extendVisibility(messages: Received[]): Promise<void> {
+  private async extendVisibility(candidates: Received[]): Promise<void> {
+    const messages = candidates.filter((message) => !this.leaving.has(message));
     if (messages.length === 0) return;
     const now = this.clock.now().getTime();
     try {
-      await this.deps.client.send(
+      const { Failed = [] } = await this.deps.client.send(
         new ChangeMessageVisibilityBatchCommand({
           QueueUrl: await this.queueUrl.get(),
           Entries: messages.map((message, index) => ({
@@ -390,6 +499,12 @@ export class SqsConsumerLoop {
         }),
         { abortSignal: AbortSignal.timeout(this.requestTimeoutMs) },
       );
+      for (const failed of Failed) {
+        const message = messages[parseSafeInteger(failed.Id) ?? -1];
+        if (message !== undefined && this.leaving.has(message)) continue;
+        const error = new VisibilityExtensionRejectedError(message?.sqsMessageId ?? `entry ${failed.Id}`, failed.Code, failed.Message);
+        this.reportError(error, 'heartbeat');
+      }
     } catch (error) {
       this.reportError(error, 'heartbeat');
     }

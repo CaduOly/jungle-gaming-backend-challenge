@@ -206,26 +206,54 @@ describe('SQS consumer loop against LocalStack', () => {
     expect(await receiveAll(queues.client, queues.commands.dlqUrl, 0)).toEqual([]);
   });
 
-  it('retries a transient failure with backoff and never dead-letters it early', async () => {
-    const { handler, calls } = recording((message) => {
-      if (message.receiveCount < MAX_RECEIVE_COUNT) {
+  it('retries a transient failure in the process with backoff, without spending a receive', async () => {
+    const { handler, calls } = recording((_, done) => {
+      if (done.length < MAX_RECEIVE_COUNT) {
         throw new TransientInfrastructureError('lock timeout', '55P03', { cause: undefined });
       }
       return MessageOutcome.ack();
     });
     await send({ messageId: 'msg-transient' });
-    const { loop } = consumer(handler);
+    const { loop } = consumer(handler, { config: { maxInProcessAttempts: MAX_RECEIVE_COUNT + 1 } });
 
     loop.start();
     await until(() => calls.length === MAX_RECEIVE_COUNT, 15_000, 'every retry');
     await until(async () => (await queueDepth(queues.client, queues.commands.url)).inFlight === 0, 5_000, 'the ack');
     await loop.stop();
 
-    expect(calls.map((call) => call.message.receiveCount)).toEqual([1, 2, 3]);
+    expect(calls.map((call) => call.message.receiveCount)).toEqual([1, 1, 1]);
     for (let index = 1; index < calls.length; index++) {
-      expect(calls[index]!.at - calls[index - 1]!.at).toBeGreaterThanOrEqual(900);
+      expect(calls[index]!.at - calls[index - 1]!.at).toBeGreaterThanOrEqual(450);
     }
     expect(await receiveAll(queues.client, queues.commands.dlqUrl, 0)).toEqual([]);
+  });
+
+  it('holds a transient head failure in the process, so no message of its group burns receives or reaches the DLQ', async () => {
+    const groupId = uuidv7();
+    let headFailures = MAX_RECEIVE_COUNT + 1;
+    const acked: string[] = [];
+    const { handler, calls } = recording((message) => {
+      const { version } = message.body as { version: string };
+      if (version === 'v1' && headFailures-- > 0) {
+        throw new TransientInfrastructureError('lock timeout', '55P03', { cause: undefined });
+      }
+      acked.push(version);
+      return MessageOutcome.ack();
+    });
+    for (const version of ['v1', 'v2', 'v3']) await send({ version }, groupId);
+    const { loop } = consumer(handler, {
+      config: { maxInProcessAttempts: MAX_RECEIVE_COUNT + 2, retry: { baseMs: 200, capMs: 400 } },
+    });
+
+    loop.start();
+    await until(() => acked.length === 3, 20_000, 'the whole group');
+    await until(async () => (await queueDepth(queues.client, queues.commands.url)).inFlight === 0, 5_000, 'the acks');
+    await loop.stop();
+
+    expect(acked).toEqual(['v1', 'v2', 'v3']);
+    expect(calls.map((call) => call.message.receiveCount)).toEqual(Array.from({ length: calls.length }, () => 1));
+    expect(await receiveAll(queues.client, queues.commands.dlqUrl, 0)).toEqual([]);
+    expect(await queueDepth(queues.client, queues.commands.url)).toEqual({ visible: 0, inFlight: 0 });
   });
 
   it('dead-letters a poison message explicitly, with its reason, on the first receive', async () => {
@@ -266,10 +294,10 @@ describe('SQS consumer loop against LocalStack', () => {
     expect(await queueDepth(queues.client, queues.commands.url)).toEqual({ visible: 0, inFlight: 0 });
   });
 
-  it('leaves the redrive policy as the safety net for a message that is never settled', async () => {
+  it('hands a message back after the in-process ceiling and dead-letters it explicitly on the last receive', async () => {
     const { handler, calls } = recording(() => MessageOutcome.retry(0));
     const sqsMessageId = await send({ messageId: 'msg-stuck' });
-    const { loop } = consumer(handler);
+    const { loop } = consumer(handler, { config: { maxInProcessAttempts: 2 } });
 
     loop.start();
     const deadLetters: Message[] = [];
@@ -279,13 +307,49 @@ describe('SQS consumer loop against LocalStack', () => {
         return deadLetters.length === 1;
       },
       20_000,
-      'the redrive',
+      'the dead letter',
     );
     await loop.stop();
 
-    expect(calls.map((call) => call.message.receiveCount)).toEqual([1, 2, 3]);
-    expect(deadLetters[0]?.MessageId).toBe(sqsMessageId);
-    expect(deadLetters[0]?.MessageAttributes?.[DEAD_LETTER_ATTRIBUTES.reason]).toBeUndefined();
+    expect(calls.map((call) => call.message.receiveCount)).toEqual([1, 1, 2, 2, 3, 3]);
+    const [deadLetter] = deadLetters;
+    expect(deadLetter?.MessageAttributes?.[DEAD_LETTER_ATTRIBUTES.sourceMessageId]?.StringValue).toBe(sqsMessageId);
+    expect(deadLetter?.MessageAttributes?.[DEAD_LETTER_ATTRIBUTES.reason]?.StringValue).toBe('retries_exhausted');
+    expect(deadLetter?.MessageAttributes?.[DEAD_LETTER_ATTRIBUTES.receiveCount]?.StringValue).toBe(`${MAX_RECEIVE_COUNT}`);
+    expect(await queueDepth(queues.client, queues.commands.url)).toEqual({ visible: 0, inFlight: 0 });
+  });
+
+  it('keeps the group order when a message in the middle is handed back to SQS', async () => {
+    const groupId = uuidv7();
+    let middleFailures = 3;
+    const acked: string[] = [];
+    const { handler, calls } = recording((message) => {
+      const { version } = message.body as { version: string };
+      if (version === 'v2' && middleFailures-- > 0) {
+        throw new TransientInfrastructureError('lock timeout', '55P03', { cause: undefined });
+      }
+      acked.push(version);
+      return MessageOutcome.ack();
+    });
+    for (const version of ['v1', 'v2', 'v3']) await send({ version }, groupId);
+    const { loop } = consumer(handler, { config: { maxInProcessAttempts: 2, retry: { baseMs: 200, capMs: 400 } } });
+
+    loop.start();
+    await until(() => acked.length === 3, 20_000, 'the whole group');
+    await until(async () => (await queueDepth(queues.client, queues.commands.url)).inFlight === 0, 5_000, 'the acks');
+    await loop.stop();
+
+    expect(acked).toEqual(['v1', 'v2', 'v3']);
+    const versionOf = (call: Call) => (call.message.body as { version: string }).version;
+    expect(calls.map((call) => `${versionOf(call)}@${call.message.receiveCount}`)).toEqual([
+      'v1@1',
+      'v2@1',
+      'v2@1',
+      'v2@2',
+      'v2@2',
+      'v3@2',
+    ]);
+    expect(await receiveAll(queues.client, queues.commands.dlqUrl, 0)).toEqual([]);
   });
 
   it('keeps a long-running message invisible with the heartbeat', async () => {

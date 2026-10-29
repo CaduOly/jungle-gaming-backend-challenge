@@ -5,6 +5,8 @@ export const DeadLetterReason = {
   CONTRACT_VIOLATION: 'contract_violation',
   INBOX_PAYLOAD_MISMATCH: 'inbox_payload_mismatch',
   PERMANENT_INFRASTRUCTURE: 'permanent_infrastructure',
+  /** Still failing after every in-process attempt of the last receive allowed by maxReceiveCount. */
+  RETRIES_EXHAUSTED: 'retries_exhausted',
 } as const;
 
 export type DeadLetterReason = (typeof DeadLetterReason)[keyof typeof DeadLetterReason];

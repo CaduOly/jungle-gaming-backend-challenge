@@ -45,7 +45,6 @@ describe('PublishOutboxBatch', () => {
       claimed: 0,
       published: 0,
       failed: 0,
-      deferred: 0,
       leaseLost: 0,
       exhausted: 0,
       exhaustedMessageIds: [],
@@ -83,25 +82,16 @@ describe('PublishOutboxBatch', () => {
     expect(retried.lockedUntil).toBeUndefined();
   });
 
-  it('defers the rest of an aggregate after one of its messages fails, until that retry is due', async () => {
-    await enqueue(4, -4, (index) => (index === 3 ? 'wallet-b' : 'wallet-a'));
-    publisher.failWhen((message) => message.id === 'evt-1');
+  it('never lets an aggregate overtake a failed head, even one message per round', async () => {
+    await enqueue(3, -3, () => 'wallet-a');
+    publisher.failNext();
 
-    const output = await useCase().execute();
+    expect(await useCase(1).execute()).toMatchObject({ claimed: 1, published: 0, failed: 1 });
+    expect(await useCase(1).execute()).toMatchObject({ claimed: 0 });
 
-    expect(output).toMatchObject({ claimed: 4, published: 2, failed: 1, deferred: 1, leaseLost: 0 });
-    expect(publisher.publishedIds()).toEqual(['evt-0', 'evt-3']);
-    const failed = (await outbox.findById('evt-1'))!;
-    const deferred = (await outbox.findById('evt-2'))!;
-    expect(deferred.attempts).toBe(0);
-    expect(deferred.lockedUntil).toBeUndefined();
-    expect(deferred.nextAttemptAt).toEqual(failed.nextAttemptAt);
-    expect(await useCase().execute()).toMatchObject({ claimed: 0 });
-
-    publisher.recover();
-    clock.set(failed.nextAttemptAt);
-    expect(await useCase().execute()).toMatchObject({ claimed: 2, published: 2 });
-    expect(publisher.publishedIds()).toEqual(['evt-0', 'evt-3', 'evt-1', 'evt-2']);
+    clock.set((await outbox.findById('evt-0'))!.nextAttemptAt);
+    for (let round = 0; round < 3; round += 1) expect(await useCase(1).execute()).toMatchObject({ published: 1 });
+    expect(publisher.publishedIds()).toEqual(['evt-0', 'evt-1', 'evt-2']);
   });
 
   it('publishes a failed message again once its backoff elapses', async () => {

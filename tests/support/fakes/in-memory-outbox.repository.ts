@@ -9,6 +9,7 @@ const byOccurrence = (a: OutboxMessageState, b: OutboxMessageState): number =>
 const withoutLease = ({ lockedUntil: _lockedUntil, leaseToken: _leaseToken, ...rest }: OutboxMessageState) => rest;
 
 /**
+ * Head-of-line like the real claim: only the oldest unpublished message of each aggregate is eligible.
  * Single-threaded stand-in for `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED)`: every
  * method runs without awaiting in between, so a claim is atomic relative to other callers.
  */
@@ -24,7 +25,11 @@ export class InMemoryOutboxRepository implements IOutboxRepository {
 
   async claimBatch(limit: number, leaseMs: number, now: Date): Promise<OutboxMessage[]> {
     const lockedUntil = new Date(now.getTime() + leaseMs);
-    const claimed = [...this.rows.values()]
+    const heads = new Map<string, OutboxMessageState>();
+    for (const row of [...this.rows.values()].filter((stored) => !stored.publishedAt).sort(byOccurrence)) {
+      if (!heads.has(row.aggregateId)) heads.set(row.aggregateId, row);
+    }
+    const claimed = [...heads.values()]
       .filter((row) => OutboxMessage.rehydrate(row).isDue(now))
       .sort(byOccurrence)
       .slice(0, limit)
@@ -50,16 +55,6 @@ export class InMemoryOutboxRepository implements IOutboxRepository {
       attempts: message.attempts,
       nextAttemptAt: message.nextAttemptAt,
     });
-    return true;
-  }
-
-  async defer(message: OutboxMessage, until: Date): Promise<boolean> {
-    const stored = this.require(message.id);
-    if (stored.publishedAt || message.leaseToken === undefined || stored.leaseToken !== message.leaseToken) {
-      return false;
-    }
-    const nextAttemptAt = new Date(Math.max(stored.nextAttemptAt.getTime(), until.getTime()));
-    this.rows.set(message.id, { ...withoutLease(stored), nextAttemptAt });
     return true;
   }
 

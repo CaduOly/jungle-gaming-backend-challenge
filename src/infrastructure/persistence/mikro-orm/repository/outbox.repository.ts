@@ -42,12 +42,18 @@ export class OutboxRepository implements IOutboxRepository {
       `UPDATE outbox_messages
           SET locked_until = ?, lease_token = gen_random_uuid()
         WHERE event_id IN (
-                SELECT event_id
-                  FROM outbox_messages
-                 WHERE published_at IS NULL
-                   AND next_attempt_at <= ?
-                   AND (locked_until IS NULL OR locked_until <= ?)
-                 ORDER BY occurred_at, event_id
+                SELECT o.event_id
+                  FROM outbox_messages o
+                 WHERE o.published_at IS NULL
+                   AND o.next_attempt_at <= ?
+                   AND (o.locked_until IS NULL OR o.locked_until <= ?)
+                   AND NOT EXISTS (
+                         SELECT 1
+                           FROM outbox_messages p
+                          WHERE p.aggregate_id = o.aggregate_id
+                            AND p.published_at IS NULL
+                            AND (p.occurred_at, p.event_id) < (o.occurred_at, o.event_id))
+                 ORDER BY o.occurred_at, o.event_id
                  LIMIT ?
                    FOR UPDATE SKIP LOCKED)
       RETURNING ${OUTBOX_COLUMNS}`,
@@ -74,18 +80,6 @@ export class OutboxRepository implements IOutboxRepository {
           SET attempts = ?, next_attempt_at = ?, locked_until = NULL, lease_token = NULL
         WHERE event_id = ? AND published_at IS NULL AND lease_token = ?`,
       [message.attempts, message.nextAttemptAt, message.id, message.leaseToken],
-      'run',
-    );
-    return result.affectedRows === 1;
-  }
-
-  async defer(message: OutboxMessage, until: Date): Promise<boolean> {
-    if (message.leaseToken === undefined) return false;
-    const result = await this.em.execute<RunResult>(
-      `UPDATE outbox_messages
-          SET locked_until = NULL, lease_token = NULL, next_attempt_at = GREATEST(next_attempt_at, ?)
-        WHERE event_id = ? AND published_at IS NULL AND lease_token = ?`,
-      [until, message.id, message.leaseToken],
       'run',
     );
     return result.affectedRows === 1;

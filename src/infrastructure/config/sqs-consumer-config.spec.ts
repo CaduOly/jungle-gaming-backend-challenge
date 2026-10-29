@@ -14,6 +14,7 @@ describe('readSqsConsumerConfig', () => {
         SQS_CONSUMER_VISIBILITY_TIMEOUT_SECONDS: '2',
         SQS_CONSUMER_HEARTBEAT_INTERVAL_MS: '500',
         SQS_MAX_RECEIVE_COUNT: '4',
+        SQS_CONSUMER_MAX_IN_PROCESS_ATTEMPTS: '7',
         SQS_CONSUMER_RETRY_BASE_MS: '100',
         SQS_CONSUMER_RETRY_CAP_MS: '900',
         SQS_CONSUMER_ERROR_DELAY_MS: '50',
@@ -27,6 +28,7 @@ describe('readSqsConsumerConfig', () => {
       visibilityTimeoutSeconds: 2,
       heartbeatIntervalMs: 500,
       maxReceiveCount: 4,
+      maxInProcessAttempts: 7,
       retry: { baseMs: 100, capMs: 900 },
       errorDelayMs: 50,
       shutdownTimeoutMs: 3_000,
@@ -40,6 +42,7 @@ describe('readSqsConsumerConfig', () => {
     ['SQS_CONSUMER_MAX_MESSAGES', '0'],
     ['SQS_CONSUMER_VISIBILITY_TIMEOUT_SECONDS', '43201'],
     ['SHUTDOWN_TIMEOUT_MS', '0'],
+    ['SQS_CONSUMER_MAX_IN_PROCESS_ATTEMPTS', '0'],
   ])('rejects %s=%s', (name, value) => {
     expect(() => readSqsConsumerConfig({ [name]: value })).toThrow(name);
   });

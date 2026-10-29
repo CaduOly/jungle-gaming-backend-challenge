@@ -10,9 +10,18 @@ import type { Pool, PoolClient } from 'pg';
  * release by its holder becomes a no-op instead of pg-pool's "Release called on client which has already
  * been released" throw.
  */
+type ConnectCallback = (error: Error | undefined, client: PoolClient | undefined, done: (release?: Error | boolean) => void) => void;
+
+const noop = (): void => undefined;
+
+/*
+ * pg-pool's own pool.query() acquires through the callback form, connect((error, client, done) => …), so the
+ * guarded connect has to honour it as well: ignoring the callback would leave that query hanging with its slot
+ * checked out for good.
+ */
 export const guardPool = (pool: Pool): void => {
   const connect = pool.connect.bind(pool) as () => Promise<PoolClient>;
-  const guardedConnect = async (): Promise<PoolClient> => {
+  const acquire = async (): Promise<PoolClient> => {
     const client = await connect();
     const release = client.release;
     let released = false;
@@ -31,6 +40,15 @@ export const guardPool = (pool: Pool): void => {
     client.once('error', onBroken);
     client.once('end', onEnd);
     return client;
+  };
+  const guardedConnect = (callback?: ConnectCallback): Promise<PoolClient> | undefined => {
+    if (callback === undefined) return acquire();
+    acquire().then(
+      (client) => queueMicrotask(() => callback(undefined, client, (destroy) => client.release(destroy))),
+      (error: unknown) =>
+        queueMicrotask(() => callback(error instanceof Error ? error : new Error(String(error)), undefined, noop)),
+    );
+    return undefined;
   };
   pool.connect = guardedConnect as Pool['connect'];
 };

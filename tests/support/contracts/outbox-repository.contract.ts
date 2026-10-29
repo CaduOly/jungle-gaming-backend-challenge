@@ -230,30 +230,39 @@ export const describeOutboxRepositoryContract = (
       await expect(repository.add([message])).rejects.toThrow();
     });
 
-    it('defers a claimed message without counting an attempt, fenced by the lease token', async () => {
-      const message = aMessage();
-      await repository.add([message]);
-      const [stale] = await repository.claimBatch(1, LEASE_MS, at(0));
-      const [owner] = await repository.claimBatch(1, LEASE_MS, at(LEASE_MS));
+    describe('head-of-line per aggregate', () => {
+      const ofAggregate = (aggregateId: string, occurredAtMs: number): OutboxMessage =>
+        OutboxMessage.fromEvent(aFakeEvent({ eventId: uuidv7(), aggregateId, occurredAt: at(occurredAtMs) }));
 
-      expect(await repository.defer(stale!, at(LEASE_MS + 500))).toBe(false);
-      expect((await repository.findById(message.id))!.lockedUntil).toEqual(at(LEASE_MS * 2));
+      it('claims only the oldest unpublished message of each aggregate', async () => {
+        const [a1, a2, b1] = [ofAggregate('agg-a', 0), ofAggregate('agg-a', 1), ofAggregate('agg-b', 2)];
+        await repository.add([a2!, b1!, a1!]);
 
-      expect(await repository.defer(owner!, at(LEASE_MS + 500))).toBe(true);
-      const stored = (await repository.findById(message.id))!;
-      expect(stored.lockedUntil).toBeUndefined();
-      expect(stored.attempts).toBe(0);
-      expect(stored.nextAttemptAt).toEqual(at(LEASE_MS + 500));
-      expect(await repository.claimBatch(1, LEASE_MS, at(LEASE_MS + 499))).toEqual([]);
-      expect(ids(await repository.claimBatch(1, LEASE_MS, at(LEASE_MS + 500)))).toEqual([message.id]);
-    });
+        expect(ids(await repository.claimBatch(10, LEASE_MS, at(10)))).toEqual([a1!.id, b1!.id]);
+      });
 
-    it('never moves nextAttemptAt back when deferring', async () => {
-      const message = aMessage();
-      await repository.add([message]);
-      const [claimed] = await repository.claimBatch(1, LEASE_MS, at(0));
-      expect(await repository.defer(claimed!, at(-5_000))).toBe(true);
-      expect((await repository.findById(message.id))!.nextAttemptAt).toEqual(message.nextAttemptAt);
+      it('keeps the rest of the aggregate back while its head is leased', async () => {
+        const [a1, a2] = [ofAggregate('agg-a', 0), ofAggregate('agg-a', 1)];
+        await repository.add([a1!, a2!]);
+        await repository.claimBatch(10, LEASE_MS, at(10));
+
+        expect(await repository.claimBatch(10, LEASE_MS, at(20))).toEqual([]);
+      });
+
+      it('keeps the rest of the aggregate back while its head waits for a retry, and releases it once the head is out', async () => {
+        const [a1, a2] = [ofAggregate('agg-a', 0), ofAggregate('agg-a', 1)];
+        await repository.add([a1!, a2!]);
+        const [head] = await repository.claimBatch(10, LEASE_MS, at(10));
+        head!.scheduleRetry(at(11), 5_000);
+        await repository.scheduleRetry(head!);
+
+        expect(await repository.claimBatch(10, LEASE_MS, at(12))).toEqual([]);
+        const [retried] = await repository.claimBatch(10, LEASE_MS, at(5_011));
+        expect(retried!.id).toBe(a1!.id);
+        retried!.markPublished(at(5_012));
+        await repository.markPublished(retried!);
+        expect(ids(await repository.claimBatch(10, LEASE_MS, at(5_013)))).toEqual([a2!.id]);
+      });
     });
   });
 };
