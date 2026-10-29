@@ -10,6 +10,14 @@ describe('detail message catalog', () => {
     }
   });
 
+  it('already maps BALANCE_LIMIT_EXCEEDED, the balance overflow rejection', () => {
+    expect(findDetailMessage('BALANCE_LIMIT_EXCEEDED')).toEqual({
+      code: 'BALANCE_LIMIT_EXCEEDED',
+      message: 'WAGERING.ERROR.BALANCE_LIMIT_EXCEEDED',
+      type: 'error',
+    });
+  });
+
   it('never repeats a code nor a message key', () => {
     const entries = allDetailMessages();
     expect(new Set(entries.map((entry) => entry.code)).size).toBe(entries.length);

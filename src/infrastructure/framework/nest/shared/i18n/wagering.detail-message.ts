@@ -13,6 +13,8 @@ export class WageringDetailMessage {
   static readonly REFERENCE_NOT_PROCESSED: IDetailMessage = error(NS, 'REFERENCE_NOT_PROCESSED');
   static readonly ALREADY_REVERSED: IDetailMessage = error(NS, 'ALREADY_REVERSED');
   static readonly AMOUNT_MISMATCH: IDetailMessage = error(NS, 'AMOUNT_MISMATCH');
+  /** The credit would push the balance past the Money maximum. */
+  static readonly BALANCE_LIMIT_EXCEEDED: IDetailMessage = error(NS, 'BALANCE_LIMIT_EXCEEDED');
   static readonly DUPLICATE_EXTERNAL_TRANSACTION: IDetailMessage = error(NS, 'DUPLICATE_EXTERNAL_TRANSACTION');
   static readonly IDEMPOTENCY_CONFLICT: IDetailMessage = error(NS, 'IDEMPOTENCY_CONFLICT');
   static readonly TRANSACTION_NOT_FOUND: IDetailMessage = error(NS, 'TRANSACTION_NOT_FOUND');
