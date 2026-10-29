@@ -1,7 +1,6 @@
-import { createParamDecorator, type ExecutionContext, Injectable, type PipeTransform } from '@nestjs/common';
-import type { Request } from 'express';
+import { Injectable, type PipeTransform } from '@nestjs/common';
 import { parseDecimalInteger } from '../../../../config/integer-env';
-import { detail } from '../envelope/api-response';
+import { type DetailMessage, detail } from '../envelope/api-response';
 import { HttpProblem } from '../errors/http-problem';
 import { ValidationDetailMessage } from '../i18n/validation.detail-message';
 
@@ -53,13 +52,10 @@ export class LimitQueryPipe implements PipeTransform<unknown, number | undefined
 }
 
 /** The Idempotency-Key header is mandatory and is the source of truth for idempotency. */
-export const IdempotencyKey = createParamDecorator((_data: unknown, context: ExecutionContext): string => {
-  const value = context.switchToHttp().getRequest<Request>().header(IDEMPOTENCY_KEY_HEADER);
+export const idempotencyKeyDetails = (value: string | undefined): DetailMessage[] => {
   if (value === undefined || value.trim() === '') {
-    throw new HttpProblem(400, [detail(ValidationDetailMessage.IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_HEADER)]);
+    return [detail(ValidationDetailMessage.IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_HEADER)];
   }
-  if (value.length > MAX_TEXT_LENGTH) {
-    throw new HttpProblem(400, [detail(ValidationDetailMessage.TOO_LONG, IDEMPOTENCY_KEY_HEADER)]);
-  }
-  return value;
-});
+  if (value.length > MAX_TEXT_LENGTH) return [detail(ValidationDetailMessage.TOO_LONG, IDEMPOTENCY_KEY_HEADER)];
+  return [];
+};

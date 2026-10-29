@@ -3,6 +3,7 @@ import { ApiExtraModels, ApiResponse, getSchemaPath } from '@nestjs/swagger';
 import { type DetailMessage, detail, envelope } from '../envelope/api-response';
 import type { IDetailMessage } from '../i18n/detail-message';
 import { InfraDetailMessage } from '../i18n/infra.detail-message';
+import { ValidationDetailMessage } from '../i18n/validation.detail-message';
 import { ApiResponseEnvelopeDto, DetailMessageDto, MoneyDto } from './schemas';
 
 const EXAMPLE_TIME = new Date('2026-07-29T15:00:00.000Z');
@@ -82,3 +83,17 @@ export const internalErrorResponse: EnvelopeResponse = {
   description: 'Unexpected error. No internal message or stack is exposed.',
   examples: { internalError: problem('Unexpected failure', InfraDetailMessage.INTERNAL_ERROR) },
 };
+
+/** Every route that reads a body: it must be JSON and fit in the body parser limit. */
+export const bodyResponses: EnvelopeResponse[] = [
+  {
+    status: 413,
+    description: 'The body is over the size limit (100 kB).',
+    examples: { payloadTooLarge: problem('Body too large', ValidationDetailMessage.PAYLOAD_TOO_LARGE) },
+  },
+  {
+    status: 415,
+    description: 'The body is not JSON (Content-Type must be application/json).',
+    examples: { unsupportedMediaType: problem('Body is text/plain', ValidationDetailMessage.UNSUPPORTED_MEDIA_TYPE) },
+  },
+];

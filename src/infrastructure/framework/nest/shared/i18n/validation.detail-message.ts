@@ -23,6 +23,12 @@ export class ValidationDetailMessage {
   static readonly IDEMPOTENCY_KEY_REQUIRED: IDetailMessage = error(NS, 'IDEMPOTENCY_KEY_REQUIRED');
   static readonly UNKNOWN_FIELD: IDetailMessage = error(NS, 'UNKNOWN_FIELD');
   static readonly MALFORMED_BODY: IDetailMessage = error(NS, 'MALFORMED_BODY');
+  /** `__proto__`, `constructor` or `prototype` anywhere in the body: refused before anything reads it. */
+  static readonly FORBIDDEN_KEY: IDetailMessage = error(NS, 'FORBIDDEN_KEY');
+  /** A path with a broken percent-encoding, which cannot even be routed. */
+  static readonly MALFORMED_PATH: IDetailMessage = error(NS, 'MALFORMED_PATH');
+  static readonly PAYLOAD_TOO_LARGE: IDetailMessage = error(NS, 'PAYLOAD_TOO_LARGE');
+  static readonly UNSUPPORTED_MEDIA_TYPE: IDetailMessage = error(NS, 'UNSUPPORTED_MEDIA_TYPE');
   /** Rejected by the use case itself (a rule the DTO cannot express). */
   static readonly INVALID_REQUEST: IDetailMessage = error(NS, 'INVALID_REQUEST');
 }

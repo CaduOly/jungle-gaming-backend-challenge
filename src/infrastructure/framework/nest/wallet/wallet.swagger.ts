@@ -4,6 +4,7 @@ import { ValidationDetailMessage } from '../shared/i18n/validation.detail-messag
 import { WalletDetailMessage } from '../shared/i18n/wallet.detail-message';
 import {
   ApiEnvelopeResponses,
+  bodyResponses,
   type EnvelopeResponse,
   internalErrorResponse,
   problem,
@@ -42,8 +43,10 @@ export const ApiCreateWalletResponses = () =>
           invalidMoneyAmount: problem('Amount with 3 decimals', ValidationDetailMessage.INVALID_MONEY_AMOUNT, 'initialBalance.amount'),
           invalidUuid: problem('playerId is not a UUID', ValidationDetailMessage.INVALID_UUID, 'playerId'),
           required: problem('initialBalance missing', ValidationDetailMessage.REQUIRED, 'initialBalance'),
+          forbiddenKey: problem('__proto__ in the body', ValidationDetailMessage.FORBIDDEN_KEY, '__proto__'),
         },
       },
+      ...bodyResponses,
       {
         status: 409,
         description: 'The player already has a wallet in this currency.',

@@ -1,11 +1,12 @@
 import { applyDecorators } from '@nestjs/common';
-import { ApiHeader, ApiOperation } from '@nestjs/swagger';
+import { ApiBody, ApiHeader, ApiOperation } from '@nestjs/swagger';
 import { InfraDetailMessage } from '../shared/i18n/infra.detail-message';
 import { ValidationDetailMessage } from '../shared/i18n/validation.detail-message';
 import { WageringDetailMessage } from '../shared/i18n/wagering.detail-message';
 import { WalletDetailMessage } from '../shared/i18n/wallet.detail-message';
 import {
   ApiEnvelopeResponses,
+  bodyResponses,
   type EnvelopeResponse,
   internalErrorResponse,
   problem,
@@ -13,6 +14,7 @@ import {
   unauthorizedResponse,
 } from '../shared/swagger/envelope-responses';
 import { IDEMPOTENCY_KEY_HEADER } from '../shared/validation/params';
+import { SubmitWagerTransactionRequestDto } from './dto/submit-wager-transaction.request.dto';
 import { WagerOutcomeDto, WagerTransactionDto } from './dto/wager-transaction.response.dto';
 
 const TRANSACTION_ID = '0192f298-345e-7e38-af88-e43f851a819d';
@@ -55,6 +57,7 @@ const common = [unauthorizedResponse, serviceUnavailableResponse, internalErrorR
 export const ApiSubmitWagerTransactionResponses = () =>
   applyDecorators(
     ApiOperation({ summary: 'Submit a wager transaction (idempotent by Idempotency-Key)' }),
+    ApiBody({ type: SubmitWagerTransactionRequestDto }),
     ApiHeader({
       name: IDEMPOTENCY_KEY_HEADER,
       required: true,
@@ -91,8 +94,16 @@ export const ApiSubmitWagerTransactionResponses = () =>
           invalidUuid: problem('walletId is not a UUID', ValidationDetailMessage.INVALID_UUID, 'walletId'),
           idempotencyKeyRequired: problem('Header missing', ValidationDetailMessage.IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_HEADER),
           openingNotSubmittable: problem('OPENING is internal', ValidationDetailMessage.KIND_NOT_SUBMITTABLE, 'kind'),
+          amountMustBePositive: problem('BET of 0.00', ValidationDetailMessage.AMOUNT_MUST_BE_POSITIVE, 'money.amount'),
+          referenceRequired: problem(
+            'REFUND without reference',
+            ValidationDetailMessage.REFERENCE_REQUIRED,
+            'referenceExternalTransactionId',
+          ),
+          forbiddenKey: problem('__proto__ in the body', ValidationDetailMessage.FORBIDDEN_KEY, '__proto__'),
         },
       },
+      ...bodyResponses,
       forbidden,
       {
         status: 404,

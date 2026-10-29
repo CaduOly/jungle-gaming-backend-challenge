@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post } from '@nestjs/common';
+import { Controller, Get, HttpCode, Inject, Param, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedProvider } from '../../../../business/shared/port/provider-identity.port';
 import { ProviderIdentityMismatchError } from '../../../../business/wagering/error/provider-identity-mismatch-error';
@@ -13,8 +13,8 @@ import { HttpResult } from '../shared/envelope/http-result';
 import { detailForFailureCode } from '../shared/i18n/catalog';
 import { InfraDetailMessage } from '../shared/i18n/infra.detail-message';
 import { WageringDetailMessage } from '../shared/i18n/wagering.detail-message';
-import { toMoneyProps } from '../shared/validation/money';
-import { IdempotencyKey, TextParamPipe, UuidParamPipe } from '../shared/validation/params';
+import { BodyWithIdempotencyKey, type KeyedBody } from '../shared/validation/keyed-body';
+import { TextParamPipe, UuidParamPipe } from '../shared/validation/params';
 import { SubmitWagerTransactionRequestDto } from './dto/submit-wager-transaction.request.dto';
 import {
   ApiGetProviderTransactionResponses,
@@ -59,11 +59,11 @@ export class WageringController {
   @HttpCode(200)
   @ApiSubmitWagerTransactionResponses()
   async submit(
-    @Body() body: SubmitWagerTransactionRequestDto,
-    @IdempotencyKey() idempotencyKey: string,
+    @BodyWithIdempotencyKey(SubmitWagerTransactionRequestDto)
+    { body, idempotencyKey }: KeyedBody<SubmitWagerTransactionRequestDto>,
     @CurrentProvider() actor: AuthenticatedProvider,
   ) {
-    const money = toMoneyProps(body.money, 'money');
+    const money = { amount: body.money.amount, currency: body.money.currency };
     const output = await this.processTransaction.execute({
       actor,
       idempotencyKey,

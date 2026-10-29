@@ -10,7 +10,6 @@ import { HttpResult } from '../shared/envelope/http-result';
 import { HttpProblem } from '../shared/errors/http-problem';
 import { ValidationDetailMessage } from '../shared/i18n/validation.detail-message';
 import { WalletDetailMessage } from '../shared/i18n/wallet.detail-message';
-import { toMoneyProps } from '../shared/validation/money';
 import { LimitQueryPipe, UuidParamPipe } from '../shared/validation/params';
 import { CreateWalletRequestDto } from './dto/create-wallet.request.dto';
 import {
@@ -36,7 +35,7 @@ export class WalletController {
   @Post()
   @ApiCreateWalletResponses()
   async create(@Body() body: CreateWalletRequestDto) {
-    const initialBalance = toMoneyProps(body.initialBalance, 'initialBalance');
+    const initialBalance = { amount: body.initialBalance.amount, currency: body.initialBalance.currency };
     return HttpResult.created(await this.createWallet.execute({ playerId: body.playerId.toLowerCase(), initialBalance }));
   }
 

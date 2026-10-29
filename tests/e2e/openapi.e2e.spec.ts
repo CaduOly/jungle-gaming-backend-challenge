@@ -2,14 +2,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { type InMemoryHttpApp, startInMemoryHttpApp } from './support/in-memory-http-app';
 
 const COMMON = ['401', '500', '503'];
+const BODY = ['413', '415'];
 
 /** docs/http-contract.md, per route: every status the endpoint can answer. */
 const STATUS_TABLE: Record<string, string[]> = {
-  'post /wallets': ['201', '400', '409', ...COMMON],
+  'post /wallets': ['201', '400', '409', ...BODY, ...COMMON],
   'get /wallets/{walletId}': ['200', '400', '404', ...COMMON],
   'get /wallets/{walletId}/ledger': ['200', '400', '404', ...COMMON],
   'post /wallets/{walletId}/reconciliation': ['200', '400', '404', ...COMMON],
-  'post /wagering/transactions': ['200', '202', '400', '403', '404', '409', '422', ...COMMON],
+  'post /wagering/transactions': ['200', '202', '400', '403', '404', '409', '422', ...BODY, ...COMMON],
   'get /wagering/transactions/{transactionId}': ['200', '400', '404', ...COMMON],
   'get /providers/{providerId}/wagering/transactions/{externalTransactionId}': ['200', '400', '403', '404', ...COMMON],
   'get /i18n': ['200', '500'],

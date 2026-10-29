@@ -21,10 +21,22 @@ export interface HttpProblemOptions {
   readonly retryAfterSeconds: number;
 }
 
+/** Express answers a path with a broken percent-encoding (`/wallets/%E0%A4%A`) with this message, and only that. */
+const isUndecodablePath = (error: HttpException): boolean => {
+  const response = error.getResponse();
+  const message = typeof response === 'object' && response !== null ? (response as { message?: unknown }).message : response;
+  return typeof message === 'string' && message.startsWith('Failed to decode param');
+};
+
 const fromNestException = (error: HttpException): HttpProblem => {
   const status = error.getStatus();
   if (status === 404) return new HttpProblem(404, [detail(InfraDetailMessage.ROUTE_NOT_FOUND)]);
   if (status === 401) return new HttpProblem(401, [detail(InfraDetailMessage.UNAUTHORIZED)]);
+  if (status === 413) return new HttpProblem(413, [detail(ValidationDetailMessage.PAYLOAD_TOO_LARGE)]);
+  if (status === 415) return new HttpProblem(415, [detail(ValidationDetailMessage.UNSUPPORTED_MEDIA_TYPE)]);
+  if (status === 400 && isUndecodablePath(error)) {
+    return new HttpProblem(400, [detail(ValidationDetailMessage.MALFORMED_PATH, 'path')]);
+  }
   if (status >= 400 && status < 500) return new HttpProblem(400, [detail(ValidationDetailMessage.MALFORMED_BODY)]);
   return new HttpProblem(500, [detail(InfraDetailMessage.INTERNAL_ERROR)]);
 };
