@@ -19,6 +19,7 @@ describe('FailureCode', () => {
         'AMOUNT_MISMATCH',
         'DUPLICATE_EXTERNAL_TRANSACTION',
         'IDEMPOTENCY_CONFLICT',
+        'BALANCE_LIMIT_EXCEEDED',
       ].sort(),
     );
   });

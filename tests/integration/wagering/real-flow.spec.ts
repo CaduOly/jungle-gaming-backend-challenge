@@ -151,6 +151,15 @@ describe('ProcessWagerTransaction over the real PostgreSQL repositories', () => 
     await expect(app.getWallet.execute({ walletId: 'not-a-uuid' })).rejects.toMatchObject({ name: 'WalletNotFoundError' });
     expect(await app.reconcile.execute({ walletId: wallet.id })).toMatchObject({ consistent: true, checkedEntries: 4 });
   });
+  it('persists a WIN past the Money maximum as REJECTED with BALANCE_LIMIT_EXCEEDED', async () => {
+    const wallet = await open('999999999999999999.99');
+    const win = await submit(wallet, 'WIN', uuidv7(), { amount: '0.01' });
+    expect(win).toMatchObject({ status: 'REJECTED', failureCode: 'BALANCE_LIMIT_EXCEEDED' });
+    const [row] = (await db.sql.query('SELECT status, failure_code FROM wager_transactions WHERE id = $1', [win.transactionId])).rows;
+    expect(row).toEqual({ status: 'REJECTED', failure_code: 'BALANCE_LIMIT_EXCEEDED' });
+    expect(await balanceOf(wallet)).toBe('999999999999999999.99');
+  });
+
   describe('input the uuid and text columns would refuse is a 400, never a raw driver error', () => {
     it.each([
       ['a playerId that is not a uuid', { playerId: 'player-x' }, 'playerId'],

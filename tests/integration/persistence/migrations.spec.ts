@@ -4,8 +4,12 @@ import { migrateDown, migrateUp } from '../../../src/infrastructure/persistence/
 import { ensureInfraUp } from '../../support/ensure-infra-up';
 import { createTestDatabase, type TestDatabase } from '../../support/test-database';
 
-const MIGRATIONS = ['Migration20261027000000WageringSchema', 'Migration20261027000100MessagingSchema'] as const;
-const [WAGERING, MESSAGING] = MIGRATIONS;
+const MIGRATIONS = [
+  'Migration20261027000000WageringSchema',
+  'Migration20261027000100MessagingSchema',
+  'Migration20261028000100BalanceLimitExceeded',
+] as const;
+const [WAGERING, MESSAGING, BALANCE_LIMIT] = MIGRATIONS;
 const TABLES = ['inbox_messages', 'outbox_messages', 'wager_transactions', 'wallet_ledger_entries', 'wallets'];
 
 const SCHEMA_FINGERPRINT_SQL = `
@@ -55,6 +59,9 @@ describe('schema migrations', () => {
     expect(await tables()).toEqual(TABLES);
     const first = await fingerprint();
     expect((await migrateUp(database.url)).applied).toEqual([]);
+
+    expect((await migrateDown(database.url)).applied).toEqual([BALANCE_LIMIT]);
+    expect(await fingerprint()).not.toContainEqual(expect.stringContaining('BALANCE_LIMIT_EXCEEDED'));
 
     expect((await migrateDown(database.url)).applied).toEqual([MESSAGING]);
     expect(await tables()).toEqual(['wager_transactions', 'wallet_ledger_entries', 'wallets']);

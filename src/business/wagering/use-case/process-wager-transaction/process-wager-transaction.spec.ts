@@ -527,6 +527,34 @@ describe('ProcessWagerTransaction', () => {
     );
   });
 
+  it('rejects a WIN past the Money maximum with BALANCE_LIMIT_EXCEEDED, auditable and without touching the balance', async () => {
+    const wallet = await open('999999999999999999.99');
+    const win = await submit(wallet, 'WIN', 'win', { amount: '0.01' });
+    expect(win).toMatchObject({
+      status: 'REJECTED',
+      failureCode: 'BALANCE_LIMIT_EXCEEDED',
+      balance: { amount: '999999999999999999.99', currency: 'BRL' },
+    });
+    expect(balanceOf(wallet)).toBe('999999999999999999.99');
+    expect(app.db.wallets.read(wallet.id)?.version).toBe(1);
+    expect(app.db.outbox.all().at(-1)?.payload.data).toMatchObject({
+      transactionId: win.transactionId,
+      failureCode: 'BALANCE_LIMIT_EXCEEDED',
+    });
+  });
+
+  it('carries the HTTP correlation id on every event of the decision, without a causation id', async () => {
+    const wallet = await open();
+    const before = app.db.outbox.all().length;
+    await submit(wallet, 'BET', 'tx', { correlationId: 'req-1' });
+    const events = app.db.outbox.all().slice(before);
+    expect(events.map((message) => message.eventType)).toEqual(['WagerTransactionProcessed', 'WalletBalanceChanged']);
+    for (const message of events) {
+      expect(message.payload.correlationId).toBe('req-1');
+      expect(message.payload.causationId).toBeUndefined();
+    }
+  });
+
   describe('SQS inbox', () => {
     it('marks the message processed in the same unit of work and carries it as causation', async () => {
       const wallet = await open();

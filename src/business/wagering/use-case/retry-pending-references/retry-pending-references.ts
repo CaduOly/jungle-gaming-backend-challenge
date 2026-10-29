@@ -102,8 +102,9 @@ export class RetryPendingReferences implements IUseCase<void, RetryPendingRefere
     try {
       decision = await this.decide(tx, transaction, wallet, now);
     } catch (error) {
-      // A domain invariant broke while settling (e.g. the credit would overflow the Money maximum): retrying can
-      // never succeed, so the transaction leaves the queue as FAILED with the closest of the persisted codes.
+      // A domain invariant broke while settling (a bug or corrupted data, not a business outcome: those, the
+      // Money maximum included, come back as rejections): retrying can never succeed, so the transaction leaves
+      // the queue as FAILED with the closest of the persisted codes.
       if (!(error instanceof DomainError) || error instanceof BusinessRuleError) throw error;
       const fresh = await tx.wagers.lockById(id);
       if (fresh === null) throw error;
