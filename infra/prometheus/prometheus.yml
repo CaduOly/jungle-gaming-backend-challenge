@@ -1,0 +1,14 @@
+# Faz scrape de toda réplica do serviço `app`: o DNS do Docker responde o nome do serviço com um registro A por
+# réplica, então subir ou descer a escala não exige mudança aqui.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: wagering
+    metrics_path: /metrics
+    dns_sd_configs:
+      - names: [app]
+        type: A
+        port: 3000
+        refresh_interval: 10s

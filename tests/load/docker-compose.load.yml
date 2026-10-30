@@ -1,0 +1,48 @@
+# Override do docker-compose.app.yml para o `bun run test:load` (tests/load/run.ts). O runner sobe ele num
+# project próprio (jungle-load-<suffix>), então nada aqui bate com uma stack da aplicação que já esteja rodando:
+#   - a imagem tem tag própria;
+#   - o nginx e o container do k6 ficam só na rede `load` do project, então `app` resolve para estas réplicas
+#     e nunca para as réplicas de outro project na rede de infraestrutura compartilhada;
+#   - o nginx publica uma porta efêmera no loopback (o runner lê ela com `docker compose port`).
+# O banco e as filas são criados a cada execução pelo runner e passados nas variáveis LOAD_*.
+
+x-load-env: &load-env
+  # A carga mede o caminho do dinheiro, não o IdP: o Keycloak não sobe aqui e as réplicas aceitam o token de dev.
+  AUTH_MODE: noop
+  DATABASE_URL: ${LOAD_DATABASE_URL:?set by tests/load/run.ts}
+  SQS_COMMANDS_QUEUE_NAME: ${LOAD_COMMANDS_QUEUE:?set by tests/load/run.ts}
+  SQS_COMMANDS_DLQ_NAME: ${LOAD_COMMANDS_DLQ:?set by tests/load/run.ts}
+  SQS_EVENTS_QUEUE_NAME: ${LOAD_EVENTS_QUEUE:?set by tests/load/run.ts}
+
+services:
+  migrate:
+    image: jungle-wagering-app:load
+    environment: *load-env
+    # Fora do docker-compose.yml não existem os serviços postgres e localstack: a carga usa os da stack
+    # principal pela rede `infra`.
+    depends_on: !reset {}
+    networks: [infra]
+
+  app:
+    image: jungle-wagering-app:load
+    depends_on: !override
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *load-env
+    networks: [infra, load]
+
+  nginx:
+    networks: !override [load]
+    ports: !override ["127.0.0.1::80"]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 128M
+
+networks:
+  infra:
+    name: jungle-wagering_default
+    external: true
+  load: {}
