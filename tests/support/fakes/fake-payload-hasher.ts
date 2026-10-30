@@ -12,7 +12,7 @@ const canonical = (value: unknown): string => {
   return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`;
 };
 
-/** Returns the canonical JSON itself (no digest), which keeps test failures readable. `undefined` counts as absent. */
+/** Devolve o próprio JSON canônico (sem digest), o que deixa as falhas de teste legíveis. `undefined` conta como ausente. */
 export class FakePayloadHasher implements IPayloadHasher {
   hash(payload: WagerPayload): string {
     return canonical(payload);

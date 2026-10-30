@@ -10,7 +10,7 @@ import {
 import { InMemoryWalletRepository, InMemoryWalletStore } from './in-memory-wallet-repository';
 import { UndoLog } from './undo-log';
 
-/** Every committed "table" the fake unit of work writes to. */
+/** Toda "tabela" commitada em que a fake unit of work escreve. */
 export class FakeDatabase {
   readonly wallets = new InMemoryWalletStore();
   readonly wagers = new InMemoryWagerTransactionStore();
@@ -47,21 +47,21 @@ const WRITES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * In-memory stand-in for the MikroORM unit of work. Writes go straight to the shared stores (so, unlike
- * Postgres, concurrent units can read uncommitted rows) and are journaled: when `work` throws, the journal
- * is replayed backwards, which discards only this unit's writes and keeps what others committed meanwhile.
- * Row locks are released after the commit or the rollback, never before.
+ * Substituto em memória da unit of work do MikroORM. As escritas vão direto para os stores compartilhados (então,
+ * diferente do Postgres, units concorrentes leem linhas não commitadas) e ficam num journal: quando o `work` lança
+ * erro, o journal é reaplicado de trás para frente, o que descarta só as escritas desta unit e mantém o que as
+ * outras commitaram nesse meio tempo. Os locks de linha são liberados depois do commit ou do rollback, nunca antes.
  */
 export class FakeUnitOfWork implements IUnitOfWork<TxRepositories> {
   commits = 0;
   rollbacks = 0;
-  /** Mode of every unit run so far, in order. */
+  /** Modo de cada unit rodada até agora, na ordem. */
   readonly modes: NonNullable<UnitOfWorkOptions['mode']>[] = [];
   private readonly hooks = new Map<string, { hook: Hook; remaining: number }[]>();
 
   constructor(readonly db: FakeDatabase = new FakeDatabase()) {}
 
-  /** Runs `hook` before the next `times` calls to `point`; a hook that throws fails that call. */
+  /** Roda o `hook` antes das próximas `times` chamadas a `point`; um hook que lança erro faz essa chamada falhar. */
   before(point: FaultPoint, hook: Hook, times = Number.POSITIVE_INFINITY): void {
     const hooks = this.hooks.get(point) ?? [];
     hooks.push({ hook, remaining: times });

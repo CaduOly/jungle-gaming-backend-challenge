@@ -1,6 +1,6 @@
 export type Release = () => void;
 
-/** FIFO mutex per key, standing in for a row lock (SELECT … FOR UPDATE). */
+/** Mutex FIFO por key, no lugar de um lock de linha (SELECT … FOR UPDATE). */
 export class KeyedMutex {
   private readonly tails = new Map<string, Promise<void>>();
 

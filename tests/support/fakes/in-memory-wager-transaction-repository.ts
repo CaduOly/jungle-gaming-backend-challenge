@@ -33,7 +33,7 @@ const IMMUTABLE_COLUMNS = [
   'payloadHash',
 ] as const;
 
-/** Mirrors the schema trigger: identity, payload and creation time never change after the insert. */
+/** Espelha a trigger do schema: identidade, payload e horário de criação nunca mudam depois do insert. */
 const changedImmutableColumn = (current: WagerTransaction, next: WagerTransaction): string | null => {
   for (const column of IMMUTABLE_COLUMNS) if (current[column] !== next[column]) return column;
   if (!current.money.equals(next.money)) return 'money';
@@ -49,8 +49,8 @@ export interface Row {
 }
 
 /**
- * Shared "table" with the schema's unique constraints (raised as UniqueConstraintViolationError, the way the
- * adapter maps 23505), terminal-status guard and row locks.
+ * "Tabela" compartilhada com as unique constraints do schema (lançadas como UniqueConstraintViolationError, do jeito
+ * que o adapter mapeia o 23505), a proteção de status terminal e os locks de linha.
  */
 export class InMemoryWagerTransactionStore {
   readonly locks = new KeyedMutex();
@@ -66,7 +66,7 @@ export class InMemoryWagerTransactionStore {
     return null;
   }
 
-  /** `keepLease: false` is the update path: writing the decision releases the claim lease. */
+  /** `keepLease: false` é o caminho de update: gravar a decisão libera o lease do claim. */
   write(transaction: WagerTransaction, { keepLease = true }: { keepLease?: boolean } = {}): void {
     const state = transaction.toState();
     this.assertUnique(state);
@@ -74,7 +74,7 @@ export class InMemoryWagerTransactionStore {
     this.rows.set(state.id, { state, lockedUntil: keepLease ? (existing?.lockedUntil ?? null) : null });
   }
 
-  /** Puts a row back as it was (or removes it when it did not exist): the rollback of a write. */
+  /** Coloca uma linha de volta como estava (ou remove quando ela não existia): o rollback de uma escrita. */
   restore(id: string, row: Row | undefined): void {
     if (row === undefined) this.rows.delete(id);
     else this.rows.set(id, { ...row });
@@ -108,9 +108,9 @@ export class InMemoryWagerTransactionStore {
 }
 
 /**
- * Repository scoped to one unit of work; `releaseLocks()` is called by the fake unit of work.
- * Like the schema trigger, an update needs the row lock, cannot move a row out of a terminal status and cannot
- * change an immutable column (a reference, once linked, stays linked).
+ * Repositório preso a uma unit of work; o `releaseLocks()` é chamado pela fake unit of work.
+ * Igual à trigger do schema, um update precisa do lock de linha, não pode tirar uma linha de um status terminal e
+ * não pode mudar uma coluna imutável (uma referência, depois de ligada, fica ligada).
  */
 export class InMemoryWagerTransactionRepository implements IWagerTransactionRepository {
   private readonly held = new Map<string, Promise<Release>>();

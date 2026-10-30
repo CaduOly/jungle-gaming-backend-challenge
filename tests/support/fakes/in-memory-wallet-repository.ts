@@ -11,7 +11,7 @@ export class StaleWalletVersionError extends Error {
   }
 }
 
-/** Shared "table" of wallets plus the per-wallet lock, shared by every scoped repository. */
+/** "Tabela" compartilhada de wallets mais o lock por wallet, compartilhada por todo repositório com escopo. */
 export class InMemoryWalletStore {
   readonly locks = new KeyedMutex();
   private readonly rows = new Map<string, WalletState>();
@@ -25,7 +25,7 @@ export class InMemoryWalletStore {
     this.rows.set(wallet.id, wallet.toState());
   }
 
-  /** Puts a row back as it was (or removes it when it did not exist): the rollback of a write. */
+  /** Coloca uma linha de volta como estava (ou remove quando ela não existia): o rollback de uma escrita. */
   restore(id: string, state: WalletState | undefined): void {
     if (state === undefined) this.rows.delete(id);
     else this.rows.set(id, state);
@@ -52,9 +52,9 @@ export class InMemoryWalletStore {
 }
 
 /**
- * Repository scoped to one unit of work. Locks taken by `lockById` are held until
- * `releaseLocks()`, which the fake unit of work calls on commit or rollback.
- * Stricter than Postgres on purpose: `update` requires the wallet to be locked in this scope.
+ * Repositório preso a uma unit of work. Os locks pegos pelo `lockById` ficam presos até o
+ * `releaseLocks()`, que a fake unit of work chama no commit ou no rollback.
+ * Mais rígido que o Postgres de propósito: o `update` exige a wallet com lock neste escopo.
  */
 export class InMemoryWalletRepository implements IWalletRepository {
   private readonly held = new Map<string, Promise<Release>>();
