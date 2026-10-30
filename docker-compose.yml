@@ -1,4 +1,12 @@
+# Sobe tudo de uma vez: PostgreSQL, LocalStack, migrations, 3 réplicas da aplicação, nginx, Prometheus e Grafana.
+#   docker compose up -d --build
+# Só a infraestrutura, para rodar os testes ou a aplicação fora do Docker:
+#   bun run infra:up
+# O Keycloak entra com o profile `auth` (ver docker-compose.auth.yml).
 name: jungle-wagering
+
+include:
+  - docker-compose.app.yml
 
 services:
   postgres:

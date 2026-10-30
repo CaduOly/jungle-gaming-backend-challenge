@@ -16,9 +16,16 @@ services:
   migrate:
     image: jungle-wagering-app:load
     environment: *load-env
+    # Fora do docker-compose.yml não existem os serviços postgres e localstack: a carga usa os da stack
+    # principal pela rede `infra`.
+    depends_on: !reset {}
+    networks: [infra]
 
   app:
     image: jungle-wagering-app:load
+    depends_on: !override
+      migrate:
+        condition: service_completed_successfully
     environment:
       <<: *load-env
     networks: [infra, load]
@@ -33,4 +40,7 @@ services:
           memory: 128M
 
 networks:
+  infra:
+    name: jungle-wagering_default
+    external: true
   load: {}

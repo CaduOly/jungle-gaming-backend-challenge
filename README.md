@@ -13,28 +13,27 @@ O enunciado está em [`docs/CHALLENGE.md`](docs/CHALLENGE.md), e as decisões, t
 | AWS CLI ou `awslocal` | qualquer v2 | Só para mandar mensagem na fila à mão |
 | k6 | qualquer recente | Só para `bun run test:load` |
 
-## Subir em 3 comandos
+## Subir com um comando
 
 ```bash
-cp .env.example .env
-bun run infra:up
-docker compose -f docker-compose.app.yml up -d --build --wait
+docker compose up -d --build --wait
 ```
 
-O primeiro sobe o PostgreSQL (porta `55432`) e o LocalStack (porta `4566`) com as filas criadas. O segundo builda a imagem, roda o `migrate` uma vez, sobe **3 réplicas** da aplicação, o nginx na frente, o Prometheus e o Grafana. Quando o `--wait` volta, está tudo de pé.
+Só isso. O comando builda a imagem e sobe, nesta ordem:
 
-O serviço `migrate` pede o build com `network: host`, porque o `bun install` precisa do DNS do host para achar o registry do npm. Se o seu Docker não liberar esse privilégio (erro de `network.host` no build), builde a imagem à parte e suba sem build:
+1. PostgreSQL (porta `55432`) e LocalStack (porta `4566`), com as filas criadas;
+2. o `migrate`, que roda as migrations uma vez e sai;
+3. **3 réplicas** da aplicação, com todos os papéis (API, consumer SQS, publisher da outbox e worker de pendências);
+4. o nginx na frente das réplicas, em `http://localhost:8080`;
+5. o Prometheus e o Grafana, já com o dashboard.
 
-```bash
-docker build --network host -t jungle-wagering-app:local .
-docker compose -f docker-compose.app.yml up -d --no-build --wait
-```
+Quando o `--wait` volta, está tudo de pé. Na primeira vez leva cerca de um minuto, por causa do download das imagens e do build. Não precisa de `.env`: todo valor tem padrão no compose.
 
 Para desligar:
 
 ```bash
-docker compose -f docker-compose.app.yml down
-bun run infra:down
+docker compose down        # mantém os dados do PostgreSQL
+docker compose down -v     # apaga também os dados
 ```
 
 ## Onde acessar
@@ -409,7 +408,7 @@ No Swagger, o esquema é `http`/`bearer`, então o Swagger UI coloca o prefixo `
 **Keycloak (profile `auth`).** Suba as réplicas validando JWT pelo JWKS do Keycloak:
 
 ```bash
-AUTH_MODE=jwks docker compose -f docker-compose.app.yml --profile auth up -d --build --wait
+AUTH_MODE=jwks docker compose --profile auth up -d --build --wait
 ```
 
 O Keycloak sobe em <http://localhost:8081> com o realm `wagering` e um client confidencial por provedor (`provider-a` e `provider-b`, segredo `<client>-secret`). Cada token traz a claim `provider_id` e a audience `wagering-api`.
@@ -537,7 +536,7 @@ curl -s $API/providers/provider-a/wagering/transactions/tx-sqs-1 -H "$AUTH"
 
 **Health.** `GET /health/live` responde `200 {"status":"ok"}` enquanto o processo está de pé. `GET /health/ready` confere o PostgreSQL (`SELECT 1`) e o SQS (`GetQueueAttributes`) e volta `503` com o nome de quem caiu. Os dois são abertos e respondem sem envelope.
 
-**Logs.** JSON pelo pino, um por linha, com `correlationId`, `messageId`, `transactionId`, `walletId` e `providerId` quando existem. Payload financeiro completo e token não vão para o log. Para ver: `docker compose -f docker-compose.app.yml logs -f app`.
+**Logs.** JSON pelo pino, um por linha, com `correlationId`, `messageId`, `transactionId`, `walletId` e `providerId` quando existem. Payload financeiro completo e token não vão para o log. Para ver: `docker compose logs -f app`.
 
 **Métricas.** `GET /metrics` no formato Prometheus. As principais:
 
@@ -613,7 +612,7 @@ Todas as suítes que falam com banco ou fila rodam contra o PostgreSQL e o Local
 
 A invariante `wallet.balance == saldo reconstruído pelo ledger` é conferida pela reconciliação de todas as wallets no fim do `test:multi` e do `test:load`, e pelo `tests/support/assert-wallet-consistency.ts` nos testes de repositório. Nas races do `test:concurrency` a conferência é o saldo final e a contagem de lançamentos no ledger.
 
-O `test:chaos` pausa o container do PostgreSQL que todo mundo usa, então ele **roda sozinho**, nunca junto com outra suíte nem com outra pessoa no mesmo stack. O `test:auth` precisa do Keycloak de pé (`docker compose -f docker-compose.auth.yml --profile auth up -d --wait`).
+O `test:chaos` pausa o container do PostgreSQL que todo mundo usa, então ele **roda sozinho**, nunca junto com outra suíte nem com outra pessoa no mesmo stack. O `test:auth` precisa do Keycloak de pé (`docker compose --profile auth up -d --wait keycloak`).
 
 Todas as suítes rodam contra o mesmo stack do compose sem se atrapalhar: cada execução cria um banco `wagering_test_<uuidv7>` e filas com o mesmo sufixo (`tests/support/test-database.ts` e `test-queues.ts`), e apaga tudo no fim.
 
@@ -640,8 +639,7 @@ O `.env.example` traz todos os parâmetros com o valor padrão e um comentário 
 
 | Sintoma | Causa e saída |
 | --- | --- |
-| Build falha com erro de `network.host` ou o `bun install` não resolve o registry | O compose pede o build com rede do host. Builde à parte com `docker build --network host -t jungle-wagering-app:local .` e suba com `up -d --no-build --wait` |
-| `network jungle-wagering_default not found` | O `docker-compose.app.yml` entra na rede do stack de infra. Rode `bun run infra:up` antes |
+| O `bun install` do build não resolve o registry do npm | O Docker da máquina está sem DNS na rede de build. Builde com a rede do host, `docker build --network host -t jungle-wagering-app:local .`, e suba com `docker compose up -d --no-build --wait` |
 | `port is already allocated` | Outra coisa usa a porta. Troque a porta no `.env` (`APP_HOST_PORT`, `GRAFANA_HOST_PORT`, `POSTGRES_HOST_PORT` etc.) e suba de novo |
 | `/health/ready` com `sqs: down` ou o consumer reclamando de fila inexistente | O LocalStack não guarda estado, e um container antigo pode ter filas com nome antigo. Recrie: `docker compose up -d --force-recreate --wait localstack`. O init cria as filas de novo e o healthcheck só fica verde com elas no lugar |
 | Token `dev:` volta 401 | As réplicas estão com `AUTH_MODE=jwks`. Use um token do Keycloak ou suba de novo sem essa variável |
