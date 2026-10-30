@@ -17,7 +17,7 @@ export interface SqsConsumerConfig {
   /** Espera depois de um readiness probe ou de um receive que falhou. */
   readonly errorDelayMs: number;
   readonly shutdownTimeoutMs: number;
-  /** Limite de uma tentativa do handler, passou disso a tentativa conta como falha transiente (ver TimeoutMessageHandler). */
+  /** Limite de uma tentativa do handler, passou disso conta como falha transiente (ver TimeoutMessageHandler). */
   readonly handlerTimeoutMs: number;
   readonly circuitBreaker: { readonly failureThreshold: number; readonly openMs: number };
 }

@@ -1,4 +1,4 @@
-/** Falha de infraestrutura com retry (lock timeout, deadlock, conexão perdida): HTTP 503, backoff de visibility no SQS. */
+/** Falha de infraestrutura com retry (lock timeout, deadlock, conexão perdida): HTTP 503, visibility backoff no SQS. */
 export class TransientInfrastructureError extends Error {
   constructor(
     message: string,
