@@ -62,10 +62,6 @@ export class WalletLedgerEntry {
     return this.state.amount;
   }
 
-  get money(): Money {
-    return this.amount;
-  }
-
   get balanceBefore(): Money {
     return this.state.balanceBefore;
   }
