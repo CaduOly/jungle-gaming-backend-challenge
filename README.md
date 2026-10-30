@@ -25,9 +25,10 @@ Só isso. O comando builda a imagem e sobe, nesta ordem:
 2. o `migrate`, que roda as migrations uma vez e sai;
 3. **3 réplicas** da aplicação, com todos os papéis (API, consumer SQS, publisher da outbox e worker de pendências);
 4. o nginx na frente das réplicas, em `http://localhost:8080`;
-5. o Prometheus e o Grafana, já com o dashboard.
+5. o Prometheus e o Grafana, já com o dashboard;
+6. o Keycloak, com o realm `wagering` e um client por provedor.
 
-Quando o `--wait` volta, está tudo de pé. Com o Bun instalado, `bun run up` faz o mesmo e `bun run down` desliga. Na primeira vez leva cerca de um minuto, por causa do download das imagens e do build. Não precisa de `.env`: todo valor tem padrão no compose.
+Quando o `--wait` volta, está tudo de pé. Com o Bun instalado, `bun run up` faz o mesmo e `bun run down` desliga. Na primeira vez leva de um a dois minutos, por causa do download das imagens e do build. Não precisa de `.env`: todo valor tem padrão no compose.
 
 Para desligar:
 
@@ -48,7 +49,7 @@ docker compose down -v     # apaga também os dados
 | <http://localhost:8080/metrics> | Métricas Prometheus da réplica que respondeu | aberto |
 | <http://localhost:3001/d/jungle-wagering> | Dashboard "Jungle Wagering" no Grafana | anônimo para ver, `admin`/`admin` para editar |
 | <http://localhost:9090> | Prometheus, raspando o `/metrics` de cada réplica | aberto |
-| <http://localhost:8081> | Keycloak, só no profile `auth` | `admin`/`admin` no console |
+| <http://localhost:8081/admin> | Keycloak (console de administração, realm `wagering`) | `admin`/`admin` |
 | `localhost:55432` | PostgreSQL | `wagering`/`wagering`, banco `wagering` |
 | <http://localhost:4566> | LocalStack (SQS) | qualquer chave estática, por exemplo `test`/`test` |
 
@@ -405,10 +406,10 @@ Dinheiro sempre entra e sai como string com duas casas (`"25.00"`). Número JSON
 
 No Swagger, o esquema é `http`/`bearer`, então o Swagger UI coloca o prefixo `Bearer` sozinho. No **Authorize** informe só `dev:provider-a`, sem o prefixo.
 
-**Keycloak (profile `auth`).** Suba as réplicas validando JWT pelo JWKS do Keycloak:
+**Keycloak.** Ele sobe junto no `docker compose up`, mas a API só exige os tokens dele com `AUTH_MODE=jwks`. Suba assim para as réplicas validarem JWT pelo JWKS do Keycloak:
 
 ```bash
-AUTH_MODE=jwks docker compose --profile auth up -d --build --wait
+AUTH_MODE=jwks docker compose up -d --build --wait
 ```
 
 O Keycloak sobe em <http://localhost:8081> com o realm `wagering` e um client confidencial por provedor (`provider-a` e `provider-b`, segredo `<client>-secret`). Cada token traz a claim `provider_id` e a audience `wagering-api`.
@@ -612,7 +613,7 @@ Todas as suítes que falam com banco ou fila rodam contra o PostgreSQL e o Local
 
 A invariante `wallet.balance == saldo reconstruído pelo ledger` é conferida pela reconciliação de todas as wallets no fim do `test:multi` e do `test:load`, e pelo `tests/support/assert-wallet-consistency.ts` nos testes de repositório. Nas races do `test:concurrency` a conferência é o saldo final e a contagem de lançamentos no ledger.
 
-O `test:chaos` pausa o container do PostgreSQL que todo mundo usa, então ele **roda sozinho**, nunca junto com outra suíte nem com outra pessoa no mesmo stack. O `test:auth` precisa do Keycloak de pé (`docker compose --profile auth up -d --wait keycloak`).
+O `test:chaos` pausa o container do PostgreSQL que todo mundo usa, então ele **roda sozinho**, nunca junto com outra suíte nem com outra pessoa no mesmo stack. O `test:auth` precisa do Keycloak de pé (ele sobe no `docker compose up`).
 
 Todas as suítes rodam contra o mesmo stack do compose sem se atrapalhar: cada execução cria um banco `wagering_test_<uuidv7>` e filas com o mesmo sufixo (`tests/support/test-database.ts` e `test-queues.ts`), e apaga tudo no fim.
 
