@@ -26,9 +26,13 @@ Só isso. O comando builda a imagem e sobe, nesta ordem:
 3. **3 réplicas** da aplicação, com todos os papéis (API, consumer SQS, publisher da outbox e worker de pendências);
 4. o nginx na frente das réplicas, em `http://localhost:8080`;
 5. o Prometheus e o Grafana, já com o dashboard;
-6. o Keycloak, com o realm `wagering` e um client por provedor.
+6. o Keycloak, com o realm `wagering` e um client por provedor. A API exige token dele em toda rota de negócio, como em produção.
 
 Quando o `--wait` volta, está tudo de pé. Com o Bun instalado, `bun run up` faz o mesmo e `bun run down` desliga. Na primeira vez leva de um a dois minutos, por causa do download das imagens e do build. Não precisa de `.env`: todo valor tem padrão no compose.
+
+O caminho até a primeira resposta é o mesmo de um provedor de verdade: **subir → pegar o token no Keycloak → chamar a API com esse token**. A seção [Primeira chamada](#primeira-chamada) faz isso passo a passo.
+
+> **Quer pular o Keycloak em dev?** Coloque `AUTH_MODE=noop` no `.env` (ou rode `AUTH_MODE=noop docker compose up -d --build --wait`). A API passa a aceitar `Authorization: Bearer dev:provider-a` sem token nenhum. É só para desenvolvimento: sem essa linha, a API sempre exige o token do Keycloak.
 
 Para desligar:
 
@@ -41,15 +45,16 @@ docker compose down -v     # apaga também os dados
 
 | URL | Para que serve | Credencial |
 | --- | --- | --- |
-| <http://localhost:8080> | API, pelo nginx, balanceando entre as 3 réplicas. Cada resposta traz o header `X-Instance-Id` | `Authorization: Bearer dev:provider-a` |
-| <http://localhost:8080/docs> | Swagger UI | Botão **Authorize** com o valor `dev:provider-a` |
+| <http://localhost:8080> | API, pelo nginx, balanceando entre as 3 réplicas. Cada resposta traz o header `X-Instance-Id` | `Authorization: Bearer <access_token>` do Keycloak (passo 1) |
+| <http://localhost:8080/docs> | Swagger UI | Botão **Authorize** com o `access_token` do Keycloak |
 | <http://localhost:8080/docs-json> | Spec OpenAPI 3 | aberto |
 | <http://localhost:8080/i18n> | Catálogo de códigos e chaves de mensagem | aberto |
 | <http://localhost:8080/health/live> e `/health/ready` | Liveness e readiness (PostgreSQL e SQS) | aberto |
 | <http://localhost:8080/metrics> | Métricas Prometheus da réplica que respondeu | aberto |
 | <http://localhost:3001/d/jungle-wagering> | Dashboard "Jungle Wagering" no Grafana | anônimo para ver, `admin`/`admin` para editar |
 | <http://localhost:9090> | Prometheus, raspando o `/metrics` de cada réplica | aberto |
-| <http://localhost:8081/admin> | Keycloak (console de administração, realm `wagering`) | `admin`/`admin` |
+| <http://localhost:8081/realms/wagering/protocol/openid-connect/token> | Keycloak: emite o token de cada provedor (`client_credentials`) | `provider-a`/`provider-a-secret` ou `provider-b`/`provider-b-secret` |
+| <http://localhost:8081/admin> | Keycloak: console de administração. Troque o realm de `master` para `wagering` para ver os clients | `admin`/`admin` |
 | `localhost:55432` | PostgreSQL | `wagering`/`wagering`, banco `wagering` |
 | <http://localhost:4566> | LocalStack (SQS) | qualquer chave estática, por exemplo `test`/`test` |
 
@@ -67,7 +72,7 @@ Os valores fixos do passo a passo:
 | --- | --- |
 | `playerId` | `0192f28f-5dc0-7d58-bdb2-814ad6a0f4b7` |
 | `walletId` | `01a18aac-a369-76a8-aae1-b810fb3e7959` (o seu vai ser outro) |
-| Token | `Bearer dev:provider-a` |
+| Provedor | `provider-a` (client secret `provider-a-secret`) |
 
 O `walletId` é gerado pela API no passo 1. Nos passos seguintes, troque `01a18aac-a369-76a8-aae1-b810fb3e7959` pelo id que voltou na sua chamada.
 
@@ -75,11 +80,54 @@ No curl, deixe as variáveis prontas:
 
 ```bash
 API=http://localhost:8080
-AUTH='Authorization: Bearer dev:provider-a'
 PLAYER=0192f28f-5dc0-7d58-bdb2-814ad6a0f4b7
 ```
 
-### 1. Criar a wallet com 100.00
+### 1. Pegar o token no Keycloak
+
+O provedor se autentica como máquina, com `client_credentials`: manda o próprio client e segredo e recebe um JWT assinado com a claim `provider_id`. A API valida esse JWT pelas chaves públicas do Keycloak (JWKS), sem falar com ele a cada requisição.
+
+**Requisição:** `POST http://localhost:8081/realms/wagering/protocol/openid-connect/token`
+
+**Headers**
+
+| Header | Valor |
+| --- | --- |
+| `Content-Type` | `application/x-www-form-urlencoded` |
+
+**Body** (form, não JSON)
+
+| Campo | Valor |
+| --- | --- |
+| `grant_type` | `client_credentials` |
+| `client_id` | `provider-a` |
+| `client_secret` | `provider-a-secret` |
+
+**Resposta esperada:** `200 OK`
+
+```json
+{
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5...",
+  "expires_in": 300,
+  "token_type": "Bearer",
+  "scope": "email profile"
+}
+```
+
+O `access_token` vale 5 minutos. Ele vai no header `Authorization: Bearer <access_token>` de todos os passos seguintes. Quando expirar, a API volta `401` e é só pegar outro. No Postman, a aba **Authorization** → **OAuth 2.0** → grant type **Client Credentials**, com a URL e os valores acima, renova sozinha. No Swagger, cole o `access_token` no **Authorize**, sem o prefixo `Bearer`.
+
+**curl**
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8081/realms/wagering/protocol/openid-connect/token \
+  -d grant_type=client_credentials -d client_id=provider-a -d client_secret=provider-a-secret \
+  | python3 -c 'import sys, json; print(json.load(sys.stdin)["access_token"])')
+AUTH="Authorization: Bearer $TOKEN"
+```
+
+Sem token, ou com token adulterado, vencido ou de outro emissor, a API responde `401`.
+
+### 2. Criar a wallet com 100.00
 
 **Requisição:** `POST http://localhost:8080/wallets`
 
@@ -87,7 +135,7 @@ PLAYER=0192f28f-5dc0-7d58-bdb2-814ad6a0f4b7
 
 | Header | Valor |
 | --- | --- |
-| `Authorization` | `Bearer dev:provider-a` |
+| `Authorization` | `Bearer <access_token>` |
 | `Content-Type` | `application/json` |
 
 **Body**
@@ -127,7 +175,7 @@ EOF
 WALLET=01a18aac-a369-76a8-aae1-b810fb3e7959   # o id que voltou
 ```
 
-### 2. Apostar 25.00
+### 3. Apostar 25.00
 
 **Requisição:** `POST http://localhost:8080/wagering/transactions`
 
@@ -135,7 +183,7 @@ WALLET=01a18aac-a369-76a8-aae1-b810fb3e7959   # o id que voltou
 
 | Header | Valor |
 | --- | --- |
-| `Authorization` | `Bearer dev:provider-a` |
+| `Authorization` | `Bearer <access_token>` |
 | `Content-Type` | `application/json` |
 | `Idempotency-Key` | `provider-a:tx-1` |
 
@@ -182,7 +230,7 @@ curl -s -X POST $API/wagering/transactions -H "$AUTH" -H 'Content-Type: applicat
 EOF
 ```
 
-### 3. Repetir a mesma chamada (replay idempotente)
+### 4. Repetir a mesma chamada (replay idempotente)
 
 **Requisição:** `POST http://localhost:8080/wagering/transactions`
 
@@ -209,7 +257,7 @@ EOF
 
 **curl:** o mesmo comando do passo 2.
 
-### 4. Mesma key com outro corpo (conflito)
+### 5. Mesma key com outro corpo (conflito)
 
 **Requisição:** `POST http://localhost:8080/wagering/transactions`
 
@@ -242,7 +290,7 @@ curl -s -X POST $API/wagering/transactions -H "$AUTH" -H 'Content-Type: applicat
 EOF
 ```
 
-### 5. Consultar o saldo
+### 6. Consultar o saldo
 
 **Requisição:** `GET http://localhost:8080/wallets/01a18aac-a369-76a8-aae1-b810fb3e7959`
 
@@ -250,7 +298,7 @@ EOF
 
 | Header | Valor |
 | --- | --- |
-| `Authorization` | `Bearer dev:provider-a` |
+| `Authorization` | `Bearer <access_token>` |
 
 **Body:** nenhum.
 
@@ -277,7 +325,7 @@ EOF
 curl -s $API/wallets/$WALLET -H "$AUTH"
 ```
 
-### 6. Consultar o extrato
+### 7. Consultar o extrato
 
 **Requisição:** `GET http://localhost:8080/wallets/01a18aac-a369-76a8-aae1-b810fb3e7959/ledger?limit=50`
 
@@ -285,7 +333,7 @@ curl -s $API/wallets/$WALLET -H "$AUTH"
 
 | Header | Valor |
 | --- | --- |
-| `Authorization` | `Bearer dev:provider-a` |
+| `Authorization` | `Bearer <access_token>` |
 
 **Body:** nenhum.
 
@@ -332,7 +380,7 @@ curl -s $API/wallets/$WALLET -H "$AUTH"
 curl -s "$API/wallets/$WALLET/ledger?limit=50" -H "$AUTH"
 ```
 
-### 7. Reconciliar
+### 8. Reconciliar
 
 **Requisição:** `POST http://localhost:8080/wallets/01a18aac-a369-76a8-aae1-b810fb3e7959/reconciliation`
 
@@ -340,7 +388,7 @@ curl -s "$API/wallets/$WALLET/ledger?limit=50" -H "$AUTH"
 
 | Header | Valor |
 | --- | --- |
-| `Authorization` | `Bearer dev:provider-a` |
+| `Authorization` | `Bearer <access_token>` |
 
 **Body:** nenhum.
 
@@ -369,7 +417,7 @@ curl -s "$API/wallets/$WALLET/ledger?limit=50" -H "$AUTH"
 curl -s -X POST $API/wallets/$WALLET/reconciliation -H "$AUTH"
 ```
 
-### 8. Health
+### 9. Health
 
 **Requisição:** `GET http://localhost:8080/health/live` e `GET http://localhost:8080/health/ready`
 
@@ -402,26 +450,17 @@ Dinheiro sempre entra e sai como string com duas casas (`"25.00"`). Número JSON
 
 ## Autenticação
 
-**Dev (padrão).** Com `AUTH_MODE=noop` a API aceita `Authorization: Bearer dev:<providerId>`. Não prova nada sobre quem chamou, serve para desenvolvimento. O provedor do token é quem está agindo: se o `providerId` do corpo ou do caminho for outro, a resposta é `403 PROVIDER_IDENTITY_MISMATCH`.
+**Padrão: Keycloak (`AUTH_MODE=jwks`).** É o modo de produção e o que sobe no `docker compose up`. Cada provedor é um client confidencial no realm `wagering` (`provider-a` e `provider-b`, segredo `<client>-secret`) e pega o token com `client_credentials`, como no [passo 1](#1-pegar-o-token-no-keycloak). As réplicas verificam a assinatura pelo JWKS do Keycloak, além de `iss`, `aud` (`wagering-api`) e validade, e tiram o provedor da claim `provider_id`. Toda recusa é `401`. Se o Keycloak estiver fora e as chaves não puderem ser buscadas, a resposta é `503`, porque o problema é do IdP, não do token.
 
-No Swagger, o esquema é `http`/`bearer`, então o Swagger UI coloca o prefixo `Bearer` sozinho. No **Authorize** informe só `dev:provider-a`, sem o prefixo.
+O provedor do token é quem está agindo. Se o `providerId` do corpo ou do caminho for outro, a resposta é `403 PROVIDER_IDENTITY_MISMATCH`. Para ver isso, pegue um token de `provider-b` e tente mexer numa transação de `provider-a`.
 
-**Keycloak.** Ele sobe junto no `docker compose up`, mas a API só exige os tokens dele com `AUTH_MODE=jwks`. Suba assim para as réplicas validarem JWT pelo JWKS do Keycloak:
-
-```bash
-AUTH_MODE=jwks docker compose up -d --build --wait
-```
-
-O Keycloak sobe em <http://localhost:8081> com o realm `wagering` e um client confidencial por provedor (`provider-a` e `provider-b`, segredo `<client>-secret`). Cada token traz a claim `provider_id` e a audience `wagering-api`.
+**Atalho de dev (`AUTH_MODE=noop`).** Pula o Keycloak e aceita `Authorization: Bearer dev:<providerId>`, que não prova nada sobre quem chamou. Tem que ser pedido explicitamente, com `AUTH_MODE=noop` no `.env` ou na linha de comando. Sem isso, a aplicação usa `jwks`:
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:8081/realms/wagering/protocol/openid-connect/token \
-  -d grant_type=client_credentials -d client_id=provider-a -d client_secret=provider-a-secret | jq -r .access_token)
-
-curl -s $API/wallets/$WALLET -H "Authorization: Bearer $TOKEN"
+AUTH_MODE=noop docker compose up -d --build --wait
 ```
 
-Nesse modo o token `dev:` volta `401`. Para voltar ao modo dev, suba de novo sem o `AUTH_MODE=jwks`.
+Os testes automatizados usam esse modo, porque testam a regra de negócio e não o IdP. A autenticação com o Keycloak tem a suíte própria, `bun run test:auth`.
 
 ## Enviar pela fila SQS
 
@@ -494,7 +533,7 @@ Com o `awslocal` é o mesmo comando sem o `--endpoint-url`. A fila responde com 
 
 **Requisição:** `GET http://localhost:8080/providers/provider-a/wagering/transactions/tx-sqs-1`
 
-**Headers:** `Authorization: Bearer dev:provider-a`.
+**Headers:** `Authorization: Bearer <access_token>`.
 
 **Resposta esperada:** `200 OK`, com `status: PROCESSED` e o saldo depois da aposta.
 
@@ -566,7 +605,7 @@ bun install
 bun run start:dev
 ```
 
-O `start:dev` cria o `.env` a partir do `.env.example` se ele ainda não existir, sobe o PostgreSQL e o LocalStack no Docker, roda as migrations e inicia a aplicação em `http://localhost:3000` com todos os papéis, recarregando a cada arquivo salvo. Para rodar sem o modo watch, use `bun run start` depois de `bun run infra:up` e `bun run migrate`.
+O `start:dev` cria o `.env` a partir do `.env.example` se ele ainda não existir, sobe o PostgreSQL, o LocalStack e o Keycloak no Docker, roda as migrations e inicia a aplicação em `http://localhost:3000` com todos os papéis, recarregando a cada arquivo salvo. Para rodar sem o modo watch, use `bun run start` depois de `bun run infra:up` e `bun run migrate`.
 
 `bun run migrate:down` desfaz a última migration. Os papéis do processo saem de `APP_ROLES` (`api`, `consumer`, `outbox`, `pending-worker`).
 
@@ -628,7 +667,7 @@ O `.env.example` traz todos os parâmetros com o valor padrão e um comentário 
 | `DATABASE_URL` | `postgres://wagering:wagering@localhost:55432/wagering` | Conexão com o PostgreSQL |
 | `APP_ROLES` | `api,consumer,outbox,pending-worker` | Papéis do processo (vazio = todos) |
 | `PORT` | `3000` | Porta HTTP do processo |
-| `AUTH_MODE` | `noop` | `noop` aceita `dev:<providerId>`, `jwks` valida JWT do Keycloak |
+| `AUTH_MODE` | `jwks` | `jwks` valida o JWT do Keycloak; `noop` é o atalho de dev que aceita `dev:<providerId>` |
 | `SQS_ENDPOINT` | `http://localhost:${LOCALSTACK_HOST_PORT}` | Endpoint do SQS |
 | `SQS_COMMANDS_QUEUE_NAME` | `wager-transactions.fifo` | Fila de comandos |
 | `SQS_EVENTS_QUEUE_NAME` | `wagering-events.fifo` | Fila de eventos |
@@ -643,7 +682,8 @@ O `.env.example` traz todos os parâmetros com o valor padrão e um comentário 
 | O `bun install` do build não resolve o registry do npm | O Docker da máquina está sem DNS na rede de build. Builde com a rede do host, `docker build --network host -t jungle-wagering-app:local .`, e suba com `docker compose up -d --no-build --wait` |
 | `port is already allocated` | Outra coisa usa a porta. Troque a porta no `.env` (`APP_HOST_PORT`, `GRAFANA_HOST_PORT`, `POSTGRES_HOST_PORT` etc.) e suba de novo |
 | `/health/ready` com `sqs: down` ou o consumer reclamando de fila inexistente | O LocalStack não guarda estado, e um container antigo pode ter filas com nome antigo. Recrie: `docker compose up -d --force-recreate --wait localstack`. O init cria as filas de novo e o healthcheck só fica verde com elas no lugar |
-| Token `dev:` volta 401 | As réplicas estão com `AUTH_MODE=jwks`. Use um token do Keycloak ou suba de novo sem essa variável |
+| A API volta `401` | O token venceu (5 minutos) ou não veio do realm `wagering`. Pegue outro no [passo 1](#1-pegar-o-token-no-keycloak). O token `dev:` só vale com `AUTH_MODE=noop` |
+| A API volta `401` depois de atualizar o repo | Um `.env` antigo com `AUTH_MODE=noop` ou `AUTH_JWKS_URL` apontando para `keycloak:8080`. Copie de novo do `.env.example` |
 | Mensagem da fila não aparece | Confira a `wager-transactions-dlq.fifo`: chave fora do contrato ou `kind: OPENING` vão direto para lá |
 | Sobram bancos `wagering_test_*` e filas de teste | `bun run test:sweep` |
 

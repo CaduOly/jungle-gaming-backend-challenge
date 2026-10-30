@@ -1,8 +1,8 @@
 # A aplicação: migrations, 3 réplicas com todos os papéis e o nginx na frente. Entra no docker-compose.yml
 # pelo `include`, então sobe junto com a infraestrutura num `docker compose up -d --build` só.
-# Prometheus, Grafana (docker-compose.observability.yml) e Keycloak (docker-compose.auth.yml) vêm junto. Para as
-# réplicas exigirem os tokens do Keycloak, suba com AUTH_MODE=jwks:
-#   AUTH_MODE=jwks docker compose up -d --build
+# Prometheus, Grafana (docker-compose.observability.yml) e Keycloak (docker-compose.auth.yml) vêm junto. As réplicas
+# exigem token do Keycloak, como em produção. Para pular o IdP só em dev:
+#   AUTH_MODE=noop docker compose up -d --build --wait
 include:
   - docker-compose.observability.yml
   - docker-compose.auth.yml
@@ -14,8 +14,9 @@ x-app-env: &app-env
   AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
   AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
   LOG_LEVEL: ${LOG_LEVEL:-info}
-  AUTH_MODE: ${AUTH_MODE:-noop}
-  AUTH_JWKS_URL: ${AUTH_JWKS_URL:-http://keycloak:8080/realms/wagering/protocol/openid-connect/certs}
+  AUTH_MODE: ${AUTH_MODE:-jwks}
+  # Fixo no nome do serviço: o AUTH_JWKS_URL do .env aponta para o localhost, que é o que o `start:dev` usa
+  AUTH_JWKS_URL: http://keycloak:8080/realms/wagering/protocol/openid-connect/certs
   AUTH_ISSUER: ${AUTH_ISSUER:-http://localhost:8081/realms/wagering}
   AUTH_AUDIENCE: ${AUTH_AUDIENCE:-wagering-api}
 

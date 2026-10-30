@@ -71,7 +71,7 @@ export const startInMemoryHttpApp = async ({
       { provide: CLOCK, useValue: fake.clock },
       { provide: ID_GENERATOR, useClass: UuidV7IdGenerator },
     ],
-    env: { HTTP_RETRY_AFTER_SECONDS: '3', HEALTH_READINESS_TIMEOUT_MS: '50', ...env },
+    env: { AUTH_MODE: 'noop', HTTP_RETRY_AFTER_SECONDS: '3', HEALTH_READINESS_TIMEOUT_MS: '50', ...env },
     logger: false,
     ...(readinessChecks === undefined ? {} : { readinessChecks }),
     ...(observability === undefined ? {} : { observability }),

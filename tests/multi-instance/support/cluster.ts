@@ -200,6 +200,7 @@ export class Cluster {
       SQS_EVENTS_QUEUE_URL: queues.events.url,
       APP_ROLES: 'api,consumer,outbox,pending-worker',
       FAULT_INJECTION: '',
+      AUTH_MODE: 'noop',
       ...options.env,
     };
     const run = uuidv7().slice(-6);
