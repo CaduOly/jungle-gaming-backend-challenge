@@ -1,29 +1,5 @@
 import js from '@eslint/js';
-
-const tsTranspiler = new Bun.Transpiler({
-  loader: 'ts',
-  trimUnusedImports: true,
-  tsconfig: JSON.stringify({
-    compilerOptions: {
-      experimentalDecorators: true,
-      emitDecoratorMetadata: true,
-      target: 'ESNext',
-    },
-  }),
-});
-
-const bunTsProcessor = {
-  meta: { name: 'bun-ts-processor', version: '1.0.0' },
-  preprocess(code) {
-    const jsCode = tsTranspiler
-      .transformSync(code)
-      .replace(/(__legacyMetadataTS\w*\("design:(?:type|paramtypes|returntype)",\s*\[?[^\]]*?\b)Number\b/g, '$1Object');
-    return [jsCode];
-  },
-  postprocess(messages) {
-    return messages.flat();
-  },
-};
+import tseslint from 'typescript-eslint';
 
 const MONEY_MESSAGE = 'Money must never pass through number. Use the Money value object (bigint minor units).';
 const PURE_BUSINESS_MESSAGE = 'business/** is pure: inject clocks, randomness and configuration through ports.';
@@ -165,26 +141,13 @@ export const productionBusinessRules = {
   'no-restricted-syntax': [...pureBusinessRules['no-restricted-syntax'], UNARY_MINUS_ON_VALUE],
 };
 
-export default [
+export default tseslint.config(
   { ignores: ['node_modules/**', 'dist/**', 'coverage/**', 'tests/fixtures/**'] },
   js.configs.recommended,
+  ...tseslint.configs.recommended,
   {
-    files: ['eslint.config.mjs'],
-    languageOptions: { globals: { Bun: 'readonly' } },
-  },
-  {
-    files: ['**/*.ts'],
-    processor: bunTsProcessor,
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
-    },
     rules: {
-      'no-undef': 'off',
-      'no-class-assign': 'off',
-      'no-unsafe-optional-chaining': 'off',
-      'no-empty': ['error', { allowEmptyCatch: true }],
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
   {
@@ -215,4 +178,4 @@ export default [
     ignores: ['src/business/**/*.spec.ts'],
     rules: productionBusinessRules,
   },
-];
+);
