@@ -615,6 +615,8 @@ A invariante `wallet.balance == saldo reconstruído pelo ledger` é conferida pe
 
 O `test:chaos` pausa o container do PostgreSQL que todo mundo usa, então ele **roda sozinho**, nunca junto com outra suíte nem com outra pessoa no mesmo stack. O `test:auth` precisa do Keycloak de pé (`docker compose -f docker-compose.auth.yml --profile auth up -d --wait`).
 
+Todas as suítes rodam contra o mesmo stack do compose sem se atrapalhar: cada execução cria um banco `wagering_test_<uuidv7>` e filas com o mesmo sufixo (`tests/support/test-database.ts` e `test-queues.ts`), e apaga tudo no fim.
+
 Se um processo de teste morrer antes do cleanup, sobram bancos e filas, e o `bun run test:sweep` limpa o que tem mais de 30 minutos (`--help` mostra as opções). O sweep só olha a idade, então com alguém rodando uma suíte longa no mesmo stack passe um `--older-than-minutes` maior que a duração dela.
 
 ## Configuração
@@ -667,6 +669,4 @@ O enunciado pede que algumas escolhas fiquem justificadas. Onde está cada uma:
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): decisões, trade-offs e limitações.
 - [`docs/http-contract.md`](docs/http-contract.md): envelope, catálogo i18n, tabela erro → status, health e Swagger.
 - [`docs/load-test.md`](docs/load-test.md): relatório da carga.
-- [`docs/test-infra.md`](docs/test-infra.md): isolamento das suítes no stack compartilhado e o sweep.
-- [`docs/spikes/localstack.md`](docs/spikes/localstack.md): validação do LocalStack sem token e do redrive FIFO.
 - [`docs/CHALLENGE.md`](docs/CHALLENGE.md): o enunciado.
