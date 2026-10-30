@@ -12,7 +12,7 @@ import { uuidv7 } from '../uuid';
 
 export interface WageringRepositoriesHarness {
   readonly uow: IWageringUnitOfWork;
-  /** Checks balance against ledger for every wallet the test touched (assertWalletConsistency or its fake twin). */
+  /** Confere o balance contra o ledger de toda wallet que o teste tocou (assertWalletConsistency ou o gêmeo fake). */
   readonly assertConsistent: (walletIds: readonly string[]) => Promise<void>;
   readonly teardown?: () => Promise<void>;
 }
@@ -46,8 +46,8 @@ const rejectionOf = (work: Promise<unknown>): Promise<unknown> =>
   );
 
 /**
- * Concurrency semantics every TxRepositories implementation must share: the wallet row lock, the unique
- * constraints behind idempotency and the SKIP LOCKED claim of pending references.
+ * Semântica de concorrência que toda implementação de TxRepositories tem de ter igual: o lock de linha da wallet,
+ * as unique constraints por trás da idempotência e o claim com SKIP LOCKED das referências pendentes.
  */
 export const describeWageringRepositoriesContract = (
   name: string,
@@ -82,7 +82,7 @@ export const describeWageringRepositoriesContract = (
     const processedOf = (wallet: Wallet, kind: WagerKind, ext = uuidv7(), overrides: Parameters<typeof aWager>[2] = {}) =>
       aProcessedWager(kind, ext, { id: uuidv7(), walletId: wallet.id, playerId: wallet.playerId, ...overrides });
 
-    /** A processed WIN with its CREDIT entry and the wallet update, under the wallet lock. */
+    /** Um WIN processado com a entry de CREDIT e o update da wallet, sob o lock da wallet. */
     const creditWin = async (tx: TxRepositories, walletId: string, amount: string): Promise<Wallet> => {
       const wallet = (await tx.wallets.lockById(walletId))!;
       const expectedVersion = wallet.version;

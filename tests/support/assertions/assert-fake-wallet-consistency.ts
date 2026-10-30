@@ -12,9 +12,9 @@ export class FakeWalletConsistencyError extends Error {
 }
 
 /**
- * In-memory twin of the SQL `assertWalletConsistency`, written independently of `reconcileWallet`:
- * balance == Σcredit − Σdebit, before[n] == after[n−1] by seq, strictly increasing versions ending at
- * wallet.version, and version 1 when there is no entry.
+ * Gêmeo em memória do `assertWalletConsistency` de SQL, escrito sem depender do `reconcileWallet`:
+ * balance == Σcredit − Σdebit, before[n] == after[n−1] por seq, versions estritamente crescentes terminando em
+ * wallet.version, e version 1 quando não tem entry.
  */
 export const findFakeWalletInconsistencies = async (db: FakeDatabase, walletId: string): Promise<string[]> => {
   const wallet = db.wallets.read(walletId);

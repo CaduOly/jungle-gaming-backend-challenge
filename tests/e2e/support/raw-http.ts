@@ -6,8 +6,8 @@ export interface RawReply {
 }
 
 /**
- * Writes the request bytes as given, for what fetch cannot send: a GET with a body, or a chunked body with no
- * chunk at all. The connection closes after the answer.
+ * Escreve os bytes da requisição do jeito que vieram, para o que o fetch não consegue mandar: um GET com body, ou
+ * um body chunked sem nenhum chunk. A conexão fecha depois da resposta.
  */
 export const rawRequest = (baseUrl: string, head: string[], body = ''): Promise<RawReply> => {
   const { hostname, port } = new URL(baseUrl);

@@ -38,7 +38,7 @@ export class DatabaseProbe {
     return Number.parseInt(rows[0]?.count ?? '0', 10);
   }
 
-  /** Waits for the publishers to drain the outbox; answers how many events are still unpublished at the deadline. */
+  /** Espera os publishers esvaziarem o outbox; responde quantos eventos ainda estão sem publicar no prazo. */
   async waitOutboxDrained(timeoutMs: number): Promise<number> {
     const deadline = Date.now() + timeoutMs;
     let unpublished = await this.unpublishedOutbox();
@@ -49,7 +49,7 @@ export class DatabaseProbe {
     return unpublished;
   }
 
-  /** published_at - occurred_at of the events written in [from, to). */
+  /** published_at - occurred_at dos eventos gravados em [from, to). */
   async outboxLag(from: Date, to: Date): Promise<OutboxLag> {
     const { rows } = await this.client.query(
       `SELECT count(*) AS events,
@@ -73,7 +73,7 @@ export class DatabaseProbe {
     };
   }
 
-  /** When each transaction of `externalIds` was applied (processed_at, or created_at while still undecided). */
+  /** Quando cada transação de `externalIds` foi aplicada (processed_at, ou created_at enquanto não decidida). */
   async appliedAt(providerId: string, externalIds: readonly string[]): Promise<Map<string, number>> {
     const { rows } = await this.client.query<{ external_transaction_id: string; applied_ms: string }>(
       `SELECT external_transaction_id,

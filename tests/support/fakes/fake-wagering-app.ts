@@ -26,7 +26,7 @@ export interface FakeWageringAppOptions {
   readonly maxAttempts?: number;
 }
 
-/** Every use case wired over one in-memory database, a fake clock, sequential UUID-shaped ids and jitter-free backoff. */
+/** Todos os use cases ligados num banco em memória, com clock fake, ids sequenciais no formato UUID e backoff sem jitter. */
 export const createFakeWageringApp = (options: FakeWageringAppOptions = {}) => {
   const uow = new FakeUnitOfWork();
   const { db } = uow;
@@ -71,7 +71,7 @@ export interface SubmissionOptions {
   readonly correlationId?: string;
 }
 
-/** A submission as the HTTP controller would build it (key defaults to `{providerId}:{externalTransactionId}`). */
+/** Uma submissão do jeito que o controller HTTP montaria (a key por padrão é `{providerId}:{externalTransactionId}`). */
 export const aSubmission = (
   wallet: Pick<WalletView, 'id' | 'playerId'>,
   kind: string,

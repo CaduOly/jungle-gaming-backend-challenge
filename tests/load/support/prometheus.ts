@@ -1,4 +1,4 @@
-/** A scrape flattened to `name{labels}` -> value, summed over every replica. */
+/** Um scrape achatado em `name{labels}` -> valor, somado em todas as réplicas. */
 export type Samples = ReadonlyMap<string, number>;
 
 const SAMPLE_LINE = /^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{[^}]*\})?\s+(\S+)/;
@@ -31,7 +31,7 @@ export const deltaSamples = (before: Samples, after: Samples): Map<string, numbe
   return delta;
 };
 
-/** Sum of every series of `name` whose labels contain all of `match` (e.g. `type="lock_timeout"`). */
+/** Soma de todas as séries de `name` cujos labels contêm todo o `match` (por exemplo `type="lock_timeout"`). */
 export const total = (samples: Samples, name: string, ...match: readonly string[]): number => {
   let sum = 0;
   for (const [key, value] of samples) {
@@ -51,8 +51,8 @@ export interface HistogramSummary {
 }
 
 /**
- * Quantile from cumulative buckets with linear interpolation inside the bucket, the same estimate as PromQL's
- * histogram_quantile. Above the last finite bucket it answers that bucket's bound (the real value is larger).
+ * Quantil a partir de buckets cumulativos com interpolação linear dentro do bucket, a mesma estimativa do
+ * histogram_quantile do PromQL. Acima do último bucket finito responde o limite desse bucket (o valor real é maior).
  */
 export const histogramQuantile = (buckets: readonly (readonly [number, number])[], q: number): number => {
   const sorted = [...buckets].sort((a, b) => a[0] - b[0]);

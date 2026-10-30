@@ -5,9 +5,9 @@ import { client } from '../e2e/support/http-client';
 import { type InMemoryHttpApp, startInMemoryHttpApp } from '../e2e/support/in-memory-http-app';
 
 /**
- * Runs only against the Keycloak of the `auth` profile (`bun run test:auth`):
+ * Roda só contra o Keycloak do profile `auth` (`bun run test:auth`):
  *   docker compose -f docker-compose.auth.yml --profile auth up -d --wait
- * KEYCLOAK_URL defaults to the published port of that service.
+ * KEYCLOAK_URL tem como padrão a porta publicada desse serviço.
  */
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL ?? 'http://localhost:8081';
 const REALM_URL = `${KEYCLOAK_URL}/realms/wagering`;

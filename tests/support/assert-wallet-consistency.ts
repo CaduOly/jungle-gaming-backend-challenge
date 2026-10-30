@@ -13,20 +13,20 @@ export class WalletConsistencyError extends Error {
 }
 
 /*
- * Expected schema (see the wagering schema migration):
+ * Schema esperado (ver a migration do schema de wagering):
  *   wallets(id, balance numeric, version int)
  *   wallet_ledger_entries(wallet_id, seq bigserial, direction 'CREDIT'|'DEBIT', amount numeric,
  *                         balance_before numeric, balance_after numeric, wallet_version int)
  *
- * Versioning contract:
- *   - Wallet.open with balance > 0 writes an OPENING entry (a CREDIT) with wallet_version = 1;
- *   - Wallet.open with balance 0 writes no entry and leaves version = 1;
- *   - every debit/credit bumps version by exactly 1 and writes exactly one entry with the new version.
- * So entries carry consecutive versions starting at 1 (opened with funds) or 2 (opened empty),
- * and the last one equals wallets.version. Neither wallets.balance nor any balance_after is negative.
+ * Contrato de versionamento:
+ *   - Wallet.open com balance > 0 grava uma entry OPENING (um CREDIT) com wallet_version = 1;
+ *   - Wallet.open com balance 0 não grava entry e deixa version = 1;
+ *   - todo debit/credit sobe a version em exatamente 1 e grava exatamente uma entry com a version nova.
+ * Então as entries têm versions consecutivas começando em 1 (aberta com saldo) ou 2 (aberta vazia),
+ * e a última é igual a wallets.version. Nem wallets.balance nem nenhum balance_after é negativo.
  *
- * All arithmetic runs in SQL on numeric (no monetary value becomes a JS number), and every
- * comparison uses IS DISTINCT FROM so a NULL never hides a violation.
+ * Toda a aritmética roda em SQL sobre numeric (nenhum valor monetário vira number do JS), e toda
+ * comparação usa IS DISTINCT FROM para um NULL nunca esconder uma violação.
  */
 const CONSISTENCY_SQL = `
 WITH wallet AS (

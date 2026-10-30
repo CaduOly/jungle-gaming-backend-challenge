@@ -71,7 +71,7 @@ const until = async (condition: () => Promise<boolean>, timeoutMs: number, what:
   }
 };
 
-/** Arrival order on the FIFO queue (one group per aggregate), first delivery of each event: the order on the wire. */
+/** Ordem de chegada na fila FIFO (um grupo por aggregate), primeira entrega de cada evento: a ordem que passou no fio. */
 const wireOrder = (collector: EventCollector, aggregateId: string): string[] => [
   ...new Set(
     collector.deliveries

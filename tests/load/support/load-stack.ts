@@ -11,8 +11,8 @@ export interface LoadStackConfig {
 }
 
 /**
- * docker-compose.app.yml + tests/load/docker-compose.load.yml under a project of its own. `down` removes only
- * what this project created (containers and its `load` network); the shared infrastructure stays up.
+ * docker-compose.app.yml + tests/load/docker-compose.load.yml num project próprio. O `down` remove só o que
+ * este project criou (containers e a rede `load` dele); a infraestrutura compartilhada continua de pé.
  */
 export class LoadStack {
   private constructor(private readonly config: LoadStackConfig) {}

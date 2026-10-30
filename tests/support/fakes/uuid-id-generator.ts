@@ -1,7 +1,7 @@
 import type { IIdGenerator } from '../../../src/business/shared/port/id-generator.port';
 import { uuidv7 } from '../uuid';
 
-/** UUIDv7 ids, for suites whose ids land in uuid columns of the real schema. */
+/** Ids UUIDv7, para as suítes cujos ids caem em colunas uuid do schema real. */
 export class UuidIdGenerator implements IIdGenerator {
   generate(): string {
     return uuidv7();

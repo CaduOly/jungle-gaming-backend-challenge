@@ -4,7 +4,7 @@ import { Code } from '../../../src/infrastructure/framework/nest/shared/envelope
 export interface Envelope {
   readonly code: number;
   readonly message: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- payloads are asserted field by field per endpoint
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- os payloads são verificados campo a campo em cada endpoint
   readonly data: any;
   readonly timestamp: number;
   readonly detailsMessage: Array<{ code: string; message: string; type: string; field?: string }>;
@@ -41,7 +41,7 @@ export const client = (baseUrl: string) =>
     return { status: response.status, headers: response.headers, text, body: text === '' ? (null as never) : JSON.parse(text) };
   };
 
-/** The envelope contract: same status in `code`, the Code name, the clock time, and the detail codes. */
+/** O contrato do envelope: o mesmo status em `code`, o nome do Code, o horário do relógio e os códigos de detalhe. */
 export const expectEnvelope = (reply: Reply, status: number, detailCodes: string[], timestamp: number): Envelope => {
   expect({ status: reply.status, details: reply.body.detailsMessage.map((item) => item.code) }).toEqual({
     status,

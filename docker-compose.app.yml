@@ -1,9 +1,9 @@
-# The application over the infrastructure stack of docker-compose.yml (project jungle-wagering): it joins that
-# stack's network and reaches PostgreSQL and LocalStack by their service names. Start the infrastructure first:
+# A aplicação em cima da stack de infraestrutura do docker-compose.yml (project jungle-wagering): ela entra na rede
+# dessa stack e acessa o PostgreSQL e o LocalStack pelo nome do serviço. Suba a infraestrutura antes:
 #   docker compose up -d
 #   docker compose -f docker-compose.app.yml up -d --build
-# Prometheus and Grafana come with it (docker-compose.observability.yml). Keycloak only with the `auth` profile
-# (docker-compose.auth.yml), and then the replicas need AUTH_MODE=jwks:
+# Prometheus e Grafana sobem junto (docker-compose.observability.yml). O Keycloak só com o profile `auth`
+# (docker-compose.auth.yml), e aí as réplicas precisam de AUTH_MODE=jwks:
 #   AUTH_MODE=jwks docker compose -f docker-compose.app.yml --profile auth up -d --build
 name: jungle-wagering-app
 
@@ -27,7 +27,7 @@ services:
   migrate:
     build:
       context: .
-      # bun install resolves the npm registry through the host's DNS (the default build bridge may not resolve it).
+      # o bun install resolve o registry do npm pelo DNS do host (a bridge padrão do build pode não resolver).
       network: host
     image: jungle-wagering-app:local
     command: ["bun", "run", "migrate"]

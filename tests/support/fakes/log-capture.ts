@@ -1,4 +1,4 @@
-/** A pino destination that keeps every JSON line in memory, parsed, for the log assertions. */
+/** Um destination do pino que guarda cada linha JSON em memória, já parseada, para as verificações de log. */
 export class LogCapture {
   readonly raw: string[] = [];
 

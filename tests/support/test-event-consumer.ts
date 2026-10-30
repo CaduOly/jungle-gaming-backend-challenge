@@ -24,8 +24,8 @@ export const parseEnvelope = (body: string | undefined): IntegrationEventEnvelop
 };
 
 /**
- * What a correct downstream consumer does: keeps the first delivery of every eventId and orders an
- * aggregate's events by walletVersion (when every event carries one), never by arrival.
+ * O que um consumer downstream correto faz: guarda a primeira entrega de cada eventId e ordena os eventos de um
+ * aggregate pelo walletVersion (quando todo evento tem um), nunca pela chegada.
  */
 export class EventCollector {
   private readonly received: ReceivedEvent[] = [];
@@ -75,7 +75,7 @@ export interface DrainOptions {
   readonly timeoutMs?: number;
 }
 
-/** Reads (and deletes) everything from an events queue into an EventCollector. */
+/** Lê (e apaga) tudo de uma fila de eventos para dentro de um EventCollector. */
 export class TestEventConsumer {
   readonly collector = new EventCollector();
 
@@ -105,7 +105,7 @@ export class TestEventConsumer {
     return Messages.length;
   }
 
-  /** Receives until every expected eventId arrived, then once more to pick up any trailing duplicate. */
+  /** Recebe até todo eventId esperado chegar, e então mais uma vez para pegar alguma duplicata atrasada. */
   async drainUntilReceived(eventIds: Iterable<string>, options: DrainOptions = {}): Promise<EventCollector> {
     const expected = [...eventIds];
     const deadline = Date.now() + (options.timeoutMs ?? 20_000);

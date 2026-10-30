@@ -3,7 +3,7 @@ import { Cluster, until, type Wallet } from './support/cluster';
 
 const WALLETS = 6;
 
-/** CHALLENGE.md §13.8: the service restarts under load and still ends consistent. */
+/** CHALLENGE.md §13.8: o serviço reinicia sob carga e ainda termina consistente. */
 describe('kill -9 of every replica under a mixed load, then a restart', () => {
   let cluster: Cluster;
 

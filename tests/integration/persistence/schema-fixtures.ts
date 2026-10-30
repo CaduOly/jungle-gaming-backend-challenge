@@ -53,7 +53,7 @@ const NOW = '2026-07-29T15:00:00.000Z';
 
 const playerOfWallet = new Map<string, string>();
 
-/** The player of a wallet built by walletRow, so transaction rows default to it (FK wallet_id, player_id). */
+/** O player de uma wallet montada por walletRow, para as linhas de transação usarem ele por padrão (FK wallet_id, player_id). */
 export const playerOf = (walletId: string): string | undefined => playerOfWallet.get(walletId);
 
 export const walletRow = (overrides: Row = {}): Row => {

@@ -122,7 +122,7 @@ describe('wager commands over SQS against PostgreSQL and LocalStack', () => {
     return wallet;
   };
 
-  /** The HTTP path: the same use case with the production hasher, so both channels hash the same way. */
+  /** O caminho HTTP: o mesmo use case com o hasher de produção, então os dois canais fazem o hash do mesmo jeito. */
   const http = () =>
     new ProcessWagerTransaction(
       new MikroOrmUnitOfWork<TxRepositories>(db.orm.em, (em) => createTxRepositories(em, { clock: new SystemClock() }), {

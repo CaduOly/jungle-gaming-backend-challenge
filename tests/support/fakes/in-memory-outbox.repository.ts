@@ -6,10 +6,10 @@ import type { UndoLog } from './undo-log';
 const withoutLease = ({ lockedUntil: _lockedUntil, leaseToken: _leaseToken, ...rest }: OutboxMessageState) => rest;
 
 /**
- * Head-of-line like the real claim: only the first added (lowest seq) unpublished message of each aggregate is
- * eligible. `seq` mirrors the bigserial column: it grows with every add, in commit order.
- * Single-threaded stand-in for `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED)`: every
- * method runs without awaiting in between, so a claim is atomic relative to other callers.
+ * Head-of-line igual ao claim real: só a primeira mensagem não publicada adicionada (menor seq) de cada aggregate
+ * é elegível. O `seq` espelha a coluna bigserial: cresce a cada add, na ordem de commit.
+ * Substituto single-thread de `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED)`: todo método roda sem
+ * await no meio, então um claim é atômico em relação aos outros chamadores.
  */
 export class InMemoryOutboxRepository implements IOutboxRepository {
   private readonly rows = new Map<string, OutboxMessageState>();
@@ -67,7 +67,7 @@ export class InMemoryOutboxRepository implements IOutboxRepository {
     return stored && OutboxMessage.rehydrate(stored);
   }
 
-  /** View bound to a unit of work: a rollback removes what it enqueued. */
+  /** View presa a uma unit of work: um rollback remove o que ela enfileirou. */
   withUndo(undo: UndoLog): Pick<IOutboxRepository, 'add'> {
     return {
       add: async (messages) => {

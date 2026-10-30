@@ -1,5 +1,5 @@
-# Scrapes every replica of the `app` service: Docker's DNS answers the service name with one A record per replica,
-# so scaling the service up or down needs no change here.
+# Faz scrape de toda réplica do serviço `app`: o DNS do Docker responde o nome do serviço com um registro A por
+# réplica, então subir ou descer a escala não exige mudança aqui.
 global:
   scrape_interval: 5s
   evaluation_interval: 5s

@@ -20,7 +20,7 @@ export interface SqsPathResult {
   readonly applied: number;
   readonly missing: number;
   readonly sendFailures: number;
-  /** Commands of the measured phase per second, from the first send to the last apply. */
+  /** Comandos da fase medida por segundo, do primeiro envio até a última aplicação. */
   readonly throughput: number;
   readonly offeredRate: number;
   readonly latencyMs: LatencySummary;
@@ -54,7 +54,7 @@ interface Phase {
   failures: number;
 }
 
-/** Sends `rate` commands per second for `seconds`, in batches of 10 every 1/(rate/10) s (an open model). */
+/** Manda `rate` comandos por segundo durante `seconds`, em lotes de 10 a cada 1/(rate/10) s (modelo aberto). */
 const produce = async (options: SqsPathOptions, phase: Phase, rate: number, seconds: number): Promise<void> => {
   const total = rate * seconds;
   const batches = Math.ceil(total / 10);
@@ -107,8 +107,8 @@ const waitApplied = async (options: SqsPathOptions, phase: Phase): Promise<Map<s
 };
 
 /**
- * The SQS path end to end: a producer on the host sends WagerTransactionRequested commands to the commands queue
- * and the latency is the time from the send to the transaction row being decided in PostgreSQL.
+ * O caminho SQS ponta a ponta: um producer no host manda comandos WagerTransactionRequested para a fila de comandos
+ * e a latência é o tempo do envio até a linha da transação estar decidida no PostgreSQL.
  */
 export const runSqsPath = async (options: SqsPathOptions): Promise<SqsPathResult> => {
   const runId = Date.now().toString(36);

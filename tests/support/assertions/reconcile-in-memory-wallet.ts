@@ -6,8 +6,8 @@ import type { Wallet } from '../../../src/business/wallet/entity/wallet';
 import type { ILedgerReader } from '../../../src/business/wallet/port/ledger-reader.port';
 
 /**
- * Reconciles a wallet against an in-memory ledger. Lets specs of other bounded contexts check the wallet
- * invariant without importing wallet/domain-service directly.
+ * Reconcilia uma wallet contra um ledger em memória. Deixa specs de outros bounded contexts checarem o invariante
+ * da wallet sem importar wallet/domain-service direto.
  */
 export const reconcileInMemoryWallet = async (
   wallet: Wallet,

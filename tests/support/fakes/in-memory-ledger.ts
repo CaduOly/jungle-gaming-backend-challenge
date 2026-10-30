@@ -13,8 +13,8 @@ export class LedgerConstraintError extends Error {
 }
 
 /**
- * Insert-only ledger with the same uniqueness guarantees as the schema and a bigserial-like seq.
- * Like a Postgres sequence, a rolled-back append still consumes its seq.
+ * Ledger só de insert com as mesmas garantias de unicidade do schema e um seq tipo bigserial.
+ * Igual a uma sequence do Postgres, um append que sofreu rollback ainda consome o seq dele.
  */
 export class InMemoryLedger implements ILedgerWriter, ILedgerReader {
   private readonly entries: WalletLedgerEntry[] = [];
@@ -51,7 +51,7 @@ export class InMemoryLedger implements ILedgerWriter, ILedgerReader {
     return this.entries.filter((entry) => entry.walletId === walletId);
   }
 
-  /** View bound to a unit of work: a rollback removes what it appended. */
+  /** View presa a uma unit of work: um rollback remove o que ela adicionou. */
   withUndo(undo: UndoLog): ILedgerWriter & ILedgerReader {
     return {
       append: async (entry) => {

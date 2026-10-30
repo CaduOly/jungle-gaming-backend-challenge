@@ -11,12 +11,12 @@ import { uuidv7 } from '../../support/uuid';
 const MAIN = new URL('../../../src/main.ts', import.meta.url).pathname;
 const MIGRATE = new URL('../../../src/infrastructure/persistence/mikro-orm/migrate.ts', import.meta.url).pathname;
 
-/** One JSON log line of a replica; `message` is the pino message key. */
+/** Uma linha de log JSON de uma réplica; `message` é a chave de mensagem do pino. */
 export type LogEvent = Readonly<Record<string, unknown>> & { readonly message: string };
 
 /**
- * Short leases, visibility and backoffs, so crashes, restarts and outages resolve in seconds. Each value still
- * passes the production validation (lease > batch x timeout, heartbeat < visibility).
+ * Leases, visibility e backoffs curtos, para crash, restart e queda se resolverem em segundos. Cada valor ainda
+ * passa na validação de produção (lease > batch x timeout, heartbeat < visibility).
  */
 const FAST_ENV: Readonly<Record<string, string>> = {
   DB_LOCK_TIMEOUT_MS: '1000',
@@ -70,7 +70,7 @@ const collectJsonLines = (stream: ReadableStream<Uint8Array>, into: LogEvent[]):
           try {
             into.push(JSON.parse(line) as LogEvent);
           } catch {
-            // not one of ours
+            // não é um dos nossos
           }
         }
         newline = buffer.indexOf('\n');
@@ -86,7 +86,7 @@ const drainText = (stream: ReadableStream<Uint8Array>, into: string[]): void => 
   })();
 };
 
-/** One `bun run src/main.ts` process, the same entry point the Docker image runs. */
+/** Um processo `bun run src/main.ts`, o mesmo entry point que a imagem Docker roda. */
 export class Instance {
   readonly events: LogEvent[] = [];
   readonly stderr: string[] = [];
@@ -161,8 +161,8 @@ export interface Wallet {
 }
 
 /**
- * ≥3 real processes over one fresh database and one set of fresh queues (unique suffixes), the way the compose
- * stack runs them: migrations once, then every replica with every role.
+ * ≥3 processos reais sobre um banco novo e um conjunto de filas novas (sufixos únicos), do jeito que a stack do
+ * compose roda: migrations uma vez, depois todas as réplicas com todos os papéis.
  */
 export class Cluster {
   readonly wallets = new Set<string>();
@@ -313,7 +313,7 @@ export class Cluster {
     return rows[0]?.total ?? 0;
   }
 
-  /** Nothing left to do anywhere: outbox published, no pending reference, commands queue empty. */
+  /** Nada mais a fazer em lugar nenhum: outbox publicado, nenhuma referência pendente, fila de comandos vazia. */
   async quiescent(): Promise<boolean> {
     const [unpublished, pending, depth] = await Promise.all([
       this.count('outbox_messages WHERE published_at IS NULL'),
@@ -330,7 +330,7 @@ export class Cluster {
     return Messages;
   }
 
-  /** Every wallet the run touched: balance == ledger, chained entries, versions in step (§13 invariant). */
+  /** Toda wallet que a execução tocou: balance == ledger, entries encadeadas, versões em sincronia (invariante do §13). */
   async assertAllWalletsConsistent(): Promise<void> {
     const { rows } = await this.sql.query<{ id: string }>('SELECT id FROM wallets');
     for (const { id } of rows) await assertWalletConsistency(this.sql, id);

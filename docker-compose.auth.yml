@@ -1,8 +1,8 @@
-# Keycloak, only with the `auth` profile, over the application stack's network. One confidential client per game
-# provider (client_credentials), each token carrying its `provider_id` claim and the `wagering-api` audience.
+# Keycloak, só com o profile `auth`, em cima da rede da stack da aplicação. Um client confidencial por game
+# provider (client_credentials), e cada token carrega a claim `provider_id` e a audience `wagering-api`.
 #   docker compose -f docker-compose.auth.yml --profile auth up -d
-# The replicas then run with AUTH_MODE=jwks (see .env.example). KC_HOSTNAME pins the issuer to the URL the
-# providers use, so a token fetched from the host and one fetched inside the network carry the same `iss`.
+# Aí as réplicas rodam com AUTH_MODE=jwks (ver .env.example). O KC_HOSTNAME fixa o issuer na URL que os
+# providers usam, então um token pego do host e um pego dentro da rede têm o mesmo `iss`.
 name: jungle-wagering-auth
 
 services:

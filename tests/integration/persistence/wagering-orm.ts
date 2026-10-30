@@ -27,9 +27,9 @@ import { createTestDatabase, type TestDatabase } from '../../support/test-databa
 export interface WageringDatabase {
   readonly database: TestDatabase;
   readonly orm: MikroORM;
-  /** Raw connection for assertions: counts, consistency and holding locks from outside the application. */
+  /** Conexão crua para as verificações: contagens, consistência e segurar lock de fora da aplicação. */
   readonly sql: Client;
-  /** An extra ORM with its own pool, so concurrent work truly runs on separate connections. */
+  /** Um ORM extra com pool próprio, para o trabalho concorrente rodar em conexões separadas de verdade. */
   connect(): Promise<MikroORM>;
   assertConsistent(walletIds: Iterable<string>): Promise<void>;
   close(): Promise<void>;
@@ -70,7 +70,7 @@ export interface RealAppOptions {
   readonly maxAttempts?: number;
 }
 
-/** Every use case over the real unit of work and repositories; only clock, ids and hasher are test doubles. */
+/** Todos os use cases em cima da unit of work e dos repositórios reais; só clock, ids e hasher são dublês. */
 export const createRealWageringApp = (orm: MikroORM, options: RealAppOptions = {}) => {
   const clock = options.clock ?? new FakeClock();
   const faults = options.faults ?? FaultInjector.none();

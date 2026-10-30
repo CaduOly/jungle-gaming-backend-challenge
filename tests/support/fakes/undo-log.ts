@@ -1,4 +1,4 @@
-/** Per-transaction journal of inverse operations: what a rollback replays, newest first. */
+/** Journal por transação das operações inversas: o que um rollback reaplica, da mais nova para a mais velha. */
 export class UndoLog {
   private readonly steps: (() => void)[] = [];
 

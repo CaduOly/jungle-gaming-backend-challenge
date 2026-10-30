@@ -28,7 +28,7 @@ export class InMemoryInboxRepository implements IInboxRepository {
     return stored && InboxMessage.rehydrate(stored);
   }
 
-  /** View bound to a unit of work: a rollback restores every row it touched. */
+  /** View presa a uma unit of work: um rollback restaura toda linha que ela tocou. */
   withUndo(undo: UndoLog): IInboxRepository {
     const journal = (message: InboxMessage): void => {
       const key = keyOf(message.consumerName, message.messageId);

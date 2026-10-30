@@ -9,7 +9,7 @@ import { createSqsClient } from '../../../src/infrastructure/messaging/sqs/sqs-c
 import { SqsMessagePublisher } from '../../../src/infrastructure/messaging/sqs/sqs-message-publisher';
 import { createMikroOrmConfig } from '../../../src/infrastructure/persistence/mikro-orm/mikro-orm.config';
 
-/** A standalone outbox publisher, spawned by the crash test so FAULT_INJECTION can SIGKILL it for real. */
+/** Um publisher de outbox avulso, que o teste de crash sobe para o FAULT_INJECTION dar SIGKILL de verdade. */
 const env = process.env;
 const sqs = readSqsConfig(env);
 const client = createSqsClient(sqs);

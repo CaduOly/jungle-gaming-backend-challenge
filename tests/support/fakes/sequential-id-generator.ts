@@ -1,6 +1,6 @@
 import type { IIdGenerator } from '../../../src/business/shared/port/id-generator.port';
 
-/** Deterministic ids (`<prefix>-0001`, `<prefix>-0002`, …) that keep test failures readable. */
+/** Ids determinísticos (`<prefix>-0001`, `<prefix>-0002`, …) que deixam as falhas de teste legíveis. */
 export class SequentialIdGenerator implements IIdGenerator {
   private next = 0;
 
@@ -13,8 +13,8 @@ export class SequentialIdGenerator implements IIdGenerator {
 }
 
 /**
- * Deterministic UUID-shaped ids (`00000000-0000-7000-a000-000000000001`, …) for the ids the use cases validate as
- * UUIDs (wallets): still readable by their last digits.
+ * Ids determinísticos no formato UUID (`00000000-0000-7000-a000-000000000001`, …) para os ids que os use cases
+ * validam como UUID (wallets): ainda dá para ler pelos últimos dígitos.
  */
 export class SequentialUuidGenerator implements IIdGenerator {
   private next = 0;
@@ -25,5 +25,5 @@ export class SequentialUuidGenerator implements IIdGenerator {
   }
 }
 
-/** The UUID-shaped player id number `n`, e.g. aPlayerId(1) = `00000000-0000-4000-8000-000000000001`. */
+/** O player id número `n` no formato UUID, por exemplo aPlayerId(1) = `00000000-0000-4000-8000-000000000001`. */
 export const aPlayerId = (n: number): string => `00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;

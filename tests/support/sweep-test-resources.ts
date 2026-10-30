@@ -32,7 +32,7 @@ export interface SweepCriteria {
   readonly onlySuffixes?: ReadonlySet<string>;
 }
 
-/** Pure: a test resource, inside `onlySuffixes` when given, and at least `minAgeMs` old at `now`. */
+/** Pura: um recurso de teste, dentro de `onlySuffixes` quando informado, e com pelo menos `minAgeMs` de idade em `now`. */
 export const isSweepable = (name: string, criteria: SweepCriteria): boolean => {
   const suffix = testResourceSuffix(name);
   if (suffix === undefined) return false;

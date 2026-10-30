@@ -5,8 +5,8 @@ import { ensureInfraUp } from '../../support/ensure-infra-up';
 import { createTestDatabase, type TestDatabase } from '../../support/test-database';
 import { uuidv7 } from '../../support/uuid';
 
-// Minimal stand-in for the wagering schema: only the columns the helper reads, no constraints,
-// so the test can insert deliberately broken ledgers.
+// Substituto mínimo do schema de wagering: só as colunas que o helper lê, sem constraints,
+// para o teste conseguir inserir ledgers quebrados de propósito.
 const STAND_IN_SCHEMA = `
 CREATE TABLE wallets (id uuid PRIMARY KEY, balance numeric(20,2), version int);
 CREATE TABLE wallet_ledger_entries (

@@ -4,7 +4,7 @@ import { type InMemoryHttpApp, startInMemoryHttpApp } from './support/in-memory-
 const COMMON = ['401', '500', '503'];
 const BODY = ['413', '415'];
 
-/** docs/http-contract.md, per route: every status the endpoint can answer. */
+/** docs/http-contract.md, por rota: todo status que o endpoint pode responder. */
 const STATUS_TABLE: Record<string, string[]> = {
   'post /wallets': ['201', '400', '409', ...BODY, ...COMMON],
   'get /wallets/{walletId}': ['200', '400', '404', ...COMMON],

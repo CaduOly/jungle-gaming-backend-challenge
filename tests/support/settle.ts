@@ -32,8 +32,8 @@ const withTimeout = async (work: Promise<unknown>, timeoutMs: number): Promise<v
 };
 
 /**
- * Disposes tracked resources one at a time, newest first (a queue before the database it may depend on),
- * each bounded by `disposeTimeoutMs`; a failure or a timeout is collected and the next resource still runs.
+ * Descarta os recursos rastreados um por vez, do mais novo para o mais velho (uma fila antes do banco de que ela
+ * pode depender), cada um limitado por `disposeTimeoutMs`; uma falha ou timeout é guardado e o próximo recurso roda.
  */
 export class ResourceScope {
   private readonly disposers: Array<() => Promise<unknown>> = [];

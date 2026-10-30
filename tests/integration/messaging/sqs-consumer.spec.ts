@@ -21,9 +21,9 @@ import { testInfraConfig } from '../../support/infra-config';
 import { createTestQueues, type TestQueues } from '../../support/test-queues';
 import { uuidv7 } from '../../support/uuid';
 
-/** The retry limit of these tests: failures of the message itself. */
+/** O limite de retry destes testes: falhas da própria mensagem. */
 const ATTEMPTS = 3;
-/** The redrive as configured in production: a crash net far above anything stops and deploys reach. */
+/** O redrive como está em produção: uma rede para crash bem acima de qualquer coisa que paradas e deploys alcançam. */
 const REDRIVE_MAX_RECEIVE_COUNT = 100;
 const VISIBILITY_TIMEOUT_SECONDS = 2;
 const PROCESS_SCRIPT = new URL('./sqs-consumer-process.ts', import.meta.url).pathname;
@@ -352,8 +352,8 @@ describe('SQS consumer loop against LocalStack', () => {
 
   describe('stops and deploys in the middle of a retry never send a valid command to the DLQ', () => {
     /**
-     * Runs one consumer per stop: each one waits until the head failed once in it, then stops gracefully, which
-     * hands the head and the rest of the group back. Every stop costs every message of the group one receive.
+     * Roda um consumer por parada: cada um espera a cabeça falhar uma vez nele e então para de forma graciosa, o que
+     * devolve a cabeça e o resto do grupo. Cada parada custa um receive para cada mensagem do grupo.
      */
     const stopDuringRetries = async (stops: number, failing: { head: boolean }, handler: IMessageHandler, calls: Call[]) => {
       for (let stop = 1; stop <= stops; stop++) {
