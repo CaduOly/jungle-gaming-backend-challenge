@@ -5,9 +5,9 @@ import { lockConflictOf } from '../metrics/error-classification';
 import type { WageringMetrics } from '../metrics/wagering-metrics';
 
 /**
- * Measures the wallet lock wait (lock_wait_seconds) and counts the units of work a lock conflict aborted
- * (lock_conflicts_total). It sits on the unit of work, not on one use case, so the HTTP path, the consumer
- * and the pending-reference worker are all counted, including the items the worker retries on its own.
+ * Mede o lock wait da wallet (lock_wait_seconds) e conta os units of work que um conflito de lock abortou
+ * (lock_conflicts_total). Fica no unit of work e não num use case, então o caminho HTTP, o consumer e o
+ * pending-reference worker são todos contados, inclusive os itens que o worker retenta sozinho.
  */
 export class ObservedUnitOfWork implements IWageringUnitOfWork {
   constructor(

@@ -1,17 +1,17 @@
 export interface PollingLoopOptions<T> {
-  /** One unit of work. Its output decides how long to wait before the next one. */
+  /** Uma unidade de trabalho. O output dela decide quanto esperar antes da próxima. */
   readonly round: () => Promise<T>;
   readonly nextDelayMs: (output: T) => number;
-  /** Delay after a round that threw. */
+  /** Delay depois de uma rodada que lançou erro. */
   readonly errorDelayMs: number;
   readonly onRound?: (output: T) => unknown;
   readonly onError?: (error: unknown) => unknown;
 }
 
 /**
- * Runs rounds one at a time, never overlapping, until stopped. `stop()` cancels the pending wait and
- * resolves only after the round in flight (if any) has finished; the loop can then be started again.
- * Observers that throw or reject are ignored.
+ * Roda as rodadas uma por vez, sem sobrepor, até ser parado. O `stop()` cancela a espera pendente e só resolve
+ * depois que a rodada em andamento (se tiver) termina, aí o loop pode ser iniciado de novo.
+ * Observer que lança ou rejeita é ignorado.
  */
 export class PollingLoop<T> {
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -70,11 +70,11 @@ export class PollingLoop<T> {
   }
 }
 
-/** An observer must never stop the loop, whether it throws or returns a rejected promise. */
+/** Um observer nunca pode parar o loop, seja lançando erro ou retornando promise rejeitada. */
 const notify = (callback: () => unknown): void => {
   try {
     Promise.resolve(callback()).catch(() => undefined);
   } catch {
-    // see above
+    // ver acima
   }
 };

@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-/** The identifiers every log line carries while a request, a message or a worker item is being handled. */
+/** Os identificadores que toda linha de log carrega enquanto uma request, uma mensagem ou um item do worker está sendo tratado. */
 export interface LogContext {
   correlationId?: string;
   causationId?: string;
@@ -30,11 +30,11 @@ const pick = (fields: Partial<Record<keyof LogContext, unknown>>): LogContext =>
   return picked;
 };
 
-/** Runs `work` with a child of the current context: the outer fields stay, the given ones are added or replaced. */
+/** Roda `work` com um filho do contexto atual: os campos de fora ficam, os passados são adicionados ou substituídos. */
 export const runWithLogContext = <T>(fields: Partial<Record<keyof LogContext, unknown>>, work: () => T): T =>
   storage.run({ ...storage.getStore(), ...pick(fields) }, work);
 
-/** Adds fields learned midway (the transaction id once the use case answers) to the context already running. */
+/** Adiciona campos descobertos no meio do caminho (o id da transação quando o use case responde) ao contexto já rodando. */
 export const bindLogContext = (fields: Partial<Record<keyof LogContext, unknown>>): void => {
   const store = storage.getStore();
   if (store !== undefined) Object.assign(store, pick(fields));

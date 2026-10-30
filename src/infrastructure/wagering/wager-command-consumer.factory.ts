@@ -28,27 +28,27 @@ export interface WagerCommandConsumerDeps {
   readonly client: SQSClient;
   readonly sqs: Pick<SqsConfig, 'commandsQueue' | 'commandsDeadLetterQueue'>;
   readonly config: SqsConsumerConfig;
-  /** Same backoff as the pending-reference worker: the use case schedules the first retry of a pending reference. */
+  /** Mesmo backoff do pending-reference worker, já que o use case agenda o primeiro retry de uma pending reference. */
   readonly referenceBackoff: PendingReferenceWorkerConfig['backoff'];
   readonly lockTimeoutMs: number;
   readonly faults?: FaultInjector;
   readonly clock?: IClock;
   readonly ids?: IIdGenerator;
   readonly random?: () => number;
-  /** PostgreSQL by default; injectable so a test can take the database "down" for the consumer alone. */
+  /** PostgreSQL por default, injetável para um teste conseguir derrubar o banco só para o consumer. */
   readonly readiness?: () => Promise<void>;
   readonly handler?: Pick<WagerCommandHandlerOptions, 'consumerName' | 'onPermanentFailure' | 'onProcessed'>;
   readonly onOutcome?: SqsConsumerLoopDeps['onOutcome'];
   readonly onError?: SqsConsumerLoopDeps['onError'];
   readonly onCircuitStateChange?: SqsConsumerLoopDeps['onCircuitStateChange'];
-  /** Logs and metrics around the use case and the unit of work; none when omitted (the tests). */
+  /** Logs e métricas em volta do use case e do unit of work, nenhum quando omitido (os testes). */
   readonly observability?: ObservabilityTools;
 }
 
 /**
- * The commands consumer over the real stack: ProcessWagerTransaction on the MikroORM unit of work and repositories,
- * SHA-256 hashing, UUIDv7 ids and the system clock, behind the SQS consumer loop whose breaker follows the
- * PostgreSQL readiness. `slow_handler` and `crash_after_commit_before_ack` come from the fault injector.
+ * O consumer de comandos em cima da stack real: ProcessWagerTransaction no unit of work e repositories do MikroORM,
+ * hash SHA-256, ids UUIDv7 e o clock do sistema, atrás do loop do consumer SQS cujo breaker segue a readiness do
+ * PostgreSQL. `slow_handler` e `crash_after_commit_before_ack` vêm do fault injector.
  */
 export const createWagerCommandConsumer = (deps: WagerCommandConsumerDeps): SqsConsumerLoop => {
   const faults = deps.faults ?? FaultInjector.none();

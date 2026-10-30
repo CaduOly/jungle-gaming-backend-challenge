@@ -22,13 +22,13 @@ export interface PendingReferenceWorkerDeps {
   readonly random?: () => number;
   readonly onRound?: PendingReferenceWorkerOptions['onRound'];
   readonly onError?: PendingReferenceWorkerOptions['onError'];
-  /** Lock wait and lock conflicts of every item; nothing is measured when omitted (the tests). */
+  /** Lock wait e conflitos de lock de cada item, nada é medido quando omitido (os testes). */
   readonly metrics?: WageringMetrics;
 }
 
 /**
- * The real RetryPendingReferences over the MikroORM unit of work: every `run` (the claim, then each item) is its own
- * transaction on a fresh fork, so the use case can be built once and shared by every round.
+ * O RetryPendingReferences real em cima do unit of work do MikroORM: cada `run` (o claim, depois cada item) é uma
+ * transação própria num fork novo, então o use case pode ser montado uma vez e compartilhado por todas as rodadas.
  */
 export const createPendingReferenceWorker = (deps: PendingReferenceWorkerDeps): PendingReferenceWorker => {
   const faults = deps.faults ?? FaultInjector.none();

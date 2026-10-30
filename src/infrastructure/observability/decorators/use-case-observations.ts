@@ -14,9 +14,9 @@ import type { WalletView } from '../../../business/wallet/use-case/wallet-view';
 import type { UseCaseObservation } from './observe-use-case';
 
 /**
- * On SQS the message is both the correlation (unless the command brings its own) and the cause, as the use case
- * records it in the events. Feeds wager_transactions_total (decisions only) or idempotent_duplicates_total (replays). The summary keeps the
- * decision (status, failureCode) and leaves the balance out.
+ * No SQS a mensagem é ao mesmo tempo a correlation (a não ser que o comando traga a dele) e a causa, do jeito que o
+ * use case grava nos eventos. Alimenta wager_transactions_total (só decisões) ou idempotent_duplicates_total
+ * (replays). O summary guarda a decisão (status, failureCode) e deixa o saldo de fora.
  */
 export const processWagerTransactionObservation: UseCaseObservation<
   ProcessWagerTransactionInput,
@@ -71,7 +71,7 @@ export const getWagerTransactionObservation: UseCaseObservation<GetWagerTransact
   summaryOf: (output) => ({ transactionId: output.transactionId, walletId: output.walletId, status: output.status }),
 };
 
-/** A divergence is counted and logged, never corrected; the amounts stay out of the line. */
+/** Divergência é contada e logada, nunca corrigida, e os valores ficam fora da linha. */
 export const reconcileWalletObservation: UseCaseObservation<ReconcileWalletInput, ReconcileWalletOutput> = {
   operation: 'reconcile_wallet',
   contextOf: (input) => ({ walletId: input.walletId }),

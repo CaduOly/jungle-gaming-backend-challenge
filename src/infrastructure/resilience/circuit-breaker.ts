@@ -3,17 +3,17 @@ import type { IClock } from '../../business/shared/port/clock.port';
 export type CircuitState = 'closed' | 'open' | 'half-open';
 
 export interface CircuitBreakerOptions {
-  /** Consecutive failures that open a closed circuit. */
+  /** Falhas consecutivas que abrem um circuito fechado. */
   readonly failureThreshold: number;
-  /** How long an open circuit refuses work before letting one trial through (half-open). */
+  /** Quanto tempo um circuito aberto recusa trabalho antes de deixar passar uma tentativa (half-open). */
   readonly openMs: number;
   readonly clock: IClock;
   readonly onStateChange?: (state: CircuitState) => void;
 }
 
 /**
- * closed → (failureThreshold consecutive failures) → open → (openMs) → half-open → success: closed,
- * failure: open again. Half-open is derived from the clock, so nothing has to tick.
+ * closed → (failureThreshold falhas consecutivas) → open → (openMs) → half-open → sucesso: closed,
+ * falha: open de novo. O half-open é derivado do clock, então nada precisa ficar fazendo tick.
  */
 export class CircuitBreaker {
   private failures = 0;
@@ -32,7 +32,7 @@ export class CircuitBreaker {
     return this.options.clock.now().getTime() - this.openedAt >= this.options.openMs ? 'half-open' : 'open';
   }
 
-  /** Exposed as the circuit_breaker_open gauge. Half-open counts as open: work is still held back. */
+  /** Exposto como o gauge circuit_breaker_open. Half-open conta como open, já que o trabalho ainda fica segurado. */
   get isOpen(): boolean {
     return this.state !== 'closed';
   }
@@ -41,7 +41,7 @@ export class CircuitBreaker {
     return this.report(this.state) !== 'open';
   }
 
-  /** Milliseconds until an open circuit turns half-open (0 when it already allows a trial). */
+  /** Milissegundos até um circuito aberto virar half-open (0 quando já deixa passar uma tentativa). */
   remainingOpenMs(): number {
     if (this.openedAt === undefined) return 0;
     return Math.max(0, this.openedAt + this.options.openMs - this.options.clock.now().getTime());
@@ -68,7 +68,7 @@ export class CircuitBreaker {
       try {
         this.options.onStateChange?.(state);
       } catch {
-        // An observer must never break the breaker.
+        // Um observer nunca pode quebrar o breaker.
       }
     }
     return state;

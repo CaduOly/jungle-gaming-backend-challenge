@@ -20,8 +20,8 @@ const MONEY_FIELDS = [
 ];
 
 /**
- * Money and raw payloads never reach a log line, at the top level or one or two levels down. A line that needs
- * a monetary fact logs its outcome (status, failureCode), never the value.
+ * Dinheiro e payload cru nunca chegam numa linha de log, nem no primeiro nível nem um ou dois níveis abaixo. Linha
+ * que precisa de um fato monetário loga o outcome (status, failureCode), nunca o valor.
  */
 export const REDACTED_PATHS: readonly string[] = MONEY_FIELDS.flatMap((field) => [field, `*.${field}`, `*.*.${field}`]);
 
@@ -33,8 +33,8 @@ export interface LoggerOptions {
 }
 
 /**
- * JSON logger. Every line gets the identifiers of the AsyncLocalStorage context (correlationId, messageId…)
- * through the mixin, so no call site has to pass them.
+ * Logger JSON. Toda linha recebe os identificadores do contexto do AsyncLocalStorage (correlationId, messageId…)
+ * pelo mixin, então nenhum ponto de chamada precisa passar eles.
  */
 export const createLogger = ({ level = 'info', destination }: LoggerOptions = {}): Logger => {
   if (!LOG_LEVELS.has(level)) throw new Error(`LOG_LEVEL must be one of ${[...LOG_LEVELS].join(', ')}`);

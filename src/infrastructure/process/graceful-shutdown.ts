@@ -11,8 +11,8 @@ export interface GracefulShutdownOptions {
 }
 
 /**
- * On the first SIGTERM/SIGINT runs `shutdown` and exits 0, also when `timeoutMs` expires first (whatever is
- * unfinished is recovered by redelivery). Exits 1 only when `shutdown` itself fails.
+ * No primeiro SIGTERM/SIGINT roda o `shutdown` e sai com 0, inclusive quando o `timeoutMs` estoura antes (o que
+ * ficou sem terminar é recuperado pela reentrega). Só sai com 1 quando o próprio `shutdown` falha.
  */
 export const installGracefulShutdown = (shutdown: () => Promise<unknown>, options: GracefulShutdownOptions): void => {
   const source = options.source ?? process;

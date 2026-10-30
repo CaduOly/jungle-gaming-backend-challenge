@@ -2,7 +2,7 @@ import type { Logger } from '../logging/logger';
 import { describeError } from '../metrics/error-classification';
 import type { WageringMetrics } from '../metrics/wagering-metrics';
 
-/** What the SQS consumer reports per settled message (its onOutcome hook). */
+/** O que o consumer SQS reporta por mensagem settled (o hook onOutcome dele). */
 export interface ConsumerOutcomeEvent {
   readonly message: { readonly sqsMessageId: string; readonly receiveCount: number };
   readonly outcome:
@@ -12,7 +12,7 @@ export interface ConsumerOutcomeEvent {
   readonly durationMs: number;
 }
 
-/** What the outbox publisher reports per round (its onRound hook). */
+/** O que o outbox publisher reporta por rodada (o hook onRound dele). */
 export interface OutboxRoundReport {
   readonly published: number;
   readonly failed: number;
@@ -20,7 +20,7 @@ export interface OutboxRoundReport {
   readonly exhaustedMessageIds: readonly string[];
 }
 
-/** What the pending-reference worker reports per round (its onRound hook). */
+/** O que o pending-reference worker reporta por rodada (o hook onRound dele). */
 export interface PendingRoundReport {
   readonly processed: number;
   readonly rejected: number;
@@ -32,8 +32,8 @@ export interface PendingRoundReport {
 export type BreakerState = 'closed' | 'open' | 'half-open';
 
 /**
- * The callbacks the consumer, the outbox publisher and the pending-reference worker take, turned into metrics
- * and log lines. The workers already shield themselves from a throwing observer.
+ * Os callbacks que o consumer, o outbox publisher e o pending-reference worker recebem, transformados em métricas
+ * e linhas de log. Os workers já se protegem de observer que lança erro.
  */
 export class WorkerObservers {
   constructor(
@@ -54,7 +54,7 @@ export class WorkerObservers {
     }
   };
 
-  /** Starts the gauge at 0, so the series exists before the first state change. */
+  /** Começa o gauge em 0, assim a série existe antes da primeira mudança de estado. */
   circuitState(breaker: string): (state: BreakerState) => void {
     this.metrics.circuitBreakerOpen.set({ breaker }, 0);
     return (state) => {

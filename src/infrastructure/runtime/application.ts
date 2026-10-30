@@ -37,8 +37,8 @@ export interface RunningApplication {
   readonly roles: ReadonlySet<AppRole>;
   readonly httpPort: number | undefined;
   /**
-   * Stops the HTTP server and every loop, lets the work in flight finish (the consumer within SHUTDOWN_TIMEOUT_MS,
-   * handing back what it did not start) and only then closes the ORM pool and the SQS client.
+   * Para o servidor HTTP e todos os loops, deixa o trabalho em andamento terminar (o consumer dentro de
+   * SHUTDOWN_TIMEOUT_MS, devolvendo o que não começou) e só então fecha o pool do ORM e o client do SQS.
    */
   stop(): Promise<void>;
 }
@@ -60,9 +60,9 @@ const dataOf = (body: unknown): Record<string, unknown> => {
 };
 
 /**
- * The composition root of one replica: the real MikroORM persistence, SQS, SHA-256 hashing, UUIDv7 ids and the
- * system clock, with only the roles in APP_ROLES started. Migrations are not run here: `bun run migrate` runs
- * once before the replicas start.
+ * O composition root de uma réplica: persistência real com MikroORM, SQS, hash SHA-256, ids UUIDv7 e o clock do
+ * sistema, subindo só as roles de APP_ROLES. As migrations não rodam aqui, o `bun run migrate` roda uma vez antes
+ * das réplicas subirem.
  */
 export const startApplication = async (env: Env, observed?: Observability): Promise<RunningApplication> => {
   const roles = readAppRoles(env);
