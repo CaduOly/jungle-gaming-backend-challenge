@@ -69,7 +69,12 @@ PLAYER=0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1
 
 ```bash
 curl -s -X POST $API/wallets -H "$AUTH" -H 'Content-Type: application/json' \
-  -d "{\"playerId\":\"$PLAYER\",\"initialBalance\":{\"amount\":\"100.00\",\"currency\":\"BRL\"}}"
+  -d @- <<EOF
+{
+  "playerId": "$PLAYER",
+  "initialBalance": { "amount": "100.00", "currency": "BRL" }
+}
+EOF
 ```
 
 ```json
@@ -83,7 +88,18 @@ Guarde o `data.id`: `WALLET=01a18a9e-ffea-73f7-a2ae-fd4e30359a7c`. Uma segunda w
 ```bash
 curl -s -X POST $API/wagering/transactions -H "$AUTH" -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: provider-a:tx-1' \
-  -d "{\"providerId\":\"provider-a\",\"externalTransactionId\":\"tx-1\",\"playerId\":\"$PLAYER\",\"walletId\":\"$WALLET\",\"roundId\":\"round-1\",\"gameId\":\"fortune-chimp\",\"kind\":\"BET\",\"money\":{\"amount\":\"25.00\",\"currency\":\"BRL\"}}"
+  -d @- <<EOF
+{
+  "providerId": "provider-a",
+  "externalTransactionId": "tx-1",
+  "playerId": "$PLAYER",
+  "walletId": "$WALLET",
+  "roundId": "round-1",
+  "gameId": "fortune-chimp",
+  "kind": "BET",
+  "money": { "amount": "25.00", "currency": "BRL" }
+}
+EOF
 ```
 
 ```json
@@ -161,10 +177,30 @@ export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=us-east-1
 QUEUE=$(aws --endpoint-url http://localhost:4566 sqs get-queue-url \
   --queue-name wager-transactions.fifo --query QueueUrl --output text)
 
+BODY=$(cat <<EOF
+{
+  "messageId": "tx-sqs-1",
+  "type": "WagerTransactionRequested",
+  "occurredAt": "2026-10-29T12:00:00Z",
+  "data": {
+    "providerId": "provider-a",
+    "externalTransactionId": "tx-sqs-1",
+    "idempotencyKey": "provider-a:tx-sqs-1",
+    "playerId": "$PLAYER",
+    "walletId": "$WALLET",
+    "roundId": "round-2",
+    "gameId": "fortune-chimp",
+    "kind": "BET",
+    "money": { "amount": "5.00", "currency": "BRL" }
+  }
+}
+EOF
+)
+
 aws --endpoint-url http://localhost:4566 sqs send-message --queue-url "$QUEUE" \
   --message-group-id "$WALLET" --message-deduplication-id tx-sqs-1 \
   --message-attributes '{"providerId":{"DataType":"String","StringValue":"provider-a"}}' \
-  --message-body "{\"messageId\":\"tx-sqs-1\",\"type\":\"WagerTransactionRequested\",\"occurredAt\":\"2026-10-29T12:00:00Z\",\"data\":{\"providerId\":\"provider-a\",\"externalTransactionId\":\"tx-sqs-1\",\"idempotencyKey\":\"provider-a:tx-sqs-1\",\"playerId\":\"$PLAYER\",\"walletId\":\"$WALLET\",\"roundId\":\"round-2\",\"gameId\":\"fortune-chimp\",\"kind\":\"BET\",\"money\":{\"amount\":\"5.00\",\"currency\":\"BRL\"}}}"
+  --message-body "$BODY"
 
 curl -s $API/providers/provider-a/wagering/transactions/tx-sqs-1 -H "$AUTH"
 ```
