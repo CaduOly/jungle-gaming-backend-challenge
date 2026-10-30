@@ -1,23 +1,22 @@
 import type { Pool, PoolClient } from 'pg';
 
 /**
- * Frees the pool slot of a client whose connection died while checked out.
+ * Libera o slot do pool de um client cuja conexão morreu enquanto estava em uso.
  *
- * Kysely (under MikroORM) releases a transaction's client only after a successful COMMIT/ROLLBACK. When the
- * backend dies mid-transaction the ROLLBACK fails too, `release()` is never called, and the slot leaks for
- * good: after `max` such deaths every acquire hangs. Here each checked-out client releases itself with the
- * error (pg-pool then destroys it instead of reusing it) as soon as it emits `error` or `end`, and a later
- * release by its holder becomes a no-op instead of pg-pool's "Release called on client which has already
- * been released" throw.
+ * O Kysely (por baixo do MikroORM) só libera o client da transação depois de um COMMIT/ROLLBACK com sucesso. Quando
+ * o backend morre no meio da transação o ROLLBACK também falha, o `release()` nunca é chamado e o slot vaza de vez:
+ * depois de `max` mortes assim todo acquire trava. Aqui cada client em uso se libera sozinho com o erro (aí o
+ * pg-pool destrói ele em vez de reusar) assim que emite `error` ou `end`, e um release posterior de quem segura ele
+ * vira no-op em vez do throw "Release called on client which has already been released" do pg-pool.
  */
 type ConnectCallback = (error: Error | undefined, client: PoolClient | undefined, done: (release?: Error | boolean) => void) => void;
 
 const noop = (): void => undefined;
 
 /*
- * pg-pool's own pool.query() acquires through the callback form, connect((error, client, done) => …), so the
- * guarded connect has to honour it as well: ignoring the callback would leave that query hanging with its slot
- * checked out for good.
+ * O próprio pool.query() do pg-pool faz acquire pela forma com callback, connect((error, client, done) => …), então
+ * o connect protegido tem que respeitar isso também, ignorar o callback deixaria essa query travada com o slot
+ * preso para sempre.
  */
 export const guardPool = (pool: Pool): void => {
   const connect = pool.connect.bind(pool) as () => Promise<PoolClient>;

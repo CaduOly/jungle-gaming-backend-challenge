@@ -11,11 +11,11 @@ export interface UnitOfWorkOptions {
 }
 
 /**
- * One transaction per `run`, on a fresh fork so nothing leaks between units. Every repository handed to `work`
- * is bound to the transactional EntityManager, so all writes commit or roll back together.
- * `read-write` (default) is READ COMMITTED with row locks; `snapshot-read` is REPEATABLE READ READ ONLY, one
- * consistent snapshot for reconciliation. lock_timeout is SET LOCAL: it dies with the transaction and never
- * touches pooled sessions. `crash_before_commit` fails the unit after `work` finished, right before COMMIT.
+ * Uma transação por `run`, num fork novo para nada vazar entre units. Todo repository passado para `work` está
+ * ligado ao EntityManager transacional, então todas as escritas commitam ou fazem rollback juntas.
+ * `read-write` (default) é READ COMMITTED com row lock; `snapshot-read` é REPEATABLE READ READ ONLY, um snapshot
+ * consistente para a reconciliação. O lock_timeout é SET LOCAL, morre com a transação e nunca mexe nas sessões do
+ * pool. `crash_before_commit` falha a unit depois que o `work` terminou, logo antes do COMMIT.
  */
 export class MikroOrmUnitOfWork<TTx> implements IUnitOfWork<TTx> {
   private readonly faults: FaultInjector;

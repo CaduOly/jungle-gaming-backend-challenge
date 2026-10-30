@@ -43,8 +43,8 @@ const toFailureCode = (value: unknown) => {
 };
 
 /**
- * The observed balance is in the wallet currency, which differs from the transaction currency only on a
- * CURRENCY_MISMATCH rejection; `wallet_currency` is NULL exactly there, so the wallet row is joined for it.
+ * O saldo observado está na currency da wallet, que só difere da currency da transação numa rejeição
+ * CURRENCY_MISMATCH; o `wallet_currency` é NULL exatamente nesse caso, por isso a linha da wallet entra no join.
  */
 export const WAGER_SELECT = `
   SELECT t.id, t.provider_id, t.external_transaction_id, t.idempotency_key, t.payload_hash, t.wallet_id,
@@ -100,10 +100,10 @@ export const wagerTransactionFromRow = (row: WagerTransactionSelectRow): WagerTr
 };
 
 /**
- * The schema stores processed_at exactly when the status is PROCESSED (CHECK
- * wager_transactions_processed_has_processed_at), while the entity also stamps REJECTED and FAILED with the
- * moment of the decision. That moment is kept in updated_at (a terminal row never changes again) and read back
- * from there, so the entity round-trips while processed_at keeps its literal meaning.
+ * O schema grava processed_at exatamente quando o status é PROCESSED (CHECK
+ * wager_transactions_processed_has_processed_at), enquanto a entity também marca REJECTED e FAILED com o momento
+ * da decisão. Esse momento fica em updated_at (linha terminal nunca muda de novo) e é lido de volta de lá, assim a
+ * entity faz o round-trip e o processed_at mantém o significado literal.
  */
 export const processedAtColumn = (transaction: WagerTransaction): Date | null =>
   transaction.status === WagerTransactionStatus.PROCESSED ? (transaction.processedAt ?? null) : null;

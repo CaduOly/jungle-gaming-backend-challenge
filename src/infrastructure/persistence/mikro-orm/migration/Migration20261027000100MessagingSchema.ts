@@ -1,14 +1,14 @@
 import { Migration } from '@mikro-orm/migrations';
 
 /*
- * Inbox: dedup of incoming SQS messages per consumer. Same message_id with another payload_hash is a
- * permanent contract violation (DLQ), decided by the application from the stored hash.
- * Outbox: one row per integration event (PK = event_id, the consumers' dedup key). The partial indexes keep
- * the publisher's claim (`… WHERE published_at IS NULL … ORDER BY occurred_at, event_id … FOR UPDATE SKIP LOCKED`)
- * cheap as the table grows, whether the planner filters by next_attempt_at or walks the occurrence order.
- * lease_token fences writes: a claim sets (locked_until, lease_token) together, and a retry only applies with
- * `WHERE event_id = $1 AND published_at IS NULL AND lease_token = $2`, so a publisher whose lease expired and
- * was reclaimed cannot overwrite the new owner's state.
+ * Inbox: dedup das mensagens SQS que chegam, por consumer. Mesmo message_id com outro payload_hash é violação
+ * permanente de contrato (DLQ), decidida pela aplicação a partir do hash gravado.
+ * Outbox: uma linha por evento de integração (PK = event_id, a chave de dedup dos consumers). Os índices parciais
+ * deixam o claim do publisher (`… WHERE published_at IS NULL … ORDER BY occurred_at, event_id … FOR UPDATE SKIP
+ * LOCKED`) barato conforme a tabela cresce, seja o planner filtrando por next_attempt_at ou seguindo a ordem de
+ * ocorrência. O lease_token protege as escritas: o claim define (locked_until, lease_token) junto, e o retry só
+ * aplica com `WHERE event_id = $1 AND published_at IS NULL AND lease_token = $2`, então um publisher cujo lease
+ * expirou e foi pego de volta não consegue sobrescrever o estado do novo dono.
  */
 const UP = /* sql */ `
 CREATE TABLE inbox_messages (

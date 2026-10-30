@@ -15,7 +15,7 @@ export interface TxRepositoriesDependencies {
   readonly faults?: FaultInjector;
 }
 
-/** The TxRepositoriesFactory of the wagering unit of work: every repository bound to the transactional em. */
+/** O TxRepositoriesFactory do unit of work de wagering: todo repository ligado ao em transacional. */
 export const createTxRepositories = (
   em: EntityManager,
   { clock, faults = FaultInjector.none() }: TxRepositoriesDependencies,
@@ -33,9 +33,9 @@ export interface ReadRepositories {
 }
 
 /**
- * Plain reads outside any unit of work (GetWallet, GetLedger, GetWagerTransaction): each query autocommits on
- * whatever pooled connection is free and never holds a lock. Each read goes through a fresh fork so nothing is
- * shared between requests.
+ * Leituras simples fora de qualquer unit of work (GetWallet, GetLedger, GetWagerTransaction): cada query faz
+ * autocommit na conexão do pool que estiver livre e nunca segura lock. Cada leitura passa por um fork novo para
+ * nada ser compartilhado entre requests.
  */
 export const createReadRepositories = (em: EntityManager, clock: IClock): ReadRepositories => ({
   wallets: { findById: (id) => new WalletRepository(em.fork()).findById(id) },

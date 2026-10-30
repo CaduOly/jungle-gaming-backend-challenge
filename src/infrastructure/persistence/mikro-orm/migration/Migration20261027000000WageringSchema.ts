@@ -1,33 +1,33 @@
 import { Migration } from '@mikro-orm/migrations';
 
 /*
- * Wallets, wager transactions and the immutable ledger. Every invariant from CHALLENGE.md §5.9/§6 lives here,
- * so it holds even if application code is wrong or several instances race.
+ * Wallets, wager transactions e o ledger imutável. Toda invariante do CHALLENGE.md §5.9/§6 mora aqui, então ela
+ * vale mesmo se o código da aplicação estiver errado ou se várias instâncias correrem juntas.
  *
- * Trigger violations raise SQLSTATE 23001 (restrict_violation) so the application can classify them as
- * permanent integrity errors.
+ * Violação de trigger levanta SQLSTATE 23001 (restrict_violation) para a aplicação conseguir classificar como erro
+ * permanente de integridade.
  *
- * OPENING (wallet opened with balance > 0) is stored as a regular wager transaction so the ledger always
- * has a transaction_id and the composite FKs close:
- *   provider_id             = 'system' (reserved: only OPENING may use it, OPENING may only use it)
- *   external_transaction_id = idempotency_key = 'opening:<walletId>'  -> at most one OPENING per wallet
- *   status                  = 'PROCESSED', no reference, round_id/game_id may be NULL.
+ * OPENING (wallet aberta com saldo > 0) é gravado como uma wager transaction normal para o ledger sempre ter um
+ * transaction_id e as FKs compostas fecharem:
+ *   provider_id             = 'system' (reservado: só OPENING pode usar, e OPENING só pode usar ele)
+ *   external_transaction_id = idempotency_key = 'opening:<walletId>'  -> no máximo um OPENING por wallet
+ *   status                  = 'PROCESSED', sem reference, round_id/game_id podem ser NULL.
  *
- * CURRENCY_MISMATCH rejections must be persisted (replay returns 422) but their currency differs from the
- * wallet's, which would break FK (wallet_id, currency). `wallet_currency` is a generated column that is NULL
- * only for that rejection; the composite FK uses MATCH SIMPLE and is skipped there, while wallet_id keeps its
- * own FK. For every other row the FK forces currency = wallet currency.
+ * Rejeição CURRENCY_MISMATCH tem que ser persistida (o replay retorna 422), mas a currency dela difere da currency
+ * da wallet, o que quebraria a FK (wallet_id, currency). O `wallet_currency` é uma coluna gerada que é NULL só para
+ * essa rejeição; a FK composta usa MATCH SIMPLE e é pulada nesse caso, enquanto o wallet_id mantém a FK própria.
+ * Para toda outra linha a FK força currency = currency da wallet.
  *
- * The same trick ties player_id to the wallet's player: `wallet_player_id` is NULL only for a
- * WALLET_PLAYER_MISMATCH rejection, which is persisted (so its replay keeps answering 422) with the player the
- * provider sent. WALLET_NOT_FOUND is never persisted: the wallet FK has nothing to point to.
+ * O mesmo truque amarra o player_id ao player da wallet: o `wallet_player_id` é NULL só numa rejeição
+ * WALLET_PLAYER_MISMATCH, que é persistida (para o replay continuar respondendo 422) com o player que o provider
+ * mandou. WALLET_NOT_FOUND nunca é persistido, já que a FK da wallet não tem para onde apontar.
  *
- * References stay inside the wallet: (reference_transaction_id, wallet_id) → (id, wallet_id), so a reversal
- * in wallet B can never take the single-reversal slot of a BET in wallet A.
+ * Reference fica dentro da wallet: (reference_transaction_id, wallet_id) → (id, wallet_id), então um reversal na
+ * wallet B nunca consegue ocupar o slot de reversal único de um BET na wallet A.
  *
- * A ledger entry only exists for a PROCESSED transaction: `transaction_status` is a generated constant
- * 'PROCESSED' and the FK (transaction_id, wallet_id, transaction_status) → (id, wallet_id, status) fails for
- * any other status. It is stable because PROCESSED is terminal (trigger below).
+ * Entrada no ledger só existe para transação PROCESSED: o `transaction_status` é uma constante gerada 'PROCESSED' e
+ * a FK (transaction_id, wallet_id, transaction_status) → (id, wallet_id, status) falha para qualquer outro status.
+ * Isso é estável já que PROCESSED é terminal (trigger abaixo).
  */
 const UP = /* sql */ `
 CREATE TABLE wallets (

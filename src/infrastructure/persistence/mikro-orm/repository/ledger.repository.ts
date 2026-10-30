@@ -7,7 +7,7 @@ import { FaultInjector } from '../../../fault-injection/fault-injector';
 import { LEDGER_SELECT, ledgerEntryFromRow, type LedgerEntryRow, ledgerEntryToInsertParams } from '../mapper/ledger-entry.mapper';
 import { isUuid, toBigInt } from '../mapper/sql-values';
 
-/** Insert-only (the table triggers reject UPDATE, DELETE and TRUNCATE); pages follow seq, never offsets. */
+/** Só insert (as triggers da tabela rejeitam UPDATE, DELETE e TRUNCATE), a paginação segue o seq, nunca offset. */
 export class LedgerRepository implements ILedgerWriter, ILedgerReader {
   constructor(
     private readonly em: EntityManager,

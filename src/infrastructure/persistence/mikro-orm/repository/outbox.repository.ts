@@ -17,7 +17,7 @@ const INSERT_COLUMNS =
   'event_id, aggregate_type, aggregate_id, event_type, payload, occurred_at, attempts, next_attempt_at, published_at';
 const INSERT_PLACEHOLDERS = '(?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?)';
 
-/** `now` always comes from the caller (IClock), never from the database clock. */
+/** `now` sempre vem de quem chama (IClock), nunca do clock do banco. */
 export class OutboxRepository implements IOutboxRepository {
   constructor(
     private readonly em: EntityManager,
@@ -35,11 +35,12 @@ export class OutboxRepository implements IOutboxRepository {
   }
 
   /**
-   * Head-of-line in two steps, so a hot aggregate with a long backlog costs one index probe, not a scan:
-   * 1. `aggregates` walks the distinct aggregates with unpublished messages (a loose index scan over
-   *    outbox_messages_unpublished_by_aggregate) and `heads` takes the lowest seq of each;
-   * 2. only then the heads are filtered by next_attempt_at and the lease, ordered by seq, limited and locked
-   *    (SKIP LOCKED). A head that is leased or not due yet is filtered out and its aggregate yields nothing.
+   * Head-of-line em dois passos, assim um aggregate quente com backlog longo custa uma consulta no índice, não um
+   * scan:
+   * 1. `aggregates` percorre os aggregates distintos com mensagem não publicada (um loose index scan em
+   *    outbox_messages_unpublished_by_aggregate) e `heads` pega o menor seq de cada um;
+   * 2. só depois as heads são filtradas por next_attempt_at e pelo lease, ordenadas por seq, limitadas e travadas
+   *    (SKIP LOCKED). Head com lease ou ainda não vencida sai no filtro e o aggregate dela não entrega nada.
    */
   async claimBatch(limit: number, leaseMs: number, now: Date): Promise<OutboxMessage[]> {
     const rows = await this.em.execute<OutboxMessageRow[]>(

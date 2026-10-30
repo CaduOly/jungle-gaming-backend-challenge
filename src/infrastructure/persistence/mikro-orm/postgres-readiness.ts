@@ -2,8 +2,8 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import { translateDatabaseError } from '../database-error';
 
 /**
- * Readiness of PostgreSQL for the workers: `SELECT 1` on a pooled connection. Rejects with the translated error
- * while the database (or the pool) cannot serve a query; the SQS consumer feeds its circuit breaker with it.
+ * Readiness do PostgreSQL para os workers: `SELECT 1` numa conexão do pool. Rejeita com o erro traduzido enquanto
+ * o banco (ou o pool) não consegue atender uma query, e o consumer SQS alimenta o circuit breaker com isso.
  */
 export const createPostgresReadiness =
   (em: EntityManager): (() => Promise<void>) =>

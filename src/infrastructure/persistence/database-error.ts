@@ -7,12 +7,12 @@ const DEADLOCK_DETECTED = '40P01';
 const SERIALIZATION_FAILURE = '40001';
 const RESTRICT_VIOLATION = '23001';
 const UNIQUE_VIOLATION = '23505';
-/** Foreign key, check and not-null: the schema caught a write the application should never have built. */
+/** Foreign key, check e not-null: o schema pegou uma escrita que a aplicação nunca deveria ter montado. */
 const SCHEMA_GUARD_VIOLATIONS = new Set(['23503', '23514', '23502']);
 /**
- * The same statement with the same input fails the same way every time: 22P02 (text that is not a valid value of
- * the column type, e.g. a non-uuid id), 08P01 (protocol violation, e.g. a NUL byte in a text parameter; class 08
- * but not a lost connection) and 25006 (a write inside a read-only snapshot).
+ * O mesmo statement com o mesmo input falha do mesmo jeito toda vez: 22P02 (texto que não é valor válido do tipo
+ * da coluna, ex. um id que não é uuid), 08P01 (violação de protocolo, ex. um byte NUL num parâmetro texto; é classe
+ * 08 mas não é conexão perdida) e 25006 (escrita dentro de um snapshot read-only).
  */
 const PERMANENT_SQL_STATES = new Set(['22P02', '08P01', '25006']);
 const TRANSIENT_SQL_STATES = new Set([
@@ -23,10 +23,10 @@ const TRANSIENT_SQL_STATES = new Set([
   '57P01',
   '57P02',
   '57P03',
-  // statement_timeout / query canceled: the statement may well succeed on a retry once the load drops.
+  // statement_timeout / query canceled: o statement pode muito bem passar num retry quando a carga baixar.
   '57014',
 ]);
-/** pg reports a dropped connection or an exhausted pool with a plain Error, no SQLSTATE. */
+/** O pg reporta conexão caída ou pool esgotado com um Error simples, sem SQLSTATE. */
 const TRANSIENT_DRIVER_MESSAGES = [
   /connection terminated/i,
   /terminating connection/i,
@@ -50,13 +50,13 @@ const constraintOf = (error: unknown): string | undefined => {
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /**
- * Classifies a database failure. Transient: lock timeout, deadlock, serialization failures (40001/40003),
- * connection loss (class 08 except 08P01, 57P0x, driver messages), insufficient resources (class 53), statement timeout
- * (57014) and a pool acquire timeout. A unique violation (23505) lost a race against a concurrent commit and
- * becomes UniqueConstraintViolationError with the constraint name, which the use cases interpret. Trigger
- * guards (23001), foreign keys, checks and not-null (23503/23514/23502) are permanent: a bug, never a retry, and so
- * are 22P02, 08P01 and 25006.
- * Anything else is returned untouched.
+ * Classifica uma falha do banco. Transiente: lock timeout, deadlock, falha de serialização (40001/40003), conexão
+ * perdida (classe 08 menos 08P01, 57P0x, mensagens do driver), recurso insuficiente (classe 53), statement timeout
+ * (57014) e timeout de acquire do pool. Unique violation (23505) é uma corrida perdida contra um commit concorrente
+ * e vira UniqueConstraintViolationError com o nome da constraint, que os use cases interpretam. Guardas de trigger
+ * (23001), foreign keys, checks e not-null (23503/23514/23502) são permanentes, é bug e nunca retry, e o mesmo vale
+ * para 22P02, 08P01 e 25006.
+ * Qualquer outra coisa volta sem mexer.
  */
 export const translateDatabaseError = (error: unknown): unknown => {
   if (

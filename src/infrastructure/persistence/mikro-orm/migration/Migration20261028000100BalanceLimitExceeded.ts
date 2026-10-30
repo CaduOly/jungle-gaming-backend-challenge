@@ -23,7 +23,7 @@ ALTER TABLE wager_transactions ADD CONSTRAINT wager_transactions_failure_code_va
   CHECK (failure_code IN (${codes.map((code) => `'${code}'`).join(', ')}));
 `;
 
-/* A credit past the Money maximum is a business rejection (BALANCE_LIMIT_EXCEEDED), so the schema has to accept it. */
+/* Crédito acima do máximo do Money é rejeição de negócio (BALANCE_LIMIT_EXCEEDED), então o schema tem que aceitar. */
 export class Migration20261028000100BalanceLimitExceeded extends Migration {
   override up(): void {
     this.addSql(checkOf([...KNOWN_CODES, 'BALANCE_LIMIT_EXCEEDED']));

@@ -1,10 +1,11 @@
 import { Migration } from '@mikro-orm/migrations';
 
 /*
- * The order of an aggregate on the wire is its commit order, not occurred_at: occurred_at is taken before the wallet
- * lock, so a later commit can carry an earlier timestamp, and UUIDv7 ties inside one millisecond are random across
- * processes. `seq` is drawn at INSERT time, and every event of a wallet is inserted while that wallet is locked, so
- * per aggregate it grows in commit order. The head-of-line claim and its index use (aggregate_id, seq).
+ * A ordem de um aggregate na fila é a ordem de commit, não o occurred_at: o occurred_at é pego antes do lock da
+ * wallet, então um commit posterior pode ter timestamp anterior, e empate de UUIDv7 dentro do mesmo milissegundo é
+ * aleatório entre processos. O `seq` é gerado no INSERT, e todo evento de uma wallet é inserido com a wallet em
+ * lock, então por aggregate ele cresce na ordem de commit. O claim head-of-line e o índice dele usam
+ * (aggregate_id, seq).
  */
 const UP = /* sql */ `
 ALTER TABLE outbox_messages ADD COLUMN seq bigserial NOT NULL;
