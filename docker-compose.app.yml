@@ -1,12 +1,8 @@
-# A aplicação em cima da stack de infraestrutura do docker-compose.yml (project jungle-wagering): ela entra na rede
-# dessa stack e acessa o PostgreSQL e o LocalStack pelo nome do serviço. Suba a infraestrutura antes:
-#   docker compose up -d
-#   docker compose -f docker-compose.app.yml up -d --build
-# Prometheus e Grafana sobem junto (docker-compose.observability.yml). O Keycloak só com o profile `auth`
+# A aplicação: migrations, 3 réplicas com todos os papéis e o nginx na frente. Entra no docker-compose.yml
+# pelo `include`, então sobe junto com a infraestrutura num `docker compose up -d --build` só.
+# Prometheus e Grafana vêm junto (docker-compose.observability.yml). O Keycloak só com o profile `auth`
 # (docker-compose.auth.yml), e aí as réplicas precisam de AUTH_MODE=jwks:
-#   AUTH_MODE=jwks docker compose -f docker-compose.app.yml --profile auth up -d --build
-name: jungle-wagering-app
-
+#   AUTH_MODE=jwks docker compose --profile auth up -d --build
 include:
   - docker-compose.observability.yml
   - docker-compose.auth.yml
@@ -27,12 +23,12 @@ services:
   migrate:
     build:
       context: .
-      # o bun install resolve o registry do npm pelo DNS do host (a bridge padrão do build pode não resolver).
-      network: host
     image: jungle-wagering-app:local
     command: ["bun", "run", "migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment: *app-env
-    networks: [infra]
     restart: "no"
 
   app:
@@ -40,6 +36,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      localstack:
+        condition: service_healthy
     environment:
       <<: *app-env
       APP_ROLES: api,consumer,outbox,pending-worker
@@ -52,7 +50,6 @@ services:
           cpus: "1.0"
           memory: 512M
     stop_grace_period: 30s
-    networks: [infra]
 
   nginx:
     image: nginx:1.27-alpine
@@ -61,9 +58,3 @@ services:
       - "${APP_HOST_PORT:-8080}:80"
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    networks: [infra]
-
-networks:
-  infra:
-    name: jungle-wagering_default
-    external: true
