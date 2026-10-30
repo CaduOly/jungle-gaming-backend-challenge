@@ -11,7 +11,7 @@ export interface PendingReferenceWorkerOptions {
   /** A round that claimed this many items may have left more due ones behind, so the next starts right away. */
   readonly batchSize: number;
   readonly pollIntervalMs: number;
-  /** Output of every finished round; the hook the metrics decorator (T11) plugs into. */
+  /** Output of every finished round; the hook the metrics decorator plugs into. */
   readonly onRound?: (output: RetryPendingReferencesOutput) => unknown;
   /** A round that threw (the claim itself failed, database down for instance). The loop keeps going. */
   readonly onError?: (error: unknown) => unknown;

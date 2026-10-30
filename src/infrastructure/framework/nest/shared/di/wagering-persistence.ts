@@ -5,7 +5,7 @@ import type { IWalletRepository } from '../../../../../business/wallet/port/wall
 
 /**
  * Everything the HTTP use cases need from storage, behind one provider (WAGERING_PERSISTENCE). The e2e
- * suites bind it to the in-memory fakes; the PostgreSQL adapters (T07b) bind it to MikroORM.
+ * suites bind it to the in-memory fakes; the PostgreSQL adapters bind it to MikroORM.
  */
 export interface WageringPersistence {
   readonly unitOfWork: IWageringUnitOfWork;

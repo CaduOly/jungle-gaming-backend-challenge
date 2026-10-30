@@ -11,7 +11,7 @@ export const METRICS = Symbol('METRICS');
 /** WAGERING_PERSISTENCE's unit of work behind ObservedUnitOfWork (lock wait and lock conflicts). */
 export const UNIT_OF_WORK = Symbol('UNIT_OF_WORK');
 export const READINESS_DETAILS = Symbol('READINESS_DETAILS');
-/** The swappable persistence: in-memory today, PostgreSQL once T07b lands. */
+/** The swappable persistence: in-memory fakes in the e2e suites, PostgreSQL in the running app. */
 export const WAGERING_PERSISTENCE = Symbol('WAGERING_PERSISTENCE');
 
 export const CREATE_WALLET = Symbol('CreateWallet');

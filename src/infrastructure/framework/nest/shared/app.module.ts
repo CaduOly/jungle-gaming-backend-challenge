@@ -18,7 +18,7 @@ import { RequestTimeoutInterceptor } from './http/request-timeout.interceptor';
 import { createValidationPipe } from './validation/validation.pipe';
 
 export interface AppModuleOptions {
-  /** Binds WAGERING_PERSISTENCE: the in-memory fakes in the e2e suites, PostgreSQL once T07b lands. */
+  /** Binds WAGERING_PERSISTENCE: the in-memory fakes in the e2e suites, PostgreSQL in the running app. */
   readonly persistence: Provider;
   /** Replaces any core provider (clock, ids, identity…) by token; used by the tests. */
   readonly overrides?: readonly Provider[];

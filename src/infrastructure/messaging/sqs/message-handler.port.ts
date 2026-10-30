@@ -38,7 +38,7 @@ export interface InboundMessage {
 }
 
 /**
- * The pluggable unit of work of the SQS consumer (T09b plugs ProcessWagerTransaction in). It may return an
+ * The pluggable unit of work of the SQS consumer (the wager command handler plugs ProcessWagerTransaction in). It may return an
  * outcome or throw: thrown errors go through classifyMessageError. Acking happens only after it resolves,
  * so the handler must commit before returning `ack`. `signal` is aborted only when shutdown times out.
  */

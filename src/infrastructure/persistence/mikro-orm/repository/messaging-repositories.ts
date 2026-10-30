@@ -10,7 +10,7 @@ export interface MessagingRepositories {
   readonly outbox: IOutboxRepository;
 }
 
-/** Building block for the UoW factory: T07b spreads it next to the wallet/wagering repositories. */
+/** Building block for the UoW factory: spread next to the wallet/wagering repositories. */
 export const createMessagingRepositories = (
   em: EntityManager,
   faults: FaultInjector = FaultInjector.none(),
