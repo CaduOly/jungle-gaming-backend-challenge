@@ -62,7 +62,7 @@ export interface SqsConsumerLoopDeps {
   readonly random?: () => number;
   readonly faults?: FaultInjector;
   readonly requestTimeoutMs?: number;
-  /** Hooks for the metrics/log decorators (T11). */
+  /** Hooks for the metrics/log decorators. */
   readonly onOutcome?: (event: MessageOutcomeEvent) => unknown;
   readonly onError?: (error: unknown, operation: string) => unknown;
   readonly onCircuitStateChange?: (state: CircuitState) => void;
@@ -211,7 +211,7 @@ export class SqsConsumerLoop {
     return this.loop.isRunning;
   }
 
-  /** circuit_breaker_open gauge (T11). */
+  /** circuit_breaker_open gauge. */
   get isCircuitOpen(): boolean {
     return this.breaker.isOpen;
   }

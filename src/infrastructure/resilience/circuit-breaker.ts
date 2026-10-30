@@ -32,7 +32,7 @@ export class CircuitBreaker {
     return this.options.clock.now().getTime() - this.openedAt >= this.options.openMs ? 'half-open' : 'open';
   }
 
-  /** Exposed as the circuit_breaker_open gauge (T11). Half-open counts as open: work is still held back. */
+  /** Exposed as the circuit_breaker_open gauge. Half-open counts as open: work is still held back. */
   get isOpen(): boolean {
     return this.state !== 'closed';
   }

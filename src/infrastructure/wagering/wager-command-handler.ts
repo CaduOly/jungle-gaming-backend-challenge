@@ -18,9 +18,9 @@ export const WAGER_COMMAND_CONSUMER = 'wager-transactions';
 export interface WagerCommandHandlerOptions {
   /** Inbox namespace: (consumerName, messageId) is the dedupe key. */
   readonly consumerName?: string;
-  /** Alert hook (T11): a permanent infrastructure failure dead-letters a command that may well be valid. */
+  /** Alert hook: a permanent infrastructure failure dead-letters a command that may well be valid. */
   readonly onPermanentFailure?: (error: PermanentInfrastructureError, message: InboundMessage) => unknown;
-  /** Hook for the metrics decorator (T11): the decision of every processed command. */
+  /** Hook for the metrics decorator: the decision of every processed command. */
   readonly onProcessed?: (output: ProcessWagerTransactionOutput, message: InboundMessage) => unknown;
 }
 

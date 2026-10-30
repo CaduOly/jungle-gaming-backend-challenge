@@ -13,7 +13,7 @@ export class WalletConsistencyError extends Error {
 }
 
 /*
- * Expected schema (created in T07):
+ * Expected schema (see the wagering schema migration):
  *   wallets(id, balance numeric, version int)
  *   wallet_ledger_entries(wallet_id, seq bigserial, direction 'CREDIT'|'DEBIT', amount numeric,
  *                         balance_before numeric, balance_after numeric, wallet_version int)

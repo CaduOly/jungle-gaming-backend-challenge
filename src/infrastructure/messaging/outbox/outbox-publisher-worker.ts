@@ -6,7 +6,7 @@ export type PublishOutboxRound = IUseCase<void, PublishOutboxBatchOutput>;
 
 export interface OutboxPublisherWorkerOptions {
   readonly pollIntervalMs: number;
-  /** Output of every finished round; the hook the metrics decorator (T11) plugs into. */
+  /** Output of every finished round; the hook the metrics decorator plugs into. */
   readonly onRound?: (output: PublishOutboxBatchOutput) => unknown;
   /** A round that threw (database down, for instance). The loop keeps going after the poll interval. */
   readonly onError?: (error: unknown) => unknown;

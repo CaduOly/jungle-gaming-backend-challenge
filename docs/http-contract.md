@@ -1,4 +1,4 @@
-# Contrato HTTP (T08)
+# Contrato HTTP
 
 Todos os endpoints respondem no mesmo envelope, e as mensagens saem como **chaves i18n**. O backend não traduz, quem traduz é o front.
 
