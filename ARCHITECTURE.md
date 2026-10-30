@@ -172,11 +172,13 @@ No `SIGTERM` o processo para o polling, deixa as mensagens em andamento terminar
 
 ## Limitações do LocalStack
 
+**Versão fixa.** O compose usa `localstack/localstack:4.4.0`, que sobe e atende SQS sem `LOCALSTACK_AUTH_TOKEN`. As versões mais novas passaram a exigir conta, por isso a tag não flutua. O healthcheck (`infra/localstack/healthcheck.sh`) só fica verde quando o script de init terminou sem erro e as filas existem com o redrive certo, e o `tests/integration/infra/sqs-redrive.spec.ts` prova que o redrive FIFO → DLQ funciona.
+
 **Bloqueio de grupo FIFO.** Na AWS, um grupo com mensagem em voo não entrega mais nada daquele grupo. O LocalStack 4.4.0 não respeita isso e entrega uma mensagem do grupo enquanto a mais antiga ainda está em voo. Por isso o restante do grupo volta com a mesma visibilidade da cabeça, e não com 0, e os testes de ordem contra o LocalStack rodam com um consumer só.
 
 **Receipt handle.** O LocalStack expira o receipt handle em "momento do receive + última visibilidade definida", então uma extensão simples de visibilidade faria o `DeleteMessage` final falhar com "The receipt handle has expired". O heartbeat define a visibilidade como o timeout mais o tempo já gasto desde o receive, o que na AWS só segura a mensagem um pouco mais depois de um crash e no LocalStack é obrigatório.
 
-**Host do `QueueUrl`.** O `QueueUrl` devolvido usa o `LOCALSTACK_HOST`, que dentro da rede do compose não resolve, então o cliente usa `endpoint` configurável e `useQueueUrlAsEndpoint: false`. Os detalhes estão em [`docs/spikes/localstack.md`](docs/spikes/localstack.md).
+**Host do `QueueUrl`.** O `QueueUrl` devolvido usa o `LOCALSTACK_HOST`, que dentro da rede do compose não resolve, então o cliente usa `endpoint` configurável e `useQueueUrlAsEndpoint: false`.
 
 ## Limitações do Bun
 
