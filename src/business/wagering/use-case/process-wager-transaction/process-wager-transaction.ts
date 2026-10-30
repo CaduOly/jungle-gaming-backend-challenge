@@ -48,19 +48,19 @@ interface ParsedRequest {
 }
 
 /**
- * Orchestrates one submission (HTTP or SQS) in a single unit of work:
- * validate → normalized hash → lock-free idempotency pre-check (HTTP) → inbox (SQS) → wallet lock →
- * IdempotencyCheck → ReferenceResolver → WagerSettlement → transaction, ledger, wallet, outbox and inbox.
+ * Orquestra uma submissão (HTTP ou SQS) numa única unit of work:
+ * validação → hash normalizado → pre-check de idempotência sem lock (HTTP) → inbox (SQS) → lock da wallet →
+ * IdempotencyCheck → ReferenceResolver → WagerSettlement → transação, ledger, wallet, outbox e inbox.
  *
- * Not persisted, by design: invalid input (400), a provider acting for another one (no row is written under the
- * victim's (provider, key) namespace, so it cannot be squatted), an unknown wallet (404, the inbox is not marked
- * either, so a redelivery is processed once the wallet exists) and idempotency conflicts (409).
- * A unique violation means a concurrent commit won the race (e.g. the same key on another wallet, which the wallet
- * lock does not serialize): the unit is rolled back and the decision is re-read in a fresh one.
+ * Não é persistido, de propósito: input inválido (400), um provider agindo por outro (nenhuma linha é gravada no
+ * namespace (provider, key) da vítima, então ninguém consegue ocupar ele), wallet desconhecida (404, o inbox também
+ * não é marcado, então uma reentrega é processada quando a wallet existir) e conflitos de idempotência (409).
+ * Uma unique violation quer dizer que um commit concorrente ganhou a corrida (ex.: a mesma key em outra wallet, que o
+ * lock da wallet não serializa), então a unit faz rollback e a decisão é lida de novo numa unit nova.
  *
- * The pre-check is HTTP only: on SQS the inbox comes first, so a messageId reused with another payload is always
- * an InboxPayloadMismatchError (DLQ) and never a replay or a 409, and a new messageId for a committed decision is
- * still recorded as processed. The wallet lock that path costs on a hot wallet is the price of that guarantee.
+ * O pre-check é só no HTTP: no SQS o inbox vem primeiro, então um messageId reaproveitado com outro payload é sempre
+ * InboxPayloadMismatchError (DLQ) e nunca replay ou 409, e um messageId novo para uma decisão já commitada ainda é
+ * registrado como processado. O lock da wallet que esse caminho custa numa wallet quente é o preço dessa garantia.
  */
 export class ProcessWagerTransaction implements IUseCase<ProcessWagerTransactionInput, ProcessWagerTransactionOutput> {
   private readonly settlement = new WagerSettlement();
@@ -153,7 +153,7 @@ export class ProcessWagerTransaction implements IUseCase<ProcessWagerTransaction
     };
   }
 
-  /** Lock-free fast path for replays on a hot wallet: only already-committed decisions are answered here. */
+  /** Fast path sem lock para replay numa wallet quente: aqui só respondem decisões já commitadas. */
   private async precheck(tx: TxRepositories, request: ParsedRequest): Promise<ProcessWagerTransactionOutput | null> {
     const decision = await new IdempotencyCheck(tx.wagers).check(request.props);
     if (decision.type === 'New') return null;
@@ -198,8 +198,8 @@ export class ProcessWagerTransaction implements IUseCase<ProcessWagerTransaction
   }
 
   /**
-   * Records the message in the inbox. A redelivery (same hash) that was already processed is answered from the
-   * stored decision; the same messageId with another payload is a permanent contract violation (DLQ).
+   * Registra a mensagem no inbox. Uma reentrega (mesmo hash) já processada é respondida pela decisão gravada,
+   * e o mesmo messageId com outro payload é violação de contrato permanente (DLQ).
    */
   private async receive(
     tx: TxRepositories,
@@ -225,7 +225,7 @@ export class ProcessWagerTransaction implements IUseCase<ProcessWagerTransaction
     await tx.inbox.markProcessed(inbox);
   }
 
-  /** Decides the new transaction against the locked wallet; returns the ledger entry when money moved. */
+  /** Decide a transação nova contra a wallet com lock, retorna a entry do ledger quando moveu dinheiro. */
   private async apply(
     tx: TxRepositories,
     transaction: WagerTransaction,

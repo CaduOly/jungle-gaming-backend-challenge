@@ -6,7 +6,7 @@ import type { WagerTransactionStatus } from '../../enum/wager-transaction-status
 
 export type WagerChannel = 'HTTP' | 'SQS';
 
-/** Raw submission, as received by the controller or the consumer (validated by the use case). */
+/** Submissão crua, como chega no controller ou no consumer (quem valida é o use case). */
 export interface WagerSubmission {
   readonly providerId: string;
   readonly externalTransactionId: string;
@@ -24,9 +24,9 @@ export type WagerSource =
   | { readonly channel: 'SQS'; readonly consumerName: string; readonly messageId: string };
 
 export interface ProcessWagerTransactionInput {
-  /** Provider authenticated by the transport (token on HTTP, trusted queue on SQS). */
+  /** Provider autenticado pelo transporte (token no HTTP, fila confiável no SQS). */
   readonly actor: AuthenticatedProvider;
-  /** HTTP: the Idempotency-Key header. SQS: `data.idempotencyKey`. */
+  /** HTTP: o header Idempotency-Key. SQS: `data.idempotencyKey`. */
   readonly idempotencyKey: string;
   readonly payload: WagerSubmission;
   readonly source: WagerSource;
@@ -35,13 +35,13 @@ export interface ProcessWagerTransactionInput {
 
 export type DecidedStatus = Exclude<WagerTransactionStatus, 'PENDING'>;
 
-/** Read by the HTTP/SQS adapters (status code, ack) and by the metric decorators (status, kind, replay, channel). */
+/** Lido pelos adapters HTTP/SQS (status code, ack) e pelos decorators de métrica (status, kind, replay, channel). */
 export interface ProcessWagerTransactionOutput {
   readonly transactionId: string;
   readonly kind: WagerKind;
   readonly status: DecidedStatus;
   readonly failureCode: FailureCode | null;
-  /** Balance observed at the decision; for PENDING_REFERENCE, the wallet balance when it was answered. */
+  /** Saldo visto na decisão, para PENDING_REFERENCE é o saldo da wallet no momento da resposta. */
   readonly balance: MoneyProps | null;
   readonly idempotentReplay: boolean;
   readonly channel: WagerChannel;

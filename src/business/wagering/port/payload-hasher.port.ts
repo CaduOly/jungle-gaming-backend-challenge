@@ -1,7 +1,7 @@
 import type { MoneyProps } from '../../shared/value-object/money';
 import type { WagerKind } from '../enum/wager-kind';
 
-/** Normalized submission fields that define "the same request" for idempotency. */
+/** Campos normalizados da submissão que definem "a mesma requisição" para a idempotência. */
 export interface WagerPayload {
   providerId: string;
   externalTransactionId: string;
@@ -14,14 +14,14 @@ export interface WagerPayload {
   referenceExternalTransactionId: string | null;
 }
 
-/** What one queue message asks for: the business fields plus the idempotency key it carries in `data`. */
+/** O que uma mensagem da fila pede: os campos de negócio mais a idempotency key que vem em `data`. */
 export interface WagerMessagePayload extends WagerPayload {
   idempotencyKey: string;
 }
 
-/** Canonical JSON (sorted keys, no whitespace) hashed with sha256 by the adapter. */
+/** JSON canônico (keys ordenadas, sem espaço) que o adapter passa no sha256. */
 export interface IPayloadHasher {
   hash(payload: WagerPayload): string;
-  /** Inbox hash: tells a redelivery (same hash) from a different message reusing the messageId. */
+  /** Hash do inbox: diferencia uma reentrega (mesmo hash) de outra mensagem reaproveitando o messageId. */
   hashMessage(message: WagerMessagePayload): string;
 }

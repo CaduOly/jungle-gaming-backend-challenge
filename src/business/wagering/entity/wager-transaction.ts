@@ -63,19 +63,19 @@ const REQUIRED_TEXT_FIELDS = [
   'payloadHash',
 ] as const;
 
-/** Kinds whose reference is mandatory; WIN and LOSS may optionally reference the BET of the round. */
+/** Kinds com referência obrigatória. WIN e LOSS podem referenciar o BET do round, mas é opcional. */
 const REFERENCE_REQUIRED: ReadonlySet<WagerKind> = new Set([WagerKind.REFUND, WagerKind.ROLLBACK]);
 const REFERENCE_FORBIDDEN: ReadonlySet<WagerKind> = new Set([WagerKind.OPENING, WagerKind.BET]);
 
 const opposite = (direction: LedgerDirection): LedgerDirection => (direction === 'CREDIT' ? 'DEBIT' : 'CREDIT');
 
 /**
- * Transitions (CHALLENGE.md §6.3 + plan):
- *   PENDING (in memory only)  -> PROCESSED | REJECTED | PENDING_REFERENCE
+ * Transições (CHALLENGE.md §6.3 + plano):
+ *   PENDING (só em memória)   -> PROCESSED | REJECTED | PENDING_REFERENCE
  *   PENDING_REFERENCE         -> PROCESSED | REJECTED | FAILED
- *   PROCESSED, REJECTED, FAILED are terminal.
- * `processedAt` is the moment a terminal status was reached; `attempts` counts failed
- * reference resolutions (the first one happens when entering PENDING_REFERENCE).
+ *   PROCESSED, REJECTED, FAILED são terminais.
+ * `processedAt` é o momento em que chegou num status terminal, `attempts` conta as resoluções de
+ * referência que falharam (a primeira acontece ao entrar em PENDING_REFERENCE).
  */
 export class WagerTransaction {
   private constructor(private state: WagerTransactionState) {}
@@ -207,7 +207,7 @@ export class WagerTransaction {
     return this.state.payloadHash === payloadHash;
   }
 
-  /** ROLLBACK moves money opposite to its reference; every other balance-affecting kind has a fixed direction. */
+  /** ROLLBACK move dinheiro no sentido oposto da referência, os outros kinds que mexem no saldo têm direção fixa. */
   ledgerDirectionFor(reference?: WagerTransaction): LedgerDirection {
     switch (this.state.kind) {
       case WagerKind.BET:

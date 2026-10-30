@@ -1,7 +1,7 @@
 import { DomainError } from '../../shared/error/domain-error';
 import type { InputRule, InputViolation } from '../../shared/error/input-rule';
 
-/** A broken invariant of the transaction. When the input caused it, `field` and `rule` say where and which. */
+/** Invariante da transação quebrada. Quando foi o input que causou, `field` e `rule` dizem onde e qual. */
 export class InvalidWagerTransactionError extends DomainError {
   readonly field?: string;
   readonly rule?: InputRule;

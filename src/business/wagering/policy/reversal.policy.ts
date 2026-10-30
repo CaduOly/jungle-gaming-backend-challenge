@@ -18,8 +18,8 @@ export const isReferenceKindAllowed = (kind: WagerKind, referenceKind: WagerKind
   ALLOWED_REFERENCE_KINDS[kind]?.includes(referenceKind) ?? false;
 
 /**
- * REFUND reverses a BET; ROLLBACK reverses a BET, WIN or REFUND (so a refund can be rolled back).
- * Each reference is reversed once in total, by REFUND or ROLLBACK, and only for its full amount.
+ * REFUND reverte um BET, ROLLBACK reverte um BET, WIN ou REFUND (então dá para fazer rollback de um refund).
+ * Cada referência é revertida uma vez só no total, por REFUND ou ROLLBACK, e só pelo valor inteiro.
  */
 export const checkReversal = (
   reversal: WagerTransaction,

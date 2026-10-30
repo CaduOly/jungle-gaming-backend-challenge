@@ -10,7 +10,7 @@ export interface WagerTransactionProcessedData extends WagerTransactionEventData
   readonly processedAt: string;
 }
 
-/** Any applied transaction, LOSS included. Grouped by wallet so it orders with the balance stream. */
+/** Qualquer transação aplicada, LOSS incluído. Agrupado por wallet para ficar ordenado com o stream de saldo. */
 export class WagerTransactionProcessed extends IntegrationEvent<WagerTransactionProcessedData> {
   readonly eventType = 'WagerTransactionProcessed';
   readonly version = 1;

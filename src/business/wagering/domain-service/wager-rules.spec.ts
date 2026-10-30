@@ -13,7 +13,7 @@ import type { WagerKind } from '../enum/wager-kind';
 import { ReferenceResolver } from './reference-resolver';
 import { WagerSettlement } from './wager-settlement';
 
-/** Resolver + settlement wired over the fakes, the way ProcessWagerTransaction orchestrates them. */
+/** Resolver + settlement ligados sobre os fakes, do jeito que o ProcessWagerTransaction orquestra. */
 describe('wagering rules end to end (domain only)', () => {
   let wallet: Wallet;
   let ledger: InMemoryLedger;

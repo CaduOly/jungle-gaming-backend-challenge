@@ -19,15 +19,15 @@ export type IdempotencyDecision =
   | { type: 'Conflict'; code: IdempotencyConflictCode; existing: WagerTransaction };
 
 /**
- * Same (provider, idempotency key) with the same payload hash is a replay; with another hash it is
- * a conflict. Same (provider, external id) under a different key is a duplicate external transaction.
+ * Mesmo (provider, idempotency key) com o mesmo hash de payload é replay, com outro hash é conflito.
+ * Mesmo (provider, external id) com outra key é transação externa duplicada.
  */
 export class IdempotencyCheck {
   constructor(private readonly transactions: Pick<IWagerTransactionReader, 'findByIdempotencyKey' | 'findByExternalId'>) {}
 
   /**
-   * The two lookups are separate reads: without the wallet lock (the pre-check) the request itself may commit
-   * between them, so a row found by external id that carries the same key is judged as a key match.
+   * As duas buscas são leituras separadas, então sem o lock da wallet (no pre-check) a própria requisição pode fazer
+   * commit entre elas, por isso uma linha achada por external id com a mesma key é tratada como match de key.
    */
   async check(request: IdempotencyRequest): Promise<IdempotencyDecision> {
     const sameKey = await this.transactions.findByIdempotencyKey(request.providerId, request.idempotencyKey);

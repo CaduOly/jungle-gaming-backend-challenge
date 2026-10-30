@@ -7,9 +7,9 @@ import type { IWalletRepository } from '../../wallet/port/wallet.repository.port
 import type { IWagerTransactionRepository } from './wager-transaction.repository.port';
 
 /**
- * Repositories bound to one unit of work: everything they write commits or rolls back together.
- * Lives in wagering (not in the shared kernel, which imports no context) because the wager flow is the one that
- * spans every context; wallet use cases reach it through this port.
+ * Repositórios presos a uma unit of work: tudo que eles escrevem faz commit ou rollback junto.
+ * Fica em wagering (e não no shared kernel, que não importa nenhum contexto) porque o fluxo de aposta é o que
+ * atravessa todos os contextos, e os use cases de wallet chegam nele por esse port.
  */
 export interface TxRepositories {
   readonly wallets: IWalletRepository;

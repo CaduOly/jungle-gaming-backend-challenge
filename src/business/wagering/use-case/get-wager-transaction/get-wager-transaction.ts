@@ -56,7 +56,7 @@ const toView = (transaction: WagerTransaction): WagerTransactionView => ({
 
 const isBlank = (value: unknown): boolean => typeof value !== 'string' || value.trim() === '';
 
-/** By internal id, or by the provider's own id (GET /providers/:providerId/wagering/transactions/:externalId). */
+/** Pelo id interno, ou pelo id do próprio provider (GET /providers/:providerId/wagering/transactions/:externalId). */
 export class GetWagerTransaction implements IUseCase<GetWagerTransactionInput, WagerTransactionView> {
   constructor(private readonly transactions: Pick<IWagerTransactionRepository, 'findById' | 'findByExternalId'>) {}
 

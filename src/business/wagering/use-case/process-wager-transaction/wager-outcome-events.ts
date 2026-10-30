@@ -12,7 +12,7 @@ import { WagerTransactionRejected } from '../../event/wager-transaction-rejected
 
 export interface WagerOutcome {
   readonly transaction: WagerTransaction;
-  /** The wallet after the decision (already debited or credited when the transaction moved money). */
+  /** A wallet depois da decisão (já debitada ou creditada quando a transação moveu dinheiro). */
   readonly wallet: Wallet;
   readonly entry: WalletLedgerEntry | null;
 }
@@ -24,9 +24,9 @@ export interface OutcomeEventContext {
 }
 
 /**
- * Turns a decided transaction into the integration events of CHALLENGE.md §11:
- * PROCESSED → Processed (+ WalletBalanceChanged when it moved money), REJECTED → Rejected,
- * PENDING_REFERENCE → PendingReference. FAILED is an internal, auditable state with no event.
+ * Transforma uma transação decidida nos integration events do CHALLENGE.md §11:
+ * PROCESSED → Processed (+ WalletBalanceChanged quando moveu dinheiro), REJECTED → Rejected,
+ * PENDING_REFERENCE → PendingReference. FAILED é um estado interno, auditável e sem evento.
  */
 export class WagerOutcomeEvents {
   constructor(private readonly ids: IIdGenerator) {}
