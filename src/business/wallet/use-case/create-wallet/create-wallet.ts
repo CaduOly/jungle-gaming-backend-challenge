@@ -26,10 +26,10 @@ export const SYSTEM_PROVIDER_ID = 'system';
 export const openingIdempotencyKey = (walletId: string): string => `opening:${walletId}`;
 
 /**
- * Opens a wallet at version 1. A positive initial balance also writes, in the same unit of work, the internal
- * OPENING transaction (provider `system`, key `opening:<walletId>`), its CREDIT entry and WalletBalanceChanged.
- * One wallet per player and currency, guaranteed by the unique constraint alone (no read-then-insert race):
- * the violation becomes the 409 conflict.
+ * Abre a wallet na versão 1. Se o saldo inicial for positivo, grava também, na mesma unit of work, a transação
+ * interna de OPENING (provider `system`, key `opening:<walletId>`), a entry de CREDIT e o WalletBalanceChanged.
+ * Uma wallet por player e moeda, garantido só pela unique constraint (sem corrida de read-then-insert),
+ * e a violação vira o conflito 409.
  */
 export class CreateWallet implements IUseCase<CreateWalletInput, WalletView> {
   constructor(

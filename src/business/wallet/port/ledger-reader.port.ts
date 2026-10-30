@@ -9,13 +9,13 @@ export interface LedgerPageQuery {
 
 export interface LedgerPage {
   entries: WalletLedgerEntry[];
-  /** Null when there are no more entries after this page. */
+  /** Null quando não há mais entries depois dessa página. */
   next: LedgerCursor | null;
 }
 
 export interface ILedgerReader {
-  /** Entries ordered by seq ascending, strictly after the cursor. */
+  /** Entries ordenadas por seq crescente, estritamente depois do cursor. */
   page(query: LedgerPageQuery): Promise<LedgerPage>;
-  /** Every entry of the wallet ordered by seq ascending, for reconciliation. */
+  /** Todas as entries da wallet ordenadas por seq crescente, para a reconciliação. */
   listAll(walletId: string): Promise<WalletLedgerEntry[]>;
 }

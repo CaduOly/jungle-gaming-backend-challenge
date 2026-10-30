@@ -16,11 +16,11 @@ export interface WalletBalanceChangedData {
   readonly money: MoneyProps;
   readonly balanceBefore: MoneyProps;
   readonly balanceAfter: MoneyProps;
-  /** Consumers order and dedupe the balance stream of a wallet by this version. */
+  /** Os consumers ordenam e fazem dedup do stream de saldo de uma wallet por essa versão. */
   readonly walletVersion: number;
 }
 
-/** Emitted only when the balance moves, OPENING included; the aggregate (and FIFO group) is the wallet. */
+/** Emitido só quando o saldo muda, OPENING incluído. O aggregate (e o grupo FIFO) é a wallet. */
 export class WalletBalanceChanged extends IntegrationEvent<WalletBalanceChangedData> {
   readonly eventType = 'WalletBalanceChanged';
   readonly version = 1;

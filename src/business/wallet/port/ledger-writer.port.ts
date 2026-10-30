@@ -1,6 +1,6 @@
 import type { WalletLedgerEntry } from '../entity/wallet-ledger-entry';
 
 export interface ILedgerWriter {
-  /** Insert-only; returns the entry carrying the seq assigned by persistence. */
+  /** Só insert, retorna a entry com o seq atribuído pela persistência. */
   append(entry: WalletLedgerEntry): Promise<WalletLedgerEntry>;
 }

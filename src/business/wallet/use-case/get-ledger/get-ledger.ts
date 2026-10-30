@@ -8,7 +8,7 @@ import { type LedgerEntryView, toLedgerEntryView } from '../wallet-view';
 
 export interface GetLedgerInput {
   readonly walletId: string;
-  /** Opaque token from a previous page; absent for the first page. */
+  /** Token opaco de uma página anterior, ausente na primeira página. */
   readonly cursor?: string | null;
   readonly limit?: number;
 }
@@ -16,14 +16,14 @@ export interface GetLedgerInput {
 export interface GetLedgerOutput {
   readonly walletId: string;
   readonly entries: readonly LedgerEntryView[];
-  /** Null on the last page. */
+  /** Null na última página. */
   readonly nextCursor: string | null;
 }
 
 export const DEFAULT_LEDGER_LIMIT = 50;
 export const MAX_LEDGER_LIMIT = 200;
 
-/** Stable pagination by seq: entries appended while paging land after the cursor, so none is skipped or repeated. */
+/** Paginação estável por seq: entries adicionadas durante a paginação caem depois do cursor, então nenhuma é pulada ou repetida. */
 export class GetLedger implements IUseCase<GetLedgerInput, GetLedgerOutput> {
   constructor(
     private readonly wallets: Pick<IWalletRepository, 'findById'>,

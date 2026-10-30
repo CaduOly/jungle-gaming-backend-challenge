@@ -6,7 +6,7 @@ const MAX_TOKEN_LENGTH = 64;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/;
 const PAYLOAD_PATTERN = /^seq:(0|[1-9]\d{0,18})$/;
 
-/** Opaque, URL-safe pagination cursor: "return entries with seq greater than this one". */
+/** Cursor de paginação opaco e seguro para URL: "retorna as entries com seq maior que esse". */
 export class LedgerCursor {
   private constructor(readonly seq: bigint) {
     Object.freeze(this);
