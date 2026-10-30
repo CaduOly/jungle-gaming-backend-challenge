@@ -213,7 +213,7 @@ O enunciado deixa a auth fora da pontuação, então eu comecei pelo ponto de ex
 `AUTH_MODE=noop` -> `DevProviderIdentity`, o padrão. Aceita `Authorization: Bearer dev:<providerId>` e não prova nada. Serve para desenvolvimento e para os testes.
 `AUTH_MODE=jwks` -> `JwksProviderIdentity`, com `jose`. Verifica a assinatura contra o JWKS do Keycloak, `iss`, `aud` e `exp`/`nbf`, e tira o provedor da claim `provider_id`. Cada provedor é um client confidencial `client_credentials` no realm `wagering`. Toda recusa é o mesmo 401 para quem chamou, e o motivo só vai para o log. Se o JWKS não puder ser buscado, o IdP está fora, o que não diz nada sobre o token, então é 503 e não 401.
 
-O Keycloak fica no profile `auth` para não pesar nos testes e na carga. Health, `/metrics`, `/docs` e `/i18n` ficam abertos.
+O Keycloak sobe junto no `docker compose up`, mas a API só passa a exigir os tokens dele com `AUTH_MODE=jwks`. O padrão é `noop`, para o avaliador testar pelo Swagger sem precisar emitir token, e a carga não sobe o Keycloak. Health, `/metrics`, `/docs` e `/i18n` ficam abertos.
 
 O `PROVIDER_IDENTITY_MISMATCH` **não é persistido**. Se fosse, um provedor mal-intencionado gravaria uma linha no namespace `(provider_id, idempotency_key)` de outro provedor, e a requisição legítima depois esbarraria num replay ou num 409 que ela não causou.
 

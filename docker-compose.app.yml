@@ -1,8 +1,8 @@
 # A aplicação: migrations, 3 réplicas com todos os papéis e o nginx na frente. Entra no docker-compose.yml
 # pelo `include`, então sobe junto com a infraestrutura num `docker compose up -d --build` só.
-# Prometheus e Grafana vêm junto (docker-compose.observability.yml). O Keycloak só com o profile `auth`
-# (docker-compose.auth.yml), e aí as réplicas precisam de AUTH_MODE=jwks:
-#   AUTH_MODE=jwks docker compose --profile auth up -d --build
+# Prometheus, Grafana (docker-compose.observability.yml) e Keycloak (docker-compose.auth.yml) vêm junto. Para as
+# réplicas exigirem os tokens do Keycloak, suba com AUTH_MODE=jwks:
+#   AUTH_MODE=jwks docker compose up -d --build
 include:
   - docker-compose.observability.yml
   - docker-compose.auth.yml

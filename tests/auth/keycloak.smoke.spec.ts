@@ -6,7 +6,7 @@ import { type InMemoryHttpApp, startInMemoryHttpApp } from '../e2e/support/in-me
 
 /**
  * Roda só contra o Keycloak do profile `auth` (`bun run test:auth`):
- *   docker compose -f docker-compose.auth.yml --profile auth up -d --wait
+ *   docker compose up -d --wait keycloak
  * KEYCLOAK_URL tem como padrão a porta publicada desse serviço.
  */
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL ?? 'http://localhost:8081';
