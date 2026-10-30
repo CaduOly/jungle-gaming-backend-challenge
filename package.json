@@ -4,7 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "up": "docker compose up -d --build --wait",
+    "down": "docker compose down",
+    "env:init": "bun -e \"const fs = require('node:fs'); if (!fs.existsSync('.env')) { fs.copyFileSync('.env.example', '.env'); console.log('.env criado a partir do .env.example'); }\"",
     "start": "bun run src/main.ts",
+    "start:dev": "bun run env:init && bun run infra:up && bun run migrate && bun --watch src/main.ts",
     "migrate": "bun run src/infrastructure/persistence/mikro-orm/migrate.ts up",
     "migrate:down": "bun run src/infrastructure/persistence/mikro-orm/migrate.ts down",
     "lint": "eslint .",
