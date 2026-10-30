@@ -57,89 +57,344 @@ As portas do host saem do `.env` (`APP_HOST_PORT`, `GRAFANA_HOST_PORT`, `PROMETH
 
 ## Primeira chamada
 
-Os exemplos usam o token de desenvolvimento do `provider-a`. Deixe as variáveis prontas:
+Cada exemplo vem em quatro partes: requisição, headers, body e resposta esperada. Assim dá para montar a chamada no Postman, no Insomnia ou no curl. As respostas foram copiadas da API rodando.
+
+Para não montar nada à mão, importe <http://localhost:8080/docs-json> no Postman ou no Insomnia. A coleção sai com todas as rotas e exemplos.
+
+Os valores fixos do passo a passo:
+
+| Nome | Valor |
+| --- | --- |
+| `playerId` | `0192f28f-5dc0-7d58-bdb2-814ad6a0f4b7` |
+| `walletId` | `01a18aac-a369-76a8-aae1-b810fb3e7959` (o seu vai ser outro) |
+| Token | `Bearer dev:provider-a` |
+
+O `walletId` é gerado pela API no passo 1. Nos passos seguintes, troque `01a18aac-a369-76a8-aae1-b810fb3e7959` pelo id que voltou na sua chamada.
+
+No curl, deixe as variáveis prontas:
 
 ```bash
 API=http://localhost:8080
 AUTH='Authorization: Bearer dev:provider-a'
-PLAYER=0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1
+PLAYER=0192f28f-5dc0-7d58-bdb2-814ad6a0f4b7
 ```
 
 ### 1. Criar a wallet com 100.00
 
-```bash
-curl -s -X POST $API/wallets -H "$AUTH" -H 'Content-Type: application/json' \
-  -d @- <<EOF
-{
-  "playerId": "$PLAYER",
-  "initialBalance": { "amount": "100.00", "currency": "BRL" }
-}
-EOF
-```
+**Requisição:** `POST http://localhost:8080/wallets`
+
+**Headers**
+
+| Header | Valor |
+| --- | --- |
+| `Authorization` | `Bearer dev:provider-a` |
+| `Content-Type` | `application/json` |
+
+**Body**
 
 ```json
-{"code":201,"message":"CREATED","data":{"id":"01a18a9e-ffea-73f7-a2ae-fd4e30359a7c","playerId":"0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1","balance":{"amount":"100.00","currency":"BRL"},"version":1},"timestamp":1793327038446,"detailsMessage":[]}
+{
+  "playerId": "0192f28f-5dc0-7d58-bdb2-814ad6a0f4b7",
+  "initialBalance": { "amount": "100.00", "currency": "BRL" }
+}
 ```
 
-Guarde o `data.id`: `WALLET=01a18a9e-ffea-73f7-a2ae-fd4e30359a7c`. Uma segunda wallet para o mesmo jogador e moeda volta `409`.
+**Resposta esperada:** `201 Created`
+
+```json
+{
+  "code": 201,
+  "message": "CREATED",
+  "data": {
+    "id": "01a18aac-a369-76a8-aae1-b810fb3e7959",
+    "playerId": "0192f28f-5dc0-7d58-bdb2-814ad6a0f4b7",
+    "balance": { "amount": "100.00", "currency": "BRL" },
+    "version": 1
+  },
+  "timestamp": 1793327932268,
+  "detailsMessage": []
+}
+```
+
+Guarde o `data.id`. Uma segunda wallet para o mesmo jogador e moeda volta `409`.
+
+**curl**
+
+```bash
+curl -s -X POST $API/wallets -H "$AUTH" -H 'Content-Type: application/json' -d @- <<EOF
+{ "playerId": "$PLAYER", "initialBalance": { "amount": "100.00", "currency": "BRL" } }
+EOF
+WALLET=01a18aac-a369-76a8-aae1-b810fb3e7959   # o id que voltou
+```
 
 ### 2. Apostar 25.00
 
-```bash
-curl -s -X POST $API/wagering/transactions -H "$AUTH" -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: provider-a:tx-1' \
-  -d @- <<EOF
+**Requisição:** `POST http://localhost:8080/wagering/transactions`
+
+**Headers**
+
+| Header | Valor |
+| --- | --- |
+| `Authorization` | `Bearer dev:provider-a` |
+| `Content-Type` | `application/json` |
+| `Idempotency-Key` | `provider-a:tx-1` |
+
+**Body**
+
+```json
 {
   "providerId": "provider-a",
   "externalTransactionId": "tx-1",
-  "playerId": "$PLAYER",
-  "walletId": "$WALLET",
+  "playerId": "0192f28f-5dc0-7d58-bdb2-814ad6a0f4b7",
+  "walletId": "01a18aac-a369-76a8-aae1-b810fb3e7959",
   "roundId": "round-1",
   "gameId": "fortune-chimp",
   "kind": "BET",
   "money": { "amount": "25.00", "currency": "BRL" }
 }
-EOF
 ```
 
+**Resposta esperada:** `200 OK`
+
 ```json
-{"code":200,"message":"SUCCESS","data":{"transactionId":"01a18a9f-00b5-7088-bb95-3ed4b4dc1352","status":"PROCESSED","balance":{"amount":"75.00","currency":"BRL"},"idempotentReplay":false},"timestamp":1793327038651,"detailsMessage":[]}
+{
+  "code": 200,
+  "message": "SUCCESS",
+  "data": {
+    "transactionId": "01a18aac-a378-747c-8bb4-46a87a792c6e",
+    "status": "PROCESSED",
+    "balance": { "amount": "75.00", "currency": "BRL" },
+    "idempotentReplay": false
+  },
+  "timestamp": 1793327932284,
+  "detailsMessage": []
+}
+```
+
+**curl**
+
+```bash
+curl -s -X POST $API/wagering/transactions -H "$AUTH" -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: provider-a:tx-1' -d @- <<EOF
+{ "providerId": "provider-a", "externalTransactionId": "tx-1", "playerId": "$PLAYER",
+  "walletId": "$WALLET", "roundId": "round-1", "gameId": "fortune-chimp",
+  "kind": "BET", "money": { "amount": "25.00", "currency": "BRL" } }
+EOF
 ```
 
 ### 3. Repetir a mesma chamada (replay idempotente)
 
-Mesmo comando, mesma `Idempotency-Key`, mesmo corpo. O saldo não muda e a resposta é a decisão original com `idempotentReplay: true`:
+**Requisição:** `POST http://localhost:8080/wagering/transactions`
+
+**Headers:** os mesmos do passo 2, com `Idempotency-Key: provider-a:tx-1`.
+
+**Body:** o mesmo do passo 2, sem mudar nada.
+
+**Resposta esperada:** `200 OK`. O saldo não muda e volta a decisão original com `idempotentReplay: true`.
 
 ```json
-{"code":200,"message":"SUCCESS","data":{"transactionId":"01a18a9f-00b5-7088-bb95-3ed4b4dc1352","status":"PROCESSED","balance":{"amount":"75.00","currency":"BRL"},"idempotentReplay":true},"timestamp":1793327038664,"detailsMessage":[]}
+{
+  "code": 200,
+  "message": "SUCCESS",
+  "data": {
+    "transactionId": "01a18aac-a378-747c-8bb4-46a87a792c6e",
+    "status": "PROCESSED",
+    "balance": { "amount": "75.00", "currency": "BRL" },
+    "idempotentReplay": true
+  },
+  "timestamp": 1793327932293,
+  "detailsMessage": []
+}
 ```
 
-Mesma key com outro corpo (por exemplo `30.00`) volta `409` com `IDEMPOTENCY_CONFLICT`.
+**curl:** o mesmo comando do passo 2.
 
-### 4. Consultar o saldo e o extrato
+### 4. Mesma key com outro corpo (conflito)
+
+**Requisição:** `POST http://localhost:8080/wagering/transactions`
+
+**Headers:** os mesmos do passo 2, com `Idempotency-Key: provider-a:tx-1`.
+
+**Body:** o do passo 2 com `"money": { "amount": "30.00", "currency": "BRL" }`.
+
+**Resposta esperada:** `409 Conflict`. Nada é gravado.
+
+```json
+{
+  "code": 409,
+  "message": "CONFLICT",
+  "data": { "existingTransactionId": "01a18aac-a378-747c-8bb4-46a87a792c6e" },
+  "timestamp": 1793327932304,
+  "detailsMessage": [
+    { "code": "IDEMPOTENCY_CONFLICT", "message": "WAGERING.ERROR.IDEMPOTENCY_CONFLICT", "type": "error" }
+  ]
+}
+```
+
+**curl**
+
+```bash
+curl -s -X POST $API/wagering/transactions -H "$AUTH" -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: provider-a:tx-1' -d @- <<EOF
+{ "providerId": "provider-a", "externalTransactionId": "tx-1", "playerId": "$PLAYER",
+  "walletId": "$WALLET", "roundId": "round-1", "gameId": "fortune-chimp",
+  "kind": "BET", "money": { "amount": "30.00", "currency": "BRL" } }
+EOF
+```
+
+### 5. Consultar o saldo
+
+**Requisição:** `GET http://localhost:8080/wallets/01a18aac-a369-76a8-aae1-b810fb3e7959`
+
+**Headers**
+
+| Header | Valor |
+| --- | --- |
+| `Authorization` | `Bearer dev:provider-a` |
+
+**Body:** nenhum.
+
+**Resposta esperada:** `200 OK`
+
+```json
+{
+  "code": 200,
+  "message": "SUCCESS",
+  "data": {
+    "id": "01a18aac-a369-76a8-aae1-b810fb3e7959",
+    "playerId": "0192f28f-5dc0-7d58-bdb2-814ad6a0f4b7",
+    "balance": { "amount": "75.00", "currency": "BRL" },
+    "version": 2
+  },
+  "timestamp": 1793327932311,
+  "detailsMessage": []
+}
+```
+
+**curl**
 
 ```bash
 curl -s $API/wallets/$WALLET -H "$AUTH"
+```
+
+### 6. Consultar o extrato
+
+**Requisição:** `GET http://localhost:8080/wallets/01a18aac-a369-76a8-aae1-b810fb3e7959/ledger?limit=50`
+
+**Headers**
+
+| Header | Valor |
+| --- | --- |
+| `Authorization` | `Bearer dev:provider-a` |
+
+**Body:** nenhum.
+
+**Resposta esperada:** `200 OK`. Os lançamentos vêm do mais antigo para o mais novo. A próxima página sai em `data.nextCursor`, que é `null` quando acabou.
+
+```json
+{
+  "code": 200,
+  "message": "SUCCESS",
+  "data": {
+    "walletId": "01a18aac-a369-76a8-aae1-b810fb3e7959",
+    "entries": [
+      {
+        "transactionId": "01a18aac-a369-76a9-b788-621ed61816b4",
+        "entryType": "OPENING",
+        "direction": "CREDIT",
+        "amount": { "amount": "100.00", "currency": "BRL" },
+        "balanceBefore": { "amount": "0.00", "currency": "BRL" },
+        "balanceAfter": { "amount": "100.00", "currency": "BRL" },
+        "walletVersion": 1,
+        "createdAt": "2026-10-30T02:38:52.265Z"
+      },
+      {
+        "transactionId": "01a18aac-a378-747c-8bb4-46a87a792c6e",
+        "entryType": "BET",
+        "direction": "DEBIT",
+        "amount": { "amount": "25.00", "currency": "BRL" },
+        "balanceBefore": { "amount": "100.00", "currency": "BRL" },
+        "balanceAfter": { "amount": "75.00", "currency": "BRL" },
+        "walletVersion": 2,
+        "createdAt": "2026-10-30T02:38:52.281Z"
+      }
+    ],
+    "nextCursor": null
+  },
+  "timestamp": 1793327932320,
+  "detailsMessage": []
+}
+```
+
+**curl**
+
+```bash
 curl -s "$API/wallets/$WALLET/ledger?limit=50" -H "$AUTH"
 ```
 
+### 7. Reconciliar
+
+**Requisição:** `POST http://localhost:8080/wallets/01a18aac-a369-76a8-aae1-b810fb3e7959/reconciliation`
+
+**Headers**
+
+| Header | Valor |
+| --- | --- |
+| `Authorization` | `Bearer dev:provider-a` |
+
+**Body:** nenhum.
+
+**Resposta esperada:** `200 OK`. A reconciliação só relata, nunca corrige.
+
 ```json
-{"code":200,"message":"SUCCESS","data":{"id":"01a18a9e-ffea-73f7-a2ae-fd4e30359a7c","playerId":"0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1","balance":{"amount":"75.00","currency":"BRL"},"version":2},"timestamp":1793327038675,"detailsMessage":[]}
+{
+  "code": 200,
+  "message": "SUCCESS",
+  "data": {
+    "walletId": "01a18aac-a369-76a8-aae1-b810fb3e7959",
+    "storedBalance": { "amount": "75.00", "currency": "BRL" },
+    "calculatedBalance": { "amount": "75.00", "currency": "BRL" },
+    "difference": { "amount": "0.00", "currency": "BRL" },
+    "consistent": true,
+    "checkedEntries": 2
+  },
+  "timestamp": 1793327932331,
+  "detailsMessage": []
+}
 ```
 
-O extrato vem em `data.entries`, do mais antigo para o mais novo, e a próxima página sai em `data.nextCursor` (`null` quando acabou).
-
-### 5. Reconciliar
+**curl**
 
 ```bash
 curl -s -X POST $API/wallets/$WALLET/reconciliation -H "$AUTH"
 ```
 
+### 8. Health
+
+**Requisição:** `GET http://localhost:8080/health/live` e `GET http://localhost:8080/health/ready`
+
+**Headers:** nenhum. As duas rotas são abertas.
+
+**Body:** nenhum.
+
+**Resposta esperada:** `200 OK`. O `/health/live` responde `{"status":"ok"}`. O `/health/ready` responde `503` se o PostgreSQL ou o SQS estiver fora.
+
 ```json
-{"code":200,"message":"SUCCESS","data":{"walletId":"01a18a9e-ffea-73f7-a2ae-fd4e30359a7c","storedBalance":{"amount":"75.00","currency":"BRL"},"calculatedBalance":{"amount":"75.00","currency":"BRL"},"difference":{"amount":"0.00","currency":"BRL"},"consistent":true,"checkedEntries":2},"timestamp":1793327038691,"detailsMessage":[]}
+{
+  "instanceId": "9f91e09fec19-1",
+  "roles": ["api", "consumer", "outbox", "pending-worker"],
+  "circuitBreaker": "closed",
+  "status": "ready",
+  "checks": { "postgres": "up", "sqs": "up" }
+}
 ```
 
-A reconciliação só relata, nunca corrige.
+**curl**
+
+```bash
+curl -s $API/health/live
+curl -s $API/health/ready
+```
 
 **Corrida de verdade.** Numa wallet nova com 100.00, duas BETs de 80.00 em paralelo (keys diferentes) dão uma `200` e uma `422` com `INSUFFICIENT_FUNDS`, o saldo fica em 20.00 e a reconciliação volta `consistent: true`.
 
@@ -170,14 +425,29 @@ Nesse modo o token `dev:` volta `401`. Para voltar ao modo dev, suba de novo sem
 
 ## Enviar pela fila SQS
 
-A fila de comandos é `wager-transactions.fifo`. O corpo é um envelope `WagerTransactionRequested` com o mesmo payload da API em `data`, mais o `idempotencyKey`. Chave fora do contrato, tipo errado ou `kind: OPENING` mandam a mensagem para a `wager-transactions-dlq.fifo`. Use o `walletId` como `MessageGroupId` para manter a ordem por wallet. O provedor que age vem do atributo `providerId` da mensagem e, sem ele, do `actorProviderId` do envelope ou do `data.providerId`.
+A fila de comandos é `wager-transactions.fifo`. O corpo é um envelope `WagerTransactionRequested` com o mesmo payload da API em `data`, mais o `idempotencyKey`. Chave fora do contrato, tipo errado ou `kind: OPENING` mandam a mensagem para a `wager-transactions-dlq.fifo`. HTTP e fila dividem a idempotência, então a mesma operação mandada pelos dois canais tem um efeito só.
 
-```bash
-export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=us-east-1
-QUEUE=$(aws --endpoint-url http://localhost:4566 sqs get-queue-url \
-  --queue-name wager-transactions.fifo --query QueueUrl --output text)
+**Fila e endpoint**
 
-BODY=$(cat <<EOF
+| Item | Valor |
+| --- | --- |
+| Endpoint | `http://localhost:4566` (LocalStack, região `us-east-1`, chaves `test`/`test`) |
+| Fila | `wager-transactions.fifo` |
+| URL da fila | `http://localhost:4566/queue/us-east-1/000000000000/wager-transactions.fifo` |
+
+**Atributos da mensagem**
+
+| Atributo | Valor | Para que serve |
+| --- | --- | --- |
+| `MessageGroupId` | `01a18aac-a369-76a8-aae1-b810fb3e7959` | O `walletId`. Mantém a ordem por wallet |
+| `MessageDeduplicationId` | `tx-sqs-1` | Deduplicação da própria fila FIFO |
+| `providerId` (atributo `String`) | `provider-a` | O provedor que age. Sem ele, vale o `actorProviderId` do envelope ou o `data.providerId` |
+
+**Body**
+
+Troque o `walletId` (e o `MessageGroupId`) pelo id devolvido no passo 1 da primeira chamada.
+
+```json
 {
   "messageId": "tx-sqs-1",
   "type": "WagerTransactionRequested",
@@ -186,14 +456,29 @@ BODY=$(cat <<EOF
     "providerId": "provider-a",
     "externalTransactionId": "tx-sqs-1",
     "idempotencyKey": "provider-a:tx-sqs-1",
-    "playerId": "$PLAYER",
-    "walletId": "$WALLET",
+    "playerId": "0192f28f-5dc0-7d58-bdb2-814ad6a0f4b7",
+    "walletId": "01a18aac-a369-76a8-aae1-b810fb3e7959",
     "roundId": "round-2",
     "gameId": "fortune-chimp",
     "kind": "BET",
     "money": { "amount": "5.00", "currency": "BRL" }
   }
 }
+```
+
+**Comando `aws`**
+
+```bash
+export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=us-east-1
+QUEUE=$(aws --endpoint-url http://localhost:4566 sqs get-queue-url \
+  --queue-name wager-transactions.fifo --query QueueUrl --output text)
+
+BODY=$(cat <<EOF
+{ "messageId": "tx-sqs-1", "type": "WagerTransactionRequested", "occurredAt": "2026-10-29T12:00:00Z",
+  "data": { "providerId": "provider-a", "externalTransactionId": "tx-sqs-1",
+    "idempotencyKey": "provider-a:tx-sqs-1", "playerId": "$PLAYER", "walletId": "$WALLET",
+    "roundId": "round-2", "gameId": "fortune-chimp", "kind": "BET",
+    "money": { "amount": "5.00", "currency": "BRL" } } }
 EOF
 )
 
@@ -201,11 +486,52 @@ aws --endpoint-url http://localhost:4566 sqs send-message --queue-url "$QUEUE" \
   --message-group-id "$WALLET" --message-deduplication-id tx-sqs-1 \
   --message-attributes '{"providerId":{"DataType":"String","StringValue":"provider-a"}}' \
   --message-body "$BODY"
-
-curl -s $API/providers/provider-a/wagering/transactions/tx-sqs-1 -H "$AUTH"
 ```
 
-Com o `awslocal` é o mesmo comando sem o `--endpoint-url`. A consulta pelo id externo devolve a transação com `status: PROCESSED` e o saldo depois dela. HTTP e fila dividem a idempotência, então a mesma operação mandada pelos dois canais tem um efeito só.
+Com o `awslocal` é o mesmo comando sem o `--endpoint-url`. A fila responde com o `MessageId` e o `SequenceNumber`.
+
+**Conferir o resultado**
+
+**Requisição:** `GET http://localhost:8080/providers/provider-a/wagering/transactions/tx-sqs-1`
+
+**Headers:** `Authorization: Bearer dev:provider-a`.
+
+**Resposta esperada:** `200 OK`, com `status: PROCESSED` e o saldo depois da aposta.
+
+```json
+{
+  "code": 200,
+  "message": "SUCCESS",
+  "data": {
+    "transactionId": "01a18aac-ceb5-752f-8e63-b0f04d5411b8",
+    "providerId": "provider-a",
+    "externalTransactionId": "tx-sqs-1",
+    "walletId": "01a18aac-a369-76a8-aae1-b810fb3e7959",
+    "playerId": "0192f28f-5dc0-7d58-bdb2-814ad6a0f4b7",
+    "roundId": "round-2",
+    "gameId": "fortune-chimp",
+    "kind": "BET",
+    "money": { "amount": "5.00", "currency": "BRL" },
+    "status": "PROCESSED",
+    "failureCode": null,
+    "referenceExternalTransactionId": null,
+    "referenceTransactionId": null,
+    "balance": { "amount": "70.00", "currency": "BRL" },
+    "attempts": 0,
+    "nextAttemptAt": null,
+    "createdAt": "2026-10-30T02:39:03.350Z",
+    "processedAt": "2026-10-30T02:39:03.350Z"
+  },
+  "timestamp": 1793327943443,
+  "detailsMessage": []
+}
+```
+
+**curl**
+
+```bash
+curl -s $API/providers/provider-a/wagering/transactions/tx-sqs-1 -H "$AUTH"
+```
 
 ## Observabilidade
 
