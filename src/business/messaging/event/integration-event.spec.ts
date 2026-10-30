@@ -88,7 +88,7 @@ describe('IntegrationEvent', () => {
   it('stores plain JSON: Dates become ISO strings at runtime and are rejected at compile time', () => {
     const event = new LooseEvent<{ at: Date }>({
       ...envelope,
-      // @ts-expect-error a Date is not plain JSON
+      // @ts-expect-error Date não é JSON puro
       data: { at: new Date('2026-07-29T15:00:00.000Z') },
     });
 
@@ -99,7 +99,7 @@ describe('IntegrationEvent', () => {
   it('honours toJSON of nested objects and rejects them at compile time', () => {
     const event = new LooseEvent<{ money: Amount }>({
       ...envelope,
-      // @ts-expect-error a class instance is not plain JSON
+      // @ts-expect-error instância de classe não é JSON puro
       data: { money: new Amount(2_550n) },
     });
 

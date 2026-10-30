@@ -1,6 +1,6 @@
 import { DomainError } from '../../shared/error/domain-error';
 
-/** Same messageId redelivered with a different payload: a permanent contract violation (DLQ). */
+/** Mesmo messageId reentregue com payload diferente: violação de contrato permanente (DLQ). */
 export class InboxPayloadMismatchError extends DomainError {
   constructor(
     readonly consumerName: string,

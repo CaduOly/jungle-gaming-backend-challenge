@@ -15,8 +15,8 @@ export interface OutboxMessageState {
   readonly nextAttemptAt: Date;
   readonly lockedUntil?: Date;
   /**
-   * Fencing token of the claim that loaded this message. Transitions release `lockedUntil` in memory but keep
-   * the token, so the repository can apply a retry only while this claim still owns the row.
+   * Fencing token do claim que carregou essa mensagem. As transições liberam `lockedUntil` em memória mas mantêm
+   * o token, então o repositório só aplica o retry enquanto esse claim ainda for dono da linha.
    */
   readonly leaseToken?: string;
   readonly publishedAt?: Date;
@@ -25,7 +25,7 @@ export interface OutboxMessageState {
 const copy = (date: Date): Date => new Date(date.getTime());
 const copyOptional = (date: Date | undefined): Date | undefined => date && copy(date);
 
-/** The id is the eventId, so a republished row keeps the dedup key the consumers rely on. */
+/** O id é o eventId, então uma linha republicada mantém a chave de dedup que os consumers usam. */
 export class OutboxMessage {
   private constructor(
     readonly id: string,

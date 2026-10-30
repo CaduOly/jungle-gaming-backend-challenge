@@ -3,9 +3,9 @@ export type JsonValue = JsonPrimitive | readonly JsonValue[] | { readonly [key: 
 export type JsonObject = { readonly [key: string]: JsonValue };
 
 /**
- * Compile-time JSON check that also accepts interfaces (which have no implicit index signature).
- * Dates, bigints, functions, class instances with methods and anything with `toJSON` resolve to `never`.
- * Optional properties are allowed: JSON.stringify drops them when undefined.
+ * Checagem de JSON em tempo de compilação que aceita interface também, já que interface não tem index signature implícita.
+ * Date, bigint, função, instância de classe com método e qualquer coisa com `toJSON` viram `never`.
+ * Propriedade opcional é permitida, o JSON.stringify descarta quando vem undefined.
  */
 export type Jsonify<T> = T extends JsonPrimitive
   ? T
@@ -17,5 +17,5 @@ export type Jsonify<T> = T extends JsonPrimitive
         ? { [Key in keyof T]: Jsonify<Exclude<T[Key], undefined>> }
         : never;
 
-/** Plain JSON copy: honours `toJSON`, drops undefined, turns Dates into ISO strings. */
+/** Cópia em JSON puro: respeita `toJSON`, descarta undefined e converte Date em string ISO. */
 export const toJsonValue = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;

@@ -3,30 +3,31 @@ import type { OutboxMessage } from '../entity/outbox-message';
 export interface IOutboxRepository {
   add(messages: readonly OutboxMessage[]): Promise<void>;
   /**
-   * Atomically leases up to `limit` due messages (unpublished, nextAttemptAt <= now, lease free or expired),
-   * in the order they were added (commit order), setting lockedUntil = now + leaseMs and a fresh leaseToken.
-   * A leased message is not claimed again until the lease expires, so concurrent publishers never share a row.
+   * Pega o lease de forma atômica de até `limit` mensagens vencidas (não publicadas, nextAttemptAt <= now, lease livre
+   * ou expirado), na ordem em que foram adicionadas (ordem de commit), setando lockedUntil = now + leaseMs e um
+   * leaseToken novo. Mensagem com lease não é pega de novo até o lease expirar, então publishers concorrentes nunca
+   * dividem a mesma linha.
    *
-   * Head-of-line: only the first added unpublished message of each aggregate is eligible (commit order, never
-   * occurredAt, which is taken before the aggregate's lock and so may run backwards across commits),
-   * even while that head is leased or waiting for its retry. So an aggregate's events go on the wire in order,
-   * across rounds and across instances, at most one in flight at a time. The price: a head that keeps failing
-   * holds its whole aggregate back; it is never dropped, and crossing the attempt ceiling raises the
-   * exhausted alert (PublishOutboxBatchOutput.exhausted) so someone looks at it.
+   * Head-of-line: só a primeira mensagem não publicada de cada aggregate é elegível (ordem de commit, nunca
+   * occurredAt, já que ele é lido antes do lock do aggregate e pode andar para trás entre commits), mesmo enquanto
+   * essa cabeça está com lease ou esperando o retry. Assim os eventos de um aggregate saem em ordem, entre rodadas e
+   * entre instâncias, no máximo um em voo por vez. O custo é que uma cabeça que falha sempre segura o aggregate
+   * inteiro, ela nunca é descartada, e passar do teto de tentativas dispara o alerta de exhausted
+   * (PublishOutboxBatchOutput.exhausted) para alguém olhar.
    */
   claimBatch(limit: number, leaseMs: number, now: Date): Promise<OutboxMessage[]>;
   /**
-   * Records the publication and releases the lease. Deliberately not fenced by the lease token: the message
-   * did reach the broker, so even a publisher whose lease expired must record it, otherwise the row would be
-   * published once more for nothing. Delivery is at-least-once and consumers dedupe by eventId, so a stale
-   * mark is safe. It is a no-op when the row is already published (returns false: someone else recorded it
-   * first) and never touches attempts or nextAttemptAt.
+   * Registra a publicação e libera o lease. Não passa pelo fencing do lease token de propósito, já que a mensagem
+   * chegou no broker, então até um publisher com lease expirado tem que registrar, senão a linha seria publicada
+   * mais uma vez à toa. A entrega é at-least-once e os consumers fazem dedup por eventId, então uma marcação
+   * atrasada não causa problema. Se a linha já está publicada não faz nada (retorna false, alguém registrou
+   * antes) e nunca mexe em attempts nem em nextAttemptAt.
    */
   markPublished(message: OutboxMessage): Promise<boolean>;
   /**
-   * Persists attempts/nextAttemptAt and releases the lease, only while `message.leaseToken` still owns the
-   * row and it is unpublished (`… WHERE id = $1 AND published_at IS NULL AND lease_token = $2`).
-   * Returns false when the write was fenced off: the lease expired and another publisher reclaimed it.
+   * Grava attempts/nextAttemptAt e libera o lease, só enquanto `message.leaseToken` ainda for dono da linha e
+   * ela não estiver publicada (`… WHERE id = $1 AND published_at IS NULL AND lease_token = $2`).
+   * Retorna false quando a escrita foi barrada pelo fencing: o lease expirou e outro publisher pegou a linha.
    */
   scheduleRetry(message: OutboxMessage): Promise<boolean>;
   findById(id: string): Promise<OutboxMessage | undefined>;

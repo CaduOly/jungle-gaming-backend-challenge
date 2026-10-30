@@ -14,19 +14,19 @@ export interface PublishOutboxBatchOutput {
   readonly claimed: number;
   readonly published: number;
   readonly failed: number;
-  /** Failures whose retry was fenced off because the lease expired and another publisher took the message. */
+  /** Falhas cujo retry foi barrado pelo fencing, já que o lease expirou e outro publisher pegou a mensagem. */
   readonly leaseLost: number;
   /**
-   * Subset of `failed` that reached the attempt ceiling in this run (reported once per message).
-   * They are never dropped: retries continue at the capped delay.
+   * Parte de `failed` que bateu o teto de tentativas nessa rodada (reportada uma vez por mensagem).
+   * Nunca são descartadas, os retries seguem com o delay no teto.
    */
   readonly exhausted: number;
   readonly exhaustedMessageIds: readonly string[];
 }
 
 /**
- * One publishing round. The claim hands out at most the head of each aggregate (see IOutboxRepository
- * .claimBatch), so publishing the claimed messages in any order never reorders an aggregate on the wire.
+ * Uma rodada de publicação. O claim entrega no máximo a cabeça de cada aggregate (ver IOutboxRepository
+ * .claimBatch), então publicar as mensagens em qualquer ordem nunca reordena um aggregate no broker.
  */
 export class PublishOutboxBatch implements IUseCase<void, PublishOutboxBatchOutput> {
   constructor(
