@@ -27,7 +27,7 @@ Só isso. O comando builda a imagem e sobe, nesta ordem:
 4. o nginx na frente das réplicas, em `http://localhost:8080`;
 5. o Prometheus e o Grafana, já com o dashboard.
 
-Quando o `--wait` volta, está tudo de pé. Na primeira vez leva cerca de um minuto, por causa do download das imagens e do build. Não precisa de `.env`: todo valor tem padrão no compose.
+Quando o `--wait` volta, está tudo de pé. Com o Bun instalado, `bun run up` faz o mesmo e `bun run down` desliga. Na primeira vez leva cerca de um minuto, por causa do download das imagens e do build. Não precisa de `.env`: todo valor tem padrão no compose.
 
 Para desligar:
 
@@ -562,10 +562,10 @@ O dashboard "Jungle Wagering" do Grafana (<http://localhost:3001/d/jungle-wageri
 
 ```bash
 bun install
-bun run infra:up
-bun run migrate         # a aplicação não roda migration sozinha
-bun run start           # http://localhost:3000, com todos os papéis
+bun run start:dev
 ```
+
+O `start:dev` cria o `.env` a partir do `.env.example` se ele ainda não existir, sobe o PostgreSQL e o LocalStack no Docker, roda as migrations e inicia a aplicação em `http://localhost:3000` com todos os papéis, recarregando a cada arquivo salvo. Para rodar sem o modo watch, use `bun run start` depois de `bun run infra:up` e `bun run migrate`.
 
 `bun run migrate:down` desfaz a última migration. Os papéis do processo saem de `APP_ROLES` (`api`, `consumer`, `outbox`, `pending-worker`).
 
