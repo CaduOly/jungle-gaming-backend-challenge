@@ -8,7 +8,7 @@ export interface IntegrationEventProps<T> {
   readonly correlationId: string;
   readonly causationId?: string;
   readonly occurredAt: Date;
-  /** Resolves to `never` for anything that is not plain JSON, so such data cannot be passed. */
+  /** Vira `never` para tudo que não é JSON puro, então esse tipo de dado não passa. */
   readonly data: Jsonify<T>;
 }
 
@@ -27,9 +27,9 @@ export interface IntegrationEventEnvelope<T = unknown> {
 const isBlank = (value: string): boolean => value.trim() === '';
 
 /**
- * `data` must be plain JSON (strings, numbers, booleans, arrays, objects), never value-object instances,
- * so the envelope stays stable and versionable on the wire. Enforced by `Jsonify` at compile time and by a
- * JSON round trip at runtime.
+ * `data` tem que ser JSON puro (string, number, boolean, array, objeto), nunca instância de value object,
+ * para o envelope ficar estável e versionável no broker. Isso é garantido pelo `Jsonify` em tempo de compilação
+ * e por um round trip de JSON em runtime.
  */
 export abstract class IntegrationEvent<T> {
   abstract readonly eventType: string;

@@ -12,7 +12,7 @@ export interface WagerTransactionRejectedData extends WagerTransactionEventData 
   readonly rejectedAt: string;
 }
 
-/** A business rule rejected the transaction; the balance was not touched. */
+/** Uma regra de negócio rejeitou a transação, o saldo não foi alterado. */
 export class WagerTransactionRejected extends IntegrationEvent<WagerTransactionRejectedData> {
   readonly eventType = 'WagerTransactionRejected';
   readonly version = 1;

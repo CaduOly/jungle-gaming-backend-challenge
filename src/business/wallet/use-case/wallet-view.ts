@@ -4,7 +4,7 @@ import type { WalletLedgerEntry } from '../entity/wallet-ledger-entry';
 import type { LedgerDirection } from '../enum/ledger-direction';
 import type { LedgerEntryType } from '../enum/ledger-entry-type';
 
-/** CHALLENGE.md §9 wallet payload. */
+/** Payload de wallet do CHALLENGE.md §9. */
 export interface WalletView {
   readonly id: string;
   readonly playerId: string;

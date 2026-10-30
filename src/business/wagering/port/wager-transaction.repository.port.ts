@@ -6,20 +6,20 @@ export interface ClaimPendingBatch {
   now: Date;
 }
 
-/** Scoped to the current unit of work. */
+/** Restrito à unit of work atual. */
 export interface IWagerTransactionRepository {
   findById(id: string): Promise<WagerTransaction | null>;
   findByIdempotencyKey(providerId: string, idempotencyKey: string): Promise<WagerTransaction | null>;
   findByExternalId(providerId: string, externalTransactionId: string): Promise<WagerTransaction | null>;
-  /** Row lock until the unit of work ends; always taken after the wallet lock. */
+  /** Row lock até a unit of work terminar, sempre pego depois do lock da wallet. */
   lockById(id: string): Promise<WagerTransaction | null>;
-  /** Unique (provider, idempotency key), (provider, external id) and one processed reversal per reference. */
+  /** Unique em (provider, idempotency key), (provider, external id) e um reversal processado por referência. */
   insert(transaction: WagerTransaction): Promise<void>;
-  /** Requires the row lock; also releases the claim lease (`locked_until = NULL`), so the next attempt is gated only by nextAttemptAt. */
+  /** Exige o row lock e também libera o lease do claim (`locked_until = NULL`), então a próxima tentativa depende só do nextAttemptAt. */
   update(transaction: WagerTransaction): Promise<void>;
-  /** True when a PROCESSED REFUND or ROLLBACK already points at this transaction. */
+  /** True quando um REFUND ou ROLLBACK PROCESSED já aponta para essa transação. */
   isReversed(referenceTransactionId: string): Promise<boolean>;
-  /** Leases due PENDING_REFERENCE ids (SKIP LOCKED) so other instances skip them until the lease ends. */
+  /** Pega lease dos ids PENDING_REFERENCE vencidos (SKIP LOCKED) para as outras instâncias pularem eles até o lease acabar. */
   claimPendingBatch(batch: ClaimPendingBatch): Promise<string[]>;
 }
 

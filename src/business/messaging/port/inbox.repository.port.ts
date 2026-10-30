@@ -6,8 +6,8 @@ export type InboxInsertResult =
 
 export interface IInboxRepository {
   /**
-   * Inserts the message unless (consumerName, messageId) already exists. When it does, the stored
-   * row is returned so the caller can tell a replay (processed, same hash) from a payload mismatch.
+   * Insere a mensagem se (consumerName, messageId) ainda não existir. Se já existir, devolve a linha
+   * gravada para quem chamou distinguir um replay (processado, mesmo hash) de um payload divergente.
    */
   insertIfAbsent(message: InboxMessage): Promise<InboxInsertResult>;
   markProcessed(message: InboxMessage): Promise<void>;

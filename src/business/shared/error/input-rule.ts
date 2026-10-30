@@ -1,6 +1,6 @@
 /**
- * Stable code of the input rule a request broke. The domain only names the rule; turning it into a message is
- * the edge's job, so the code never changes when a text does.
+ * Código estável da regra de input que a requisição quebrou. O domínio só nomeia a regra, transformar em mensagem
+ * é papel da borda, então o código não muda quando um texto muda.
  */
 export const InputRule = {
   BLANK: 'BLANK',
@@ -19,7 +19,7 @@ export const InputRule = {
 
 export type InputRule = (typeof InputRule)[keyof typeof InputRule];
 
-/** Where in the request the rule broke (dotted path, e.g. `money.amount`) and which rule it was. */
+/** Onde na requisição a regra quebrou (caminho com ponto, ex.: `money.amount`) e qual foi a regra. */
 export interface InputViolation {
   readonly field: string;
   readonly rule: InputRule;

@@ -15,14 +15,14 @@ const CENTS_PER_UNIT = 100n;
 const MAX_CENTS = 99_999_999_999_999_999_999n;
 
 /**
- * Exact, never-negative monetary amount in minor units (cents, scale 2).
- * Input with any other format is rejected: there is no rounding policy.
+ * Valor monetário exato e nunca negativo, em centavos (escala 2).
+ * Input em qualquer outro formato é rejeitado, já que não existe política de arredondamento.
  */
 export class Money {
   readonly #cents: bigint;
   /**
-   * Normalized decimal string ("25.00"), derived from the cents. Arithmetic never reads it; it is public so
-   * structural equality (spread, `toEqual`) sees the value and not only the currency.
+   * String decimal normalizada ("25.00"), derivada dos centavos. A aritmética nunca lê esse campo, ele é público
+   * para a igualdade estrutural (spread, `toEqual`) enxergar o valor e não só a moeda.
    */
   readonly amount: string;
 
@@ -43,7 +43,7 @@ export class Money {
     return new Money(BigInt(amount.replace('.', '')), Money.assertCurrency(currency));
   }
 
-  /** The format rule of Money.from for the amount alone, so an edge can report it apart from the currency. */
+  /** A regra de formato do Money.from só para o amount, para a borda conseguir reportar separado da moeda. */
   static isValidAmount(amount: unknown): amount is string {
     return typeof amount === 'string' && AMOUNT_PATTERN.test(amount);
   }

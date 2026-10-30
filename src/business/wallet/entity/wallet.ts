@@ -20,7 +20,7 @@ export interface OpenWalletProps {
   id: string;
   playerId: string;
   initialBalance: Money;
-  /** Internal OPENING transaction; required only when the initial balance is positive. */
+  /** Transação interna de OPENING, só é obrigatória quando o saldo inicial é positivo. */
   openingTransactionId?: string;
   at: Date;
 }
@@ -58,8 +58,8 @@ export class Wallet {
   ) {}
 
   /**
-   * The initial balance is written directly at version 1 (not through `credit`);
-   * a positive one is mirrored by the returned OPENING entry.
+   * O saldo inicial é gravado direto na versão 1 (sem passar pelo `credit`),
+   * e quando é positivo ele vem espelhado na entry de OPENING retornada.
    */
   static open(props: OpenWalletProps): OpenedWallet {
     const { id, playerId, initialBalance, openingTransactionId, at } = props;
@@ -126,7 +126,7 @@ export class Wallet {
     return this.apply(LedgerDirection.CREDIT, props, this._balance.add(props.amount));
   }
 
-  /** `insufficientFundsCode` lets the caller tell a plain bet apart from a reversal (CHALLENGE.md §7, rule 9). */
+  /** `insufficientFundsCode` deixa quem chama diferenciar uma aposta comum de um reversal (CHALLENGE.md §7, regra 9). */
   debit(props: DebitProps): WalletLedgerEntry {
     this.assertSameCurrency(props.amount);
     if (props.amount.isGreaterThan(this._balance)) {

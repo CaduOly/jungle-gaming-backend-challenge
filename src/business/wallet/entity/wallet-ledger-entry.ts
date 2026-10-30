@@ -21,9 +21,9 @@ export interface LedgerEntryState extends CreateLedgerEntryProps {
 }
 
 /**
- * One balance movement of one wallet. A transaction produces at most one entry, so
- * `transactionId` identifies the entry; the OPENING entry points at the internal OPENING
- * transaction. `seq` is assigned by persistence and backs the ledger cursor.
+ * Uma movimentação de saldo de uma wallet. Uma transação gera no máximo uma entry, então
+ * `transactionId` identifica a entry, e a entry de OPENING aponta para a transação interna
+ * de OPENING. O `seq` é atribuído pela persistência e é a base do cursor do ledger.
  */
 export class WalletLedgerEntry {
   private constructor(private readonly state: Readonly<LedgerEntryState>) {

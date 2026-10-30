@@ -1,8 +1,8 @@
 import { DomainError } from './domain-error';
 
 /**
- * A write lost a race against a concurrent commit on a unique constraint (Postgres 23505).
- * Raised by persistence adapters; the transaction that hit it is already doomed and must be rolled back.
+ * Uma escrita perdeu a corrida para um commit concorrente numa unique constraint (Postgres 23505).
+ * Lançado pelos adapters de persistência, a transação que bateu nisso já está perdida e precisa de rollback.
  */
 export class UniqueConstraintViolationError extends DomainError {
   constructor(

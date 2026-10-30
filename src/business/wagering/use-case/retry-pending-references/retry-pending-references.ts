@@ -17,14 +17,14 @@ import { WagerOutcomeEvents } from '../process-wager-transaction/wager-outcome-e
 
 export interface RetryPendingReferencesConfig {
   readonly batchSize: number;
-  /** How long a claimed id stays invisible to other instances while this one works on it. */
+  /** Quanto tempo um id com claim fica invisível para as outras instâncias enquanto essa trabalha nele. */
   readonly leaseMs: number;
 }
 
 export interface RetryPendingReferencesInput {
   /**
-   * Checked before each item: once it answers true the round ends there. The items it did not reach keep their lease
-   * and attempts untouched, so another instance retries them when the lease ends.
+   * Checado antes de cada item, quando responde true a rodada termina ali. Os itens que não foram alcançados ficam
+   * com lease e attempts intactos, então outra instância faz o retry quando o lease acabar.
    */
   readonly shouldStop?: () => boolean;
 }
@@ -35,27 +35,27 @@ export interface RetryPendingReferencesOutput {
   readonly claimed: number;
   readonly processed: number;
   readonly rejected: number;
-  /** Rejected because the attempts ran out (REFERENCE_NOT_FOUND / REFERENCE_NOT_PROCESSED); not counted in `rejected`. */
+  /** Rejeitados porque as tentativas acabaram (REFERENCE_NOT_FOUND / REFERENCE_NOT_PROCESSED), não entram em `rejected`. */
   readonly exhausted: number;
   readonly rescheduled: number;
   readonly failed: number;
-  /** Already decided by someone else (or gone) when its turn came. */
+  /** Já decididos por outro (ou sumiram) quando chegou a vez deles. */
   readonly skipped: number;
-  /** Items whose unit of work threw (e.g. a transient database error); they are retried after the lease. */
+  /** Itens cuja unit of work lançou erro (ex.: erro transitório do banco), o retry vem depois do lease. */
   readonly erroredIds: readonly string[];
-  /** Claimed but not attempted because the round was asked to stop; retried after the lease. */
+  /** Com claim mas sem tentativa porque pediram para a rodada parar, o retry vem depois do lease. */
   readonly unattemptedIds: readonly string[];
 }
 
 /**
- * Pending-reference worker, deadlock-free across instances:
- * 1. claims only ids, in a short unit of work (lease + SKIP LOCKED);
- * 2. runs each id in its own unit of work, locking wallet → transaction (the same order as the main flow),
- *    re-checking the status and that the attempt is still due, then resolving and settling with the same domain
+ * Worker de pending-reference, sem deadlock entre instâncias:
+ * 1. faz claim só dos ids, numa unit of work curta (lease + SKIP LOCKED);
+ * 2. roda cada id na própria unit of work, com lock de wallet → transação (mesma ordem do fluxo principal),
+ *    checa de novo o status e se a tentativa ainda está vencida, e então resolve e liquida com os mesmos domain
  *    services.
- * Attempts are capped by the backoff: when the last one still finds no reference the transaction is
- * REJECTED/REFERENCE_NOT_FOUND (REFERENCE_NOT_PROCESSED when the reference exists but never settled) and the
- * rejection event is published. A permanent inconsistency (no wallet, broken invariant) moves it to FAILED.
+ * As tentativas têm teto pelo backoff: se a última ainda não acha a referência a transação vira
+ * REJECTED/REFERENCE_NOT_FOUND (REFERENCE_NOT_PROCESSED quando a referência existe mas nunca foi liquidada) e o
+ * evento de rejeição é publicado. Uma inconsistência permanente (sem wallet, invariante quebrada) leva para FAILED.
  */
 export class RetryPendingReferences implements IUseCase<RetryPendingReferencesInput | void, RetryPendingReferencesOutput> {
   private readonly settlement = new WagerSettlement();
@@ -105,8 +105,8 @@ export class RetryPendingReferences implements IUseCase<RetryPendingReferencesIn
     const wallet = await tx.wallets.lockById(peek.walletId);
     const transaction = await tx.wagers.lockById(id);
     if (transaction === null || transaction.status !== WagerTransactionStatus.PENDING_REFERENCE) return 'skipped';
-    // The claim only picks attempts due at claimedAt. A later due date means this lease expired and another
-    // instance reclaimed the item and already counted this attempt: counting it again would burn the backoff.
+    // O claim só pega tentativas vencidas em claimedAt. Se a data de vencimento é posterior, esse lease expirou e
+    // outra instância pegou o item e já contou essa tentativa, então contar de novo queimaria o backoff.
     const due = transaction.nextAttemptAt;
     if (due !== undefined && due.getTime() > claimedAt.getTime()) return 'skipped';
     const now = this.clock.now();
@@ -122,9 +122,9 @@ export class RetryPendingReferences implements IUseCase<RetryPendingReferencesIn
     try {
       decision = await this.decide(tx, transaction, wallet, now);
     } catch (error) {
-      // A domain invariant broke while settling (a bug or corrupted data, not a business outcome: those, the
-      // Money maximum included, come back as rejections): retrying can never succeed, so the transaction leaves
-      // the queue as FAILED with the closest of the persisted codes.
+      // Uma invariante de domínio quebrou na liquidação (bug ou dado corrompido, não resultado de negócio, já que
+      // esses, o máximo de Money incluído, voltam como rejeição). O retry nunca vai dar certo, então a transação
+      // sai da fila como FAILED com o código persistido mais próximo.
       if (!(error instanceof DomainError) || error instanceof BusinessRuleError) throw error;
       const fresh = await tx.wagers.lockById(id);
       if (fresh === null) throw error;
@@ -139,8 +139,8 @@ export class RetryPendingReferences implements IUseCase<RetryPendingReferencesIn
       await tx.wallets.update(wallet, expectedVersion);
     }
     if (transaction.isTerminal()) {
-      // The submission's correlation id is not persisted: the retry is a new causal chain started by the worker,
-      // and the transaction id is what both chains share (it is in every event of the transaction).
+      // O correlation id da submissão não é persistido, o retry é uma cadeia causal nova iniciada pelo worker,
+      // e o que as duas cadeias têm em comum é o id da transação (ele está em todo evento da transação).
       const events = this.outcomeEvents.toEvents(
         { transaction, wallet, entry: decision.entry },
         { correlationId: transaction.id, occurredAt: now },

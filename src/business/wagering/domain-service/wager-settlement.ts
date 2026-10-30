@@ -11,9 +11,9 @@ import { InvalidWagerTransactionError } from '../error/invalid-wager-transaction
 
 export interface SettleCommand {
   transaction: WagerTransaction;
-  /** The wallet of the transaction, already locked by the caller. */
+  /** A wallet da transação, já com lock pego por quem chamou. */
   wallet: Wallet;
-  /** The resolved reference, when the transaction has one. */
+  /** A referência resolvida, quando a transação tem uma. */
   reference: WagerTransaction | null;
   at: Date;
 }
@@ -26,10 +26,10 @@ type CreditKind = typeof WagerKind.WIN | typeof WagerKind.REFUND | typeof WagerK
 type DebitKind = typeof WagerKind.BET | typeof WagerKind.ROLLBACK;
 
 /**
- * Applies a resolved transaction to its wallet and moves the transaction to PROCESSED or REJECTED,
- * recording the balance observed after the decision. Business rejections never touch the wallet. A credit past
- * the Money maximum is one of them (BALANCE_LIMIT_EXCEEDED): the wallet computes the new balance before changing
- * anything, so it is left exactly as it was.
+ * Aplica uma transação resolvida na wallet e leva a transação para PROCESSED ou REJECTED, gravando o saldo
+ * visto depois da decisão. Rejeição de negócio nunca mexe na wallet. Um crédito além do máximo de Money é uma
+ * delas (BALANCE_LIMIT_EXCEEDED), já que a wallet calcula o saldo novo antes de mudar qualquer coisa, então ela
+ * fica exatamente como estava.
  */
 export class WagerSettlement {
   settle({ transaction, wallet, reference, at }: SettleCommand): SettlementOutcome {

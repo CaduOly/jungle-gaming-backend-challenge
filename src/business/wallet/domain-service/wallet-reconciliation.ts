@@ -32,12 +32,12 @@ export interface Divergence {
 export interface WalletReconciliation {
   walletId: string;
   storedBalance: Money;
-  /** Null when the ledger cannot be summed into a valid amount (it would go negative or overflow). */
+  /** Null quando o ledger não soma num valor válido (ficaria negativo ou daria overflow). */
   calculatedBalance: Money | null;
-  /** Absolute difference between stored and calculated balances; null when the latter is null. */
+  /** Diferença absoluta entre o saldo gravado e o calculado, null quando o calculado é null. */
   difference: Money | null;
   consistent: boolean;
-  /** Every entry received, including foreign ones (which are flagged and left out of the checks). */
+  /** Todas as entries recebidas, inclusive as de outra wallet (que são marcadas e ficam fora das checagens). */
   checkedEntries: number;
   divergences: Divergence[];
 }
@@ -50,7 +50,7 @@ const describeEntry = (entry: WalletLedgerEntry, index: number): string =>
 
 const KNOWN_DIRECTIONS: ReadonlySet<string> = new Set(Object.values(LedgerDirection));
 
-/** Entries with an unknown direction are left out, like the NULL a SQL CASE would yield. */
+/** Entries com direction desconhecida ficam de fora, igual ao NULL que um CASE no SQL daria. */
 const sumLedger = (currency: string, entries: readonly WalletLedgerEntry[]): Money | null => {
   let running = Money.zero(currency);
   for (const entry of entries) {
@@ -72,10 +72,10 @@ const sumLedger = (currency: string, entries: readonly WalletLedgerEntry[]): Mon
 const absoluteDifference = (a: Money, b: Money): Money => (a.isGreaterThan(b) ? a.subtract(b) : b.subtract(a));
 
 /**
- * Pure check of a wallet against its full ledger, ordered by seq. Mirrors the rules of
- * tests/support/assert-wallet-consistency.ts (consecutive versions, first version 1 or 2,
- * positive amounts, known directions) and adds: OPENING <=> first entry <=> walletVersion 1,
- * ascending seq and foreign entries. Never corrects anything.
+ * Checagem pura de uma wallet contra o ledger completo, ordenado por seq. Segue as regras do
+ * tests/support/assert-wallet-consistency.ts (versões consecutivas, primeira versão 1 ou 2,
+ * valores positivos, directions conhecidas) e adiciona: OPENING <=> primeira entry <=> walletVersion 1,
+ * seq crescente e entries de outra wallet. Nunca corrige nada.
  */
 export const reconcileWallet = (wallet: Wallet, entries: readonly WalletLedgerEntry[]): WalletReconciliation => {
   const divergences: Divergence[] = [];

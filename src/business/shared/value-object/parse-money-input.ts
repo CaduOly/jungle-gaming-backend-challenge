@@ -4,8 +4,8 @@ import { InvalidRequestError } from '../error/invalid-request-error';
 import { Money } from './money';
 
 /**
- * Money from untrusted input, with the failure pinned to the exact field: `<field>.amount` or `<field>.currency`,
- * or `<field>` itself when there is no money object at all.
+ * Money vindo de input não confiável, com a falha apontando o campo exato: `<field>.amount` ou `<field>.currency`,
+ * ou o próprio `<field>` quando nem existe objeto de money.
  */
 export const parseMoneyInput = (money: unknown, field: string): Money => {
   if (typeof money !== 'object' || money === null) {

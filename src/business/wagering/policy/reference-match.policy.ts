@@ -3,7 +3,7 @@ import type { WagerTransaction } from '../entity/wager-transaction';
 
 export type ReferenceMatchFailure = typeof FailureCode.REFERENCE_MISMATCH | typeof FailureCode.CURRENCY_MISMATCH;
 
-/** CHALLENGE.md §7 rule 2: the reference must share provider, player, wallet, round and currency. */
+/** CHALLENGE.md §7 regra 2: a referência tem que ter o mesmo provider, player, wallet, round e currency. */
 export const checkReferenceMatch = (
   transaction: WagerTransaction,
   reference: WagerTransaction,

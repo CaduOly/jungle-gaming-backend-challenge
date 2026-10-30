@@ -5,7 +5,7 @@ import type { WagerTransaction } from '../entity/wager-transaction';
 import type { WagerKind } from '../enum/wager-kind';
 import type { WagerTransactionStatus } from '../enum/wager-transaction-status';
 
-/** Common, JSON-only description of a wager transaction carried by every wagering event. */
+/** Descrição comum de uma wager transaction, só em JSON, que vai em todo evento de wagering. */
 export interface WagerTransactionEventData {
   readonly transactionId: string;
   readonly providerId: string;
@@ -21,9 +21,9 @@ export interface WagerTransactionEventData {
   readonly referenceExternalTransactionId: string | null;
   readonly referenceTransactionId: string | null;
   readonly failureCode: FailureCode | null;
-  /** Balance observed when the decision was taken; for a pending transaction, the balance at that moment. */
+  /** Saldo visto quando a decisão foi tomada, para uma transação pendente é o saldo naquele momento. */
   readonly balance: MoneyProps;
-  /** Wallet version right after the decision, so wagering events order against WalletBalanceChanged. */
+  /** Versão da wallet logo depois da decisão, para os eventos de wagering ficarem ordenados com o WalletBalanceChanged. */
   readonly walletVersion: number;
 }
 

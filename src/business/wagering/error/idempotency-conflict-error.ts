@@ -1,7 +1,7 @@
 import { DomainError } from '../../shared/error/domain-error';
 import type { IdempotencyConflictCode } from '../domain-service/idempotency-check';
 
-/** 409: the key (or the external id) is already bound to a different request. Never persisted. */
+/** 409: a key (ou o external id) já está ligada a outra requisição. Nunca é persistido. */
 export class IdempotencyConflictError extends DomainError {
   constructor(
     readonly failureCode: IdempotencyConflictCode,

@@ -12,7 +12,7 @@ export interface WagerTransactionPendingReferenceData extends WagerTransactionEv
   readonly nextAttemptAt: string;
 }
 
-/** The reference is missing (or still pending itself); the pending-reference worker retries it later. */
+/** A referência não existe (ou ela mesma ainda está pendente), o worker de pending-reference tenta de novo depois. */
 export class WagerTransactionPendingReference extends IntegrationEvent<WagerTransactionPendingReferenceData> {
   readonly eventType = 'WagerTransactionPendingReference';
   readonly version = 1;

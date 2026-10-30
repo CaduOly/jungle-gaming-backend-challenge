@@ -8,19 +8,19 @@ export interface ReconcileWalletInput {
   readonly walletId: string;
 }
 
-/** CHALLENGE.md §9 reconciliation payload plus the divergences found. */
+/** Payload de reconciliação do CHALLENGE.md §9 mais as divergências encontradas. */
 export interface ReconcileWalletOutput {
   readonly walletId: string;
   readonly storedBalance: MoneyProps;
   readonly calculatedBalance: MoneyProps | null;
   readonly difference: MoneyProps | null;
-  /** Read by the metric decorator: a false here is counted and logged, never corrected. */
+  /** Lido pelo decorator de métrica: um false aqui é contado e logado, nunca corrigido. */
   readonly consistent: boolean;
   readonly checkedEntries: number;
   readonly divergences: readonly Divergence[];
 }
 
-/** Compares the wallet with its whole ledger inside one read-only snapshot. Reports, never fixes. */
+/** Compara a wallet com o ledger inteiro dentro de um snapshot só leitura. Só reporta, nunca corrige. */
 export class ReconcileWallet implements IUseCase<ReconcileWalletInput, ReconcileWalletOutput> {
   constructor(private readonly unitOfWork: IWageringUnitOfWork) {}
 

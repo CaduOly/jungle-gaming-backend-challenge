@@ -6,7 +6,7 @@ import { checkReferenceMatch } from '../policy/reference-match.policy';
 import { checkReversal, isReferenceKindAllowed } from '../policy/reversal.policy';
 
 export type ReferenceResolution =
-  /** `reference` is null when the transaction does not reference anything. */
+  /** `reference` é null quando a transação não referencia nada. */
   | { type: 'Resolved'; reference: WagerTransaction | null }
   | { type: 'Missing' }
   | { type: 'StillPending'; reference: WagerTransaction }
@@ -18,10 +18,10 @@ const NOT_PROCESSED: ReadonlySet<WagerTransactionStatus> = new Set([
 ]);
 
 /**
- * Finds the referenced transaction by (provider, external id) and applies the reference policies, checking
- * ownership (player, wallet, round, currency) before anything that depends on the reference status.
- * A missing reference (WIN included) or one still waiting for its own reference keeps the
- * dependent pending; a REJECTED/FAILED one rejects it with REFERENCE_NOT_PROCESSED.
+ * Busca a transação referenciada por (provider, external id) e aplica as policies de referência, checando
+ * ownership (player, wallet, round, currency) antes de qualquer coisa que dependa do status da referência.
+ * Se a referência não existe (WIN incluído) ou ainda espera a própria referência, a dependente fica
+ * pendente, e se ela está REJECTED/FAILED a dependente é rejeitada com REFERENCE_NOT_PROCESSED.
  */
 export class ReferenceResolver {
   constructor(private readonly transactions: Pick<IWagerTransactionReader, 'findByExternalId' | 'isReversed'>) {}
@@ -33,7 +33,7 @@ export class ReferenceResolver {
     const reference = await this.transactions.findByExternalId(transaction.providerId, externalId);
     if (reference === null) return { type: 'Missing' };
 
-    // Ownership first: the status of another player's (or round's) transaction must not leak through the code.
+    // Ownership primeiro, senão o status da transação de outro player (ou round) vaza pelo código de erro.
     const mismatch = checkReferenceMatch(transaction, reference);
     if (mismatch !== null) return { type: 'Rejected', code: mismatch, reference };
 
