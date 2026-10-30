@@ -8,16 +8,16 @@ export interface SqsConsumerConfig {
   readonly visibilityTimeoutSeconds: number;
   readonly heartbeatIntervalMs: number;
   /**
-   * The retry limit: consecutive failures of the message itself, retried inside the process (backoff +
-   * heartbeat), before it is dead-lettered as retries_exhausted. It is not the queue's redrive
-   * maxReceiveCount, which counts deliveries and must stay far above it (see SqsConsumerLoop).
+   * Limite de retry: falhas consecutivas da própria mensagem, retentadas dentro do processo (backoff + heartbeat),
+   * antes de ir para a DLQ como retries_exhausted. Não é o maxReceiveCount do redrive da fila, que conta entregas e
+   * tem que ficar bem acima disso (ver SqsConsumerLoop).
    */
   readonly maxInProcessAttempts: number;
   readonly retry: { readonly baseMs: number; readonly capMs: number };
-  /** Wait after a failed readiness probe or a failed receive. */
+  /** Espera depois de um readiness probe ou de um receive que falhou. */
   readonly errorDelayMs: number;
   readonly shutdownTimeoutMs: number;
-  /** Upper bound of one handler attempt; past it the attempt is a transient failure (see TimeoutMessageHandler). */
+  /** Limite de uma tentativa do handler, passou disso a tentativa conta como falha transiente (ver TimeoutMessageHandler). */
   readonly handlerTimeoutMs: number;
   readonly circuitBreaker: { readonly failureThreshold: number; readonly openMs: number };
 }

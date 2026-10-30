@@ -9,19 +9,19 @@ const ALGORITHMS = ['RS256', 'PS256', 'ES256'];
 const BEARER = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/;
 
 export interface JwksProviderIdentityOptions {
-  /** Expected `iss`: the realm URL as the provider sees it, e.g. http://localhost:8081/realms/wagering. */
+  /** `iss` esperado: a URL do realm como o provider enxerga, ex. http://localhost:8081/realms/wagering. */
   readonly issuer: string;
-  /** Expected `aud`: the API, which the IdP adds to every provider client's token. */
+  /** `aud` esperado: a API, que o IdP coloca no token de todo client de provider. */
   readonly audience: string;
-  /** Signing keys: the IdP's JWKS endpoint in production, a local set in the tests. */
+  /** Chaves de assinatura: o endpoint JWKS do IdP em produção, um set local nos testes. */
   readonly keys: JWTVerifyGetKey;
   readonly clockToleranceSeconds?: number;
 }
 
 /**
- * The key set could not be fetched or read (timeout, connection refused, a non-200 or a broken JWKS document): the
- * IdP is down, which says nothing about the token, so it is a 503 and not a 401. A token signed by a key the set
- * does not have (JWKSNoMatchingKey) stays a 401.
+ * Não deu para buscar ou ler o key set (timeout, conexão recusada, resposta não 200 ou JWKS quebrado), então o IdP
+ * está fora, o que não diz nada sobre o token, por isso é 503 e não 401. Token assinado por uma chave que o set não
+ * tem (JWKSNoMatchingKey) continua 401.
  */
 const isKeySetUnavailable = (error: unknown): boolean => {
   if (!(error instanceof errors.JOSEError)) return true;
@@ -30,9 +30,9 @@ const isKeySetUnavailable = (error: unknown): boolean => {
 };
 
 /**
- * Verifies a client_credentials access token from the IdP (Keycloak): signature against its JWKS, `iss`, `aud`,
- * `exp`/`nbf`, and takes the provider from the `provider_id` claim each provider client carries. Every refusal is
- * the same 401 to the caller; the reason only goes to the logs.
+ * Verifica o access token client_credentials do IdP (Keycloak): assinatura contra o JWKS, `iss`, `aud`, `exp`/`nbf`,
+ * e pega o provider da claim `provider_id` que todo client de provider carrega. Toda recusa volta como o mesmo 401
+ * para quem chamou, o motivo vai só para o log.
  */
 export class JwksProviderIdentity implements IProviderIdentity {
   constructor(private readonly options: JwksProviderIdentityOptions) {}

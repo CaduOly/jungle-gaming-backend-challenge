@@ -1,4 +1,4 @@
-/** Non-retryable integrity failure raised by the database (e.g. an immutability trigger): a bug, never a retry. */
+/** Falha de integridade sem retry levantada pelo banco (ex. trigger de imutabilidade): é bug, nunca retry. */
 export class PermanentInfrastructureError extends Error {
   constructor(
     message: string,

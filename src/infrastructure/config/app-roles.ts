@@ -9,8 +9,9 @@ export type AppRole = (typeof APP_ROLES)[number];
 const isAppRole = (value: string): value is AppRole => (APP_ROLES as readonly string[]).includes(value);
 
 /**
- * APP_ROLES is a comma separated subset of api, consumer, outbox and pending-worker; empty or missing means all of
- * them. One image runs any mix, so a replica can be the whole service or a single worker.
+ * APP_ROLES é um subconjunto separado por vírgula de api, consumer, outbox e pending-worker, vazio ou ausente
+ * significa todos. A mesma imagem roda qualquer combinação, então uma réplica pode ser o serviço inteiro ou um
+ * worker só.
  */
 export const readAppRoles = (env: Env): ReadonlySet<AppRole> => {
   const raw = env.APP_ROLES?.trim() ?? '';
@@ -25,7 +26,7 @@ export const readAppRoles = (env: Env): ReadonlySet<AppRole> => {
 
 const INSTANCE_ID = /^[A-Za-z0-9._-]{1,64}$/;
 
-/** INSTANCE_ID when set, otherwise host and pid: unique per process, stable for its whole life. */
+/** INSTANCE_ID quando definido, senão host e pid: único por processo e estável durante a vida dele. */
 export const readInstanceId = (env: Env, fallback: () => string = () => `${hostname()}-${process.pid}`): string => {
   const raw = env.INSTANCE_ID?.trim() ?? '';
   if (raw === '') return fallback();

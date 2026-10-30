@@ -5,7 +5,7 @@ const read = (env: Env, name: string, fallback: string): string => {
   return value === undefined || value === '' ? fallback : value;
 };
 
-/** DATABASE_URL wins; otherwise the URL is composed from the docker compose variables (see .env.example). */
+/** DATABASE_URL tem prioridade, senão a URL é montada a partir das variáveis do docker compose (ver .env.example). */
 export const readDatabaseUrl = (env: Env): string => {
   const explicit = env.DATABASE_URL;
   if (explicit !== undefined && explicit !== '') {

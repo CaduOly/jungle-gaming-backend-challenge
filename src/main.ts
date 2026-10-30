@@ -4,8 +4,9 @@ import { installGracefulShutdown } from './infrastructure/process/graceful-shutd
 import { startApplication } from './infrastructure/runtime/application';
 
 /**
- * One image, any mix of roles: APP_ROLES=api,consumer,outbox,pending-worker (all by default). SIGTERM/SIGINT stop
- * every role within SHUTDOWN_TIMEOUT_MS; run `bun run migrate` before the first replica starts.
+ * Uma imagem, qualquer combinação de roles: APP_ROLES=api,consumer,outbox,pending-worker (todas por default).
+ * SIGTERM/SIGINT param todas as roles dentro de SHUTDOWN_TIMEOUT_MS, e o `bun run migrate` tem que rodar antes da
+ * primeira réplica subir.
  */
 if (import.meta.main) {
   const application = await startApplication(process.env);

@@ -25,8 +25,8 @@ const url = (env: Env, name: string): string => {
 };
 
 /**
- * AUTH_MODE=noop (default): DevProviderIdentity, a fake token that proves nothing (development and tests).
- * AUTH_MODE=jwks: real tokens from the IdP, verified against AUTH_JWKS_URL, AUTH_ISSUER and AUTH_AUDIENCE.
+ * AUTH_MODE=noop (default): DevProviderIdentity, token fake que não prova nada (desenvolvimento e testes).
+ * AUTH_MODE=jwks: token de verdade do IdP, verificado contra AUTH_JWKS_URL, AUTH_ISSUER e AUTH_AUDIENCE.
  */
 export const readAuthConfig = (env: Env): AuthConfig => {
   const mode = env.AUTH_MODE?.trim() || 'noop';

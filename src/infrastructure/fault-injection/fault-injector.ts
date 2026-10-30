@@ -26,11 +26,11 @@ const killSelf = (): void => {
 
 const isFaultPoint = (value: string): value is FaultPoint => (FAULT_POINTS as readonly string[]).includes(value);
 
-/** Test-only failure points, enabled exclusively through FAULT_INJECTION=point[,point]. */
+/** Pontos de falha só para teste, habilitados exclusivamente por FAULT_INJECTION=point[,point]. */
 export class FaultInjector {
   private constructor(
     private readonly active: ReadonlySet<FaultPoint>,
-    /** How long `slow_handler` holds a message (FAULT_SLOW_HANDLER_MS). */
+    /** Quanto tempo o `slow_handler` segura uma mensagem (FAULT_SLOW_HANDLER_MS). */
     readonly slowHandlerMs: number = DEFAULT_SLOW_HANDLER_MS,
   ) {}
 
@@ -66,7 +66,7 @@ export class FaultInjector {
     if (this.isActive(point)) throw new InjectedFaultError(point);
   }
 
-  /** Kills the process without any cleanup, the way a crash or `kill -9` would. */
+  /** Mata o processo sem cleanup nenhum, igual um crash ou `kill -9` faria. */
   crash(point: FaultPoint, kill: () => void = killSelf): void {
     if (this.isActive(point)) kill();
   }

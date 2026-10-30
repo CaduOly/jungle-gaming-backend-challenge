@@ -19,9 +19,9 @@ const positive = (env: Readonly<Record<string, string | undefined>>, name: strin
 };
 
 /**
- * Backoff of a PENDING_REFERENCE transaction waiting for its reference; ExponentialBackoff validates the bounds.
- * The HTTP/SQS flow (first attempt) and the pending reference worker (the next ones) read the same PENDING_*
- * variables, so the two can never schedule with different policies.
+ * Backoff de uma transação PENDING_REFERENCE esperando a referência dela, os limites são validados pelo
+ * ExponentialBackoff. O fluxo HTTP/SQS (primeira tentativa) e o pending reference worker (as próximas) leem as
+ * mesmas variáveis PENDING_*, então os dois nunca agendam com políticas diferentes.
  */
 export const readPendingReferenceBackoff = (
   env: Readonly<Record<string, string | undefined>>,
