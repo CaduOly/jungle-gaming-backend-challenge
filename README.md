@@ -9,7 +9,7 @@ O enunciado completo está em [`docs/CHALLENGE.md`](docs/CHALLENGE.md), e as dec
 | Item | Versão |
 | --- | --- |
 | Runtime | Bun 1.4 (imagem `oven/bun:1.4.4-alpine`) |
-| Linguagem | TypeScript 7.0 (strict, compilador nativo) |
+| Linguagem | TypeScript strict: checagem de tipos no compilador nativo 7.0 e lint com o parser do 6.0 (ver `ARCHITECTURE.md`) |
 | HTTP | NestJS 12, isolado em `src/infrastructure/framework/nest` |
 | ORM | MikroORM 7 (PostgreSQL) |
 | Banco | PostgreSQL 17.6 |
@@ -128,7 +128,7 @@ Todas as suítes que falam com banco ou fila rodam contra o PostgreSQL e o Local
 | Comando | O que roda |
 | --- | --- |
 | `bun run lint` | ESLint, incluindo o bloqueio de `parseFloat`, `Number(` e `toFixed` no código de dinheiro |
-| `bun run typecheck` | `tsc --noEmit` |
+| `bun run typecheck` | `tsc --noEmit` com o TypeScript 7 nativo |
 | `bun run test` | unitários de `src`, specs de fakes, contratos e builders em `tests/support`, e o e2e HTTP em memória |
 | `bun run test:arch` | dependency-cruiser + regras de arquitetura (business sem import externo, Nest só em `framework/nest` etc.) |
 | `bun run test:integration` | schema, triggers, repositórios, UoW, outbox, consumer SQS, worker de pendências e redrive, no PG e no LocalStack |

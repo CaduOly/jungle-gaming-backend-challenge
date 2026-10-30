@@ -194,8 +194,8 @@ Envio direto para a fila FIFO `wager-transactions-<suffix>.fifo` a 100 cmd/s (lo
 
 Ao término dos 4 cenários (~48.000 transações na fase de medição mais o warm-up, totalizando mais de 84.000 eventos publicados na outbox):
 
-- **Via API (`POST /wallets/:id/reconciliation`)**: **1.301 de 1.301 wallets** retornaram `consistent: true`, com `ledgerBalance === currentBalance` e `version === entriesCount + 1`.
-- **Via SQL direto no ledger (`findWalletInconsistencies`)**: **0 violações** — nenhuma wallet negativa, nenhuma lacuna ou duplicidade na sequência `wallet_version`, nenhum `previous_balance` desalinhado com o `balance_after` anterior e nenhuma divergência entre `wager_transactions.observed_balance` e `wallet_ledger_entries.balance_after`.
+- **Via API (`POST /wallets/:id/reconciliation`)**: **1.301 de 1.301 wallets** retornaram `consistent: true`, ou seja, o `storedBalance` da wallet bate com o `calculatedBalance` reconstruído pelo ledger, e as versões dos lançamentos são consecutivas até a `version` da wallet.
+- **Via SQL direto no ledger (`findWalletInconsistencies`)**: **0 violações** — nenhuma wallet ou lançamento com saldo negativo, nenhuma lacuna ou duplicidade na sequência `wallet_version`, nenhum `balance_before` desalinhado com o `balance_after` anterior, e o saldo da wallet igual à soma de créditos menos débitos do ledger.
 
 ---
 

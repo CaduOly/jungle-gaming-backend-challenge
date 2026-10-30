@@ -6,7 +6,7 @@ Este documento junta as decisões que não saem óbvias do código, o trade-off 
 
 O código fica em duas pastas, e a separação é verificada por `bun run test:arch` (dependency-cruiser):
 
-`src/business` -> regra pura, entidades, value objects, policies, domain services, ports e use cases. Não importa nada externo nem `infrastructure/`, e nem `Math`, `Bun` ou `process`.
+`src/business` -> regra pura, entidades, value objects, policies, domain services, ports e use cases. Não importa nada externo nem `infrastructure/`, e não usa `Bun`, `process`, relógio (`Date.now`, `new Date()` sem argumento) nem aleatoriedade (`Math.random`, `crypto.randomUUID`). Do `Math` só ficam liberadas as funções sem efeito em dinheiro, como `min`, `max` e `floor`, que o backoff usa.
 `src/infrastructure` -> adapters dos ports: MikroORM, SQS, `jose`, pino, prom-client, config, workers, e o Nest isolado em `src/infrastructure/framework/nest`.
 
 Um contexto (`wallet`, `wagering`, `messaging`) só importa outro por `entity`, `event`, `port` ou `value-object`, nunca por `use-case`. Métrica, log e tracing não entram no business, eles são decorators de use case na infraestrutura que leem o output (`status`, `idempotentReplay`, `consistent`).
@@ -17,7 +17,7 @@ A doc do Nest não prescreve camadas, e o caminho natural dela é colocar `@Inje
 
 ## Dinheiro: `bigint` e nada de arredondamento
 
-`Money` guarda o valor em centavos num `bigint` privado, e no banco tudo é `numeric(20,2)`. Eu não usei uma lib de Decimal porque o domínio só precisa de soma, subtração e comparação em escala fixa de 2 casas, então um `bigint` em centavos é exato, não tem dependência e não abre espaço para alguém configurar uma precisão ou um modo de arredondamento diferente em outro lugar. O lint bloqueia `parseFloat`, `Number(` e `toFixed` justamente para o valor nunca passar por `number`.
+`Money` guarda o valor em centavos num `bigint` privado, e no banco tudo é `numeric(20,2)`. Eu não usei uma lib de Decimal porque o domínio só precisa de soma, subtração e comparação em escala fixa de 2 casas, então um `bigint` em centavos é exato, não tem dependência e não abre espaço para alguém configurar uma precisão ou um modo de arredondamento diferente em outro lugar. O lint bloqueia `parseFloat`, `parseInt`, `Number(`, `toFixed`, `toPrecision` e a coerção por `+x`, justamente para o valor nunca passar por `number`. O `tests/arch/money-lint.spec.ts` prova cada bloqueio.
 
 A entrada aceita só string no formato `^(0|[1-9]\d{0,17})\.\d{2}$`, ou seja, exatamente duas casas, sem zero à esquerda, sem sinal, sem expoente e com no máximo 18 dígitos inteiros, que é o que cabe em `numeric(20,2)`. Não existe política de arredondamento, a política é **rejeitar**: `"25.5"`, `"1."`, `".5"`, `"1e2"`, `" 1"` e número JSON voltam 400. Se eu arredondasse, a API aceitaria um valor que o provedor não mandou, e a diferença de um centavo só apareceria na auditoria.
 
@@ -154,20 +154,23 @@ O OTel ficou de fora. A auto-instrumentação do `@opentelemetry` se apoia nos h
 
 ## TypeScript 7 (compilador nativo)
 
-O Bun transpila `.ts` nativamente em Zig para rodar a aplicação e os testes, mas não faz checagem de tipos. Quem garante `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `experimentalDecorators` e `emitDecoratorMetadata` é o `bun run typecheck` (`tsc --noEmit -p tsconfig.json`).
+O Bun transpila `.ts` sozinho para rodar a aplicação e os testes, mas não checa tipos. Quem garante `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride` e os decorators é o `bun run typecheck`, e ele roda no **TypeScript 7.0.2**, o compilador nativo em Go (pacote `@typescript/native`, apelido de `typescript@7.0.2`).
 
-Eu atualizei o projeto do TypeScript `6.0.3` (em JavaScript sobre Node/Bun) para o **TypeScript `7.0.2`** (o compilador nativo em Go, distribuído pelo pacote oficial `typescript` via `@typescript/typescript-linux-x64`). Nos 2.287 arquivos e 234.681 linhas analisados pelo `tsconfig.json` do projeto, a diferença medida com `tsc --noEmit -p tsconfig.json --diagnostics` foi:
+Medi o `--noEmit -p tsconfig.json` nesta máquina, três execuções de cada, com o cache quente:
 
-| Etapa | TypeScript 6.0.3 | TypeScript 7.0.2 | Ganho |
-| --- | --- | --- | --- |
-| Parse time | 1.330 ms (1,33 s) | 102 ms (0,102 s) | 13,04x mais rápido (-92,3%) |
-| Bind time | 460 ms (0,46 s) | 41 ms (0,041 s) | 11,22x mais rápido (-91,1%) |
-| Check time | 2.740 ms (2,74 s) | 279 ms (0,279 s) | 9,82x mais rápido (-89,8%) |
-| **Total time (`--diagnostics`)** | **4.530 ms (4,53 s)** | **428 ms (0,428 s)** | **10,58x mais rápido (-90,55%)** |
-| **`bun run typecheck` (mediana de 5 runs)** | **5.262 ms** | **605 ms** | **8,70x mais rápido (-88,50%)** |
-| Memória (RSS) | 335,7 MB | 279,1 MB | -16,88% |
+| Compilador | Tempo |
+| --- | --- |
+| TypeScript 6.0.3 (`tsc` em JavaScript) | ~2,4 s |
+| TypeScript 7.0.2 (nativo) | ~0,4 s |
 
-Como o TypeScript 7.0 não expõe a API JavaScript legada (`import * as ts from 'typescript'`), o `typescript-eslint` e o extrator `tsc` do `dependency-cruiser` exigiriam manter o TypeScript 6 instalado em paralelo (`@typescript/typescript6`). Eu preferi deixar `"typescript": "7.0.2"` puro no `package.json`: o `eslint.config.mjs` usa um processor leve sobre `Bun.Transpiler` (preservando toda a AST de expressões verificada pelas 75 regras de `tests/arch/money-lint.spec.ts`) e o `.dependency-cruiser.cjs` usa `parser: 'swc'` (`@swc/core`), mantendo `bun run lint` e `bun run test:arch` independentes do TypeScript 6.
+O ganho fica perto de **6x**. O número exato muda com a máquina e com o cache, então o que vale guardar é a ordem de grandeza.
+
+O TypeScript 7 ainda não expõe a API JavaScript (`import * as ts from 'typescript'`), e o `typescript-eslint` depende dela. Por isso o projeto mantém os dois instalados, cada um no seu papel:
+
+`@typescript/native` (7.0.2) -> só o `typecheck`.
+`typescript` (6.0.3, via `@typescript/typescript6`) -> só o parser do `typescript-eslint`, no `bun run lint`.
+
+Cheguei a testar um lint sem o TypeScript 6, rodando o ESLint sobre o JavaScript gerado pelo `Bun.Transpiler`. As regras de dinheiro continuavam passando, mas as regras de TypeScript sumiam, a linha do erro deixava de bater com o `.ts` e os metadados de decorator precisavam de um ajuste por regex. Para um projeto em que o lint é uma das barreiras contra `number` em dinheiro, preferi o lint estável. Quando o TypeScript 7 publicar a API e o `typescript-eslint` passar a suportá-la, o TypeScript 6 sai. O `dependency-cruiser` lê os imports com o parser do SWC (`parser: 'swc'`) e não depende de nenhuma das duas versões.
 
 ## Auth
 
@@ -180,7 +183,9 @@ O Keycloak fica no profile `auth` para não pesar nos testes e na carga. Health,
 
 O `PROVIDER_IDENTITY_MISMATCH` **não é persistido**. Se fosse, um provedor mal-intencionado gravaria uma linha no namespace `(provider_id, idempotency_key)` de outro provedor, e a requisição legítima depois esbarraria num replay ou num 409 que ela não causou.
 
-No SQS o consumer lê o `actorProviderId` dos atributos da mensagem (`MessageAttributes.providerId` / `ProviderId`) ou do envelope (`actorProviderId`), aplicando a mesma validação `PROVIDER_IDENTITY_MISMATCH` do use case (com ack sem persistir nada quando diverge de `data.providerId`). Quando a mensagem vem sem esse atributo no canal interno confiável, o handler faz fallback para `data.providerId`.
+No SQS não existe token. O enunciado trata a fila como canal interno confiável, mas pede que a identidade do provedor na mensagem passe pelas mesmas validações. O consumer lê o `actorProviderId` dos atributos da mensagem (`MessageAttributes.providerId`) ou do envelope e o passa como `actor`. Se ele divergir de `data.providerId`, a regra `PROVIDER_IDENTITY_MISMATCH` do use case recusa, e a mensagem recebe ack sem gravar nada. Sem o atributo, o `actor` passa a ser o próprio `data.providerId`.
+
+Isso não autentica ninguém. Quem publica na fila escolhe os dois valores, então a checagem só pega o produtor que se contradiz. A proteção real do canal é a permissão de escrita na fila (IAM na AWS). Se o canal deixar de ser confiável, o caminho é assinar a mensagem ou exigir o atributo e ligá-lo à credencial de quem publicou.
 
 ## O que não é persistido, e as colunas geradas
 
@@ -212,7 +217,7 @@ NTP -> o claim do worker de pendências usa o `IClock` da instância e não o `n
 O OTel, que era diferencial opcional, ficou de fora.
 `BALANCE_LIMIT_EXCEEDED` é um `FailureCode` a mais, para o crédito acima do máximo do `Money` ser rejeição e não erro 500.
 As respostas HTTP vêm dentro do envelope. O payload do enunciado está inteiro em `data`.
-No SQS a identidade do provedor vem de `MessageAttributes.providerId` (ou `actorProviderId` no envelope) e faz fallback para `data.providerId` quando a mensagem é publicada sem atributo no canal interno.
+No SQS a identidade do provedor não é autenticada, só checada contra o próprio payload. A garantia é a permissão de escrita na fila.
 O head-of-line da outbox troca vazão por ordem: uma mensagem que não publica segura os eventos seguintes daquela wallet até sair.
 A DLQ não tem redrive automático. Uma mensagem que caiu lá por falha permanente de infraestrutura pode ser válida, e o reenvio é manual, depois de entender a causa (esse caso sai no log como `error`, com o `sqlState`).
 O `ApproximateReceiveCount` não é usado como limite, então um consumer que morre repetidamente antes de resolver a mesma mensagem só manda ela para a DLQ pelo redrive, depois de 100 entregas.
