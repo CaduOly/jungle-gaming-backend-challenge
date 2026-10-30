@@ -190,14 +190,14 @@ O OTel ficou de fora. A auto-instrumentação do `@opentelemetry` se apoia nos h
 
 O Bun transpila `.ts` sozinho para rodar a aplicação e os testes, mas não checa tipos. Quem garante `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride` e os decorators é o `bun run typecheck`, e ele roda no **TypeScript 7.0.2**, o compilador nativo em Go (pacote `@typescript/native`, apelido de `typescript@7.0.2`).
 
-Medi o `--noEmit -p tsconfig.json` nesta máquina, três execuções de cada, com o cache quente:
+Medi o `--noEmit -p tsconfig.json` nesta máquina, cinco execuções de cada, com o projeto completo (código e testes), com o cache quente:
 
 | Compilador | Tempo |
 | --- | --- |
-| TypeScript 6.0.3 (`tsc` em JavaScript) | ~2,4 s |
-| TypeScript 7.0.2 (nativo) | ~0,4 s |
+| TypeScript 6.0.3 (`tsc` em JavaScript) | ~2,9 s |
+| TypeScript 7.0.2 (nativo) | ~0,46 s |
 
-O ganho fica perto de **6x**. O número exato muda com a máquina e com o cache, então o que vale guardar é a ordem de grandeza.
+O ganho fica perto de **6x** (6,4x na última medição). O número exato muda com a máquina e com o cache, então o que vale guardar é a ordem de grandeza.
 
 O TypeScript 7 ainda não expõe a API JavaScript (`import * as ts from 'typescript'`), e o `typescript-eslint` depende dela. Por isso o projeto mantém os dois instalados, cada um no seu papel:
 
