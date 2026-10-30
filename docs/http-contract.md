@@ -92,7 +92,7 @@ Os dois endpoints são abertos (sem token) e respondem cru, sem envelope.
 | Endpoint | Resposta |
 | --- | --- |
 | `GET /health/live` | `200 { "status": "ok" }` enquanto o processo responde. |
-| `GET /health/ready` | `200 { "status": "ready", "checks": { "postgres": "up", "sqs": "up" } }` quando todos os checks respondem. `503 { "status": "unavailable", "checks": { … "down" } }` quando algum falha, com o nome de quem caiu. |
+| `GET /health/ready` | `200 { "instanceId": "…", "roles": ["api", "consumer", "outbox", "pending-worker"], "circuitBreaker": "closed", "status": "ready", "checks": { "postgres": "up", "sqs": "up" } }` quando todos os checks respondem. `503 { "status": "unavailable", "checks": { … "down" } }` quando algum falha, com o nome de quem caiu. |
 
 - Os checks implementam o port de infra `IReadinessCheck` e entram na montagem do app. Em produção são o `PostgresReadinessCheck` (`SELECT 1` no pool) e o `SqsReadinessCheck` (`GetQueueAttributes` na fila).
 - Cada check tem um teto de `HEALTH_READINESS_TIMEOUT_MS` (padrão 1000). Um check travado conta como `down` dentro do prazo, e o probe não fica pendurado.
