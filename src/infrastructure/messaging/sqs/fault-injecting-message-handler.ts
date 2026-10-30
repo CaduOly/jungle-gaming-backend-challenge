@@ -1,7 +1,7 @@
 import type { FaultInjector } from '../../fault-injection/fault-injector';
 import type { IMessageHandler, InboundMessage, MessageOutcome } from './message-handler.port';
 
-/** `slow_handler`: holds every message for FAULT_SLOW_HANDLER_MS before handling it (shutdown tests). */
+/** `slow_handler`: segura toda mensagem por FAULT_SLOW_HANDLER_MS antes de tratar (testes de shutdown). */
 export class FaultInjectingMessageHandler implements IMessageHandler {
   constructor(
     private readonly inner: IMessageHandler,

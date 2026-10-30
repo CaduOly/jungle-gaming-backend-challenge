@@ -21,14 +21,14 @@ export interface OutboxPublisherWorkerDeps {
   readonly random?: () => number;
   readonly onRound?: OutboxPublisherWorkerOptions['onRound'];
   readonly onError?: OutboxPublisherWorkerOptions['onError'];
-  /** outbox_lag_seconds on every successful publish; nothing is measured when omitted (the tests). */
+  /** outbox_lag_seconds em todo publish com sucesso, nada é medido quando omitido (os testes). */
   readonly metrics?: WageringMetrics;
 }
 
 /**
- * The outbox repository runs on a plain fork, outside any unit of work: claimBatch, markPublished and
- * scheduleRetry are each a single autocommitted statement, so a lease is visible to the other instances
- * as soon as it is taken and no transaction stays open while SQS is called.
+ * O repository do outbox roda num fork simples, fora de qualquer unit of work: claimBatch, markPublished e
+ * scheduleRetry são cada um um único statement com autocommit, então o lease fica visível para as outras
+ * instâncias assim que é pego e nenhuma transação fica aberta enquanto o SQS é chamado.
  */
 export const createOutboxPublisherWorker = (deps: OutboxPublisherWorkerDeps): OutboxPublisherWorker => {
   const faults = deps.faults ?? FaultInjector.none();

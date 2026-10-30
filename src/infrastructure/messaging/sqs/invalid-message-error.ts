@@ -1,6 +1,6 @@
 import type { DeadLetterReason } from './message-handler.port';
 
-/** Raised by a handler when the message can never be processed as sent: it goes to the DLQ, never retried. */
+/** Lançado pelo handler quando a mensagem nunca vai poder ser processada do jeito que veio: vai para a DLQ, sem retry. */
 export class InvalidMessageError extends Error {
   constructor(
     readonly reason: DeadLetterReason,

@@ -12,8 +12,8 @@ export class PublishTimeoutError extends Error {
 }
 
 /**
- * Bounds a publish so a round always fits in its lease. A publish that times out may still reach the broker;
- * it is then retried and published twice, which at-least-once delivery and eventId dedup already absorb.
+ * Limita o publish para a rodada sempre caber no lease. Um publish que deu timeout ainda pode chegar no broker, aí
+ * ele é retentado e publicado duas vezes, o que a entrega at-least-once e o dedup por eventId já absorvem.
  */
 export class TimeoutMessagePublisher implements IMessagePublisher {
   constructor(

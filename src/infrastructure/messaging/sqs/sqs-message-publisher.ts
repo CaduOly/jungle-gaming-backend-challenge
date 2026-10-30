@@ -11,8 +11,9 @@ export interface SqsMessagePublisherOptions {
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
 
 /**
- * One FIFO group per aggregate keeps a wallet's events in order; the eventId as deduplication id makes a
- * republish inside SQS's 5-minute window a no-op. Past that window consumers still dedupe by eventId.
+ * Um grupo FIFO por aggregate mantém os eventos de uma wallet em ordem, e o eventId como deduplication id faz um
+ * republish dentro da janela de 5 minutos do SQS virar no-op. Passada essa janela os consumers ainda fazem dedup
+ * por eventId.
  */
 export class SqsMessagePublisher implements IMessagePublisher {
   private readonly queueUrl: SqsQueueUrl;

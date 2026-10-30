@@ -1,11 +1,11 @@
 export const DeadLetterReason = {
   INVALID_JSON: 'invalid_json',
   INVALID_SCHEMA: 'invalid_schema',
-  /** Valid shape, forbidden content (e.g. kind OPENING from a provider). */
+  /** Formato válido, conteúdo proibido (ex. kind OPENING vindo de um provider). */
   CONTRACT_VIOLATION: 'contract_violation',
   INBOX_PAYLOAD_MISMATCH: 'inbox_payload_mismatch',
   PERMANENT_INFRASTRUCTURE: 'permanent_infrastructure',
-  /** Still failing after every in-process attempt of the last receive allowed by maxReceiveCount. */
+  /** Ainda falhando depois de todas as tentativas in-process do último receive permitido pelo maxReceiveCount. */
   RETRIES_EXHAUSTED: 'retries_exhausted',
 } as const;
 
@@ -13,7 +13,7 @@ export type DeadLetterReason = (typeof DeadLetterReason)[keyof typeof DeadLetter
 
 export type MessageOutcome =
   | { readonly kind: 'ack' }
-  /** Without `delayMs` the consumer picks the backoff from the receive count. */
+  /** Sem `delayMs` o consumer escolhe o backoff pelo receive count. */
   | { readonly kind: 'retry'; readonly delayMs?: number }
   | { readonly kind: 'dead-letter'; readonly reason: DeadLetterReason; readonly detail?: string };
 
@@ -25,12 +25,12 @@ export const MessageOutcome = {
 } as const;
 
 export interface InboundMessage {
-  /** JSON.parse of the SQS body. The handler validates its shape (schema errors → dead letter). */
+  /** JSON.parse do body do SQS. O handler valida o formato (erro de schema → dead letter). */
   readonly body: unknown;
   readonly rawBody: string;
-  /** SQS MessageId. The provider's own `messageId`, used by the inbox, lives inside `body`. */
+  /** MessageId do SQS. O `messageId` do próprio provider, usado pelo inbox, fica dentro do `body`. */
   readonly sqsMessageId: string;
-  /** ApproximateReceiveCount: 1 on the first delivery. */
+  /** ApproximateReceiveCount: 1 na primeira entrega. */
   readonly receiveCount: number;
   readonly messageGroupId?: string;
   readonly sentAt?: Date;
@@ -38,9 +38,10 @@ export interface InboundMessage {
 }
 
 /**
- * The pluggable unit of work of the SQS consumer (the wager command handler plugs ProcessWagerTransaction in). It may return an
- * outcome or throw: thrown errors go through classifyMessageError. Acking happens only after it resolves,
- * so the handler must commit before returning `ack`. `signal` is aborted only when shutdown times out.
+ * A unidade de trabalho plugável do consumer SQS (o wager command handler pluga o ProcessWagerTransaction). Pode
+ * retornar um outcome ou lançar erro, e erro lançado passa pelo classifyMessageError. O ack só acontece depois que
+ * ele resolve, então o handler tem que commitar antes de retornar `ack`. O `signal` só é abortado quando o shutdown
+ * dá timeout.
  */
 export interface IMessageHandler {
   handle(message: InboundMessage, signal: AbortSignal): Promise<MessageOutcome>;

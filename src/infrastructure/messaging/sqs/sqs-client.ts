@@ -3,7 +3,7 @@ import type { SqsConfig } from '../../config/sqs-config';
 
 export type SqsClientConfig = Pick<SqsConfig, 'endpoint' | 'region' | 'credentials' | 'maxAttempts'>;
 
-/** Path-style queue urls from LocalStack must not override the endpoint, hence useQueueUrlAsEndpoint: false. */
+/** As queue urls path-style do LocalStack não podem sobrescrever o endpoint, por isso useQueueUrlAsEndpoint: false. */
 export const createSqsClient = (config: SqsClientConfig): SQSClient =>
   new SQSClient({
     region: config.region,

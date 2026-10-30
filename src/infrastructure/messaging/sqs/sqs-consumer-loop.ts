@@ -46,7 +46,7 @@ export interface MessageOutcomeEvent {
   readonly message: InboundMessage | { readonly sqsMessageId: string; readonly receiveCount: number };
   readonly outcome: MessageOutcome;
   readonly durationMs: number;
-  /** The outcome came from a thrown error classified as transient infrastructure. */
+  /** O outcome veio de um erro lançado classificado como infraestrutura transiente. */
   readonly transient: boolean;
 }
 
@@ -56,20 +56,20 @@ export interface SqsConsumerLoopDeps {
   readonly deadLetterQueue: SqsQueueRef;
   readonly handler: IMessageHandler;
   readonly config: SqsConsumerConfig;
-  /** Throws (or rejects) while a dependency such as PostgreSQL is not ready; feeds the circuit breaker. */
+  /** Lança (ou rejeita) enquanto uma dependência como o PostgreSQL não está ready, alimenta o circuit breaker. */
   readonly readiness: () => Promise<void>;
   readonly clock?: IClock;
   readonly random?: () => number;
   readonly faults?: FaultInjector;
   readonly requestTimeoutMs?: number;
-  /** Hooks for the metrics/log decorators. */
+  /** Hooks para os decorators de métricas/log. */
   readonly onOutcome?: (event: MessageOutcomeEvent) => unknown;
   readonly onError?: (error: unknown, operation: string) => unknown;
   readonly onCircuitStateChange?: (state: CircuitState) => void;
 }
 
 export interface StopResult {
-  /** False when the shutdown timeout expired with messages still in flight. */
+  /** False quando o timeout do shutdown estourou com mensagens ainda em andamento. */
   readonly graceful: boolean;
 }
 
@@ -88,12 +88,12 @@ const toVisibilitySeconds = (delayMs: number): number =>
 const truncate = (value: string): string =>
   value.length <= MAX_DETAIL_LENGTH ? value : `${value.slice(0, MAX_DETAIL_LENGTH - 1)}…`;
 
-/** An observer must never stop the consumer, whether it throws or returns a rejected promise. */
+/** Um observer nunca pode parar o consumer, seja lançando erro ou retornando promise rejeitada. */
 const observe = (callback: () => unknown): void => {
   try {
     Promise.resolve(callback()).catch(() => undefined);
   } catch {
-    // see above
+    // ver acima
   }
 };
 
@@ -102,7 +102,7 @@ const isAbort = (error: unknown): boolean =>
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-/** Resolves after `ms`, or as soon as `signal` aborts. */
+/** Resolve depois de `ms`, ou assim que o `signal` abortar. */
 const pause = (ms: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve) => {
     if (signal.aborted) {
@@ -118,12 +118,12 @@ const pause = (ms: number, signal: AbortSignal): Promise<void> =>
     signal.addEventListener('abort', done, { once: true });
   });
 
-/** Settled: acked or dead-lettered. Handed back: returned to SQS with a visibility delay, still unprocessed. */
+/** Settled: ack ou dead letter. Handed back: devolvida ao SQS com delay de visibility, ainda sem processar. */
 type Disposition = { readonly handedBack: false } | { readonly handedBack: true; readonly visibilitySeconds: number };
 
 const SETTLED: Disposition = { handedBack: false };
 
-/** Thrown into onError (operation `heartbeat`) for each entry SQS refused to extend. */
+/** Vai para o onError (operation `heartbeat`) para cada entrada que o SQS recusou estender. */
 export class VisibilityExtensionRejectedError extends Error {
   override readonly name = 'VisibilityExtensionRejectedError';
 
@@ -137,31 +137,30 @@ export class VisibilityExtensionRejectedError extends Error {
 }
 
 /**
- * Long-polls the commands queue and hands each message to the handler. Messages of one FIFO group are
- * handled in order, groups in parallel. Every message of the batch keeps its visibility extended by a
- * heartbeat until it is settled. Settling: ack → DeleteMessage (only after the handler resolved, i.e.
- * after its commit); dead letter → explicit SendMessage to the DLQ, then delete.
+ * Faz long-poll da fila de comandos e entrega cada mensagem ao handler. Mensagens do mesmo grupo FIFO são
+ * tratadas em ordem, e os grupos em paralelo. Toda mensagem do batch tem a visibility estendida por um heartbeat
+ * até ser settled. Settle: ack → DeleteMessage (só depois que o handler resolveu, ou seja, depois do commit);
+ * dead letter → SendMessage explícito para a DLQ e depois delete.
  *
- * Retry stays in the process, and so does the count that sends a message to the DLQ. A failed message is
- * attempted again here, with backoff, while the heartbeat keeps it and the rest of its group invisible.
- * After a failure the readiness probe runs first: while PostgreSQL is down the failure does not count and
- * the handler is not called again until the probe passes (the breaker paces the probes). Once the message
- * itself failed maxInProcessAttempts times in a row it is dead-lettered explicitly (retries_exhausted). It
- * goes back to SQS only on stop, with a backoff visibility, and the rest of its group in the batch goes back
- * with the same visibility.
+ * O retry fica no processo, e a contagem que manda a mensagem para a DLQ também. Mensagem que falhou é tentada de
+ * novo aqui, com backoff, enquanto o heartbeat mantém ela e o resto do grupo invisíveis. Depois de uma falha o
+ * readiness probe roda primeiro: enquanto o PostgreSQL está fora a falha não conta e o handler não é chamado de
+ * novo até o probe passar (o breaker dita o ritmo dos probes). Quando a própria mensagem falhou
+ * maxInProcessAttempts vezes seguidas ela vai para a DLQ explicitamente (retries_exhausted). Ela só volta para o
+ * SQS no stop, com visibility de backoff, e o resto do grupo no batch volta com a mesma visibility.
  *
- * Why not the SQS receive count: it counts deliveries, not failures. A tail handed back with its head, or a
- * batch handed back on a stop or deploy, gains receives without ever failing, so any decision taken on
- * ApproximateReceiveCount (ours or the redrive's) could dead-letter a command that was never processed.
- * Here the DLQ decision only counts the message's own failures inside one delivery, so it never fires
- * early; a stop restarts that count, which can only delay a dead letter, never bring it forward. The
- * redrive policy stays as the net for a consumer that crashes before settling, and its maxReceiveCount must
- * sit far above anything stops and deploys can reach (100 by default): it is not the retry limit.
+ * Por que não o receive count do SQS: ele conta entregas, não falhas. Uma tail devolvida junto com a head, ou um
+ * batch devolvido num stop ou deploy, ganha receives sem nunca ter falhado, então qualquer decisão tomada em cima
+ * do ApproximateReceiveCount (nossa ou do redrive) poderia mandar para a DLQ um comando que nunca foi processado.
+ * Aqui a decisão da DLQ só conta as falhas da própria mensagem dentro de uma entrega, então nunca dispara antes da
+ * hora; um stop reinicia essa contagem, o que só pode atrasar um dead letter, nunca adiantar. A redrive policy fica
+ * como rede para um consumer que cai antes do settle, e o maxReceiveCount dela tem que ficar bem acima de qualquer
+ * coisa que stops e deploys alcancem (100 por default), ele não é o limite de retry.
  *
- * FIFO order: on AWS a group with a message in flight delivers nothing else, so the tail can never pass
- * the head. LocalStack does not honour that block: a message of a group can be received while an older one
- * of the same group is still in flight. That is why the tail goes back with the head's visibility instead
- * of 0, and why the order tests against LocalStack run a single consumer.
+ * Ordem FIFO: na AWS um grupo com mensagem em andamento não entrega mais nada, então a tail nunca passa a head.
+ * O LocalStack não respeita esse bloqueio, uma mensagem do grupo pode ser recebida enquanto uma mais antiga do
+ * mesmo grupo ainda está em andamento. Por isso a tail volta com a visibility da head em vez de 0, e por isso os
+ * testes de ordem contra o LocalStack rodam um consumer só.
  */
 export class SqsConsumerLoop {
   readonly breaker: CircuitBreaker;
@@ -173,7 +172,7 @@ export class SqsConsumerLoop {
   private readonly clock: IClock;
   private readonly requestTimeoutMs: number;
   private receiveAbort: AbortController | undefined;
-  /** Messages whose final SQS call (delete, dead letter, hand back) has started: the heartbeat leaves them alone. */
+  /** Mensagens cuja chamada final no SQS (delete, dead letter, hand back) já começou, o heartbeat não mexe nelas. */
   private readonly leaving = new WeakSet<Received>();
   private handlerAbort = new AbortController();
   private stopAbort = new AbortController();
@@ -225,10 +224,10 @@ export class SqsConsumerLoop {
   }
 
   /**
-   * Stops polling (aborting the long poll and any in-process retry wait), lets the handlers in flight finish,
-   * hands a message waiting for a retry back with its backoff visibility, the received but not started ones
-   * back with visibility 0, and resolves. After `timeoutMs` it gives up waiting and aborts the
-   * handlers' signal; whatever is unsettled reappears once its visibility timeout expires.
+   * Para o polling (abortando o long poll e qualquer espera de retry in-process), deixa os handlers em andamento
+   * terminarem, devolve a mensagem que espera retry com a visibility de backoff, as recebidas mas não iniciadas com
+   * visibility 0, e resolve. Depois de `timeoutMs` desiste de esperar e aborta o signal dos handlers, e o que não
+   * foi settled reaparece quando o visibility timeout dele expira.
    */
   async stop(timeoutMs: number = this.deps.config.shutdownTimeoutMs): Promise<StopResult> {
     const stopped = this.loop.stop();
@@ -381,8 +380,8 @@ export class SqsConsumerLoop {
   }
 
   /**
-   * Waits, without calling the handler, until the readiness probe passes (true) or the consumer stops (false).
-   * While the breaker is open nothing is probed; half-open lets one probe through.
+   * Espera, sem chamar o handler, até o readiness probe passar (true) ou o consumer parar (false).
+   * Com o breaker aberto não tem probe nenhum, e half-open deixa passar um probe.
    */
   private async untilReady(): Promise<boolean> {
     while (!this.loop.isStopping) {
@@ -407,7 +406,7 @@ export class SqsConsumerLoop {
     }
   }
 
-  /** Feeds the breaker; false while a dependency such as PostgreSQL is not ready. */
+  /** Alimenta o breaker, false enquanto uma dependência como o PostgreSQL não está ready. */
   private async probeReadiness(): Promise<boolean> {
     try {
       await this.deps.readiness();
@@ -498,12 +497,12 @@ export class SqsConsumerLoop {
   }
 
   /**
-   * Sets the visibility to visibilityTimeout plus the time already spent since the receive. On AWS that only
-   * holds the message a little longer after a crash; on LocalStack it is required, because LocalStack
-   * expires the receipt handle at receive time + the last visibility set, so a plain extension would make
-   * the final DeleteMessage fail with "The receipt handle has expired". A message whose final call already
-   * started is skipped, and so is a refusal that raced with it (the message is gone, nothing to report);
-   * any other refused entry goes to onError as VisibilityExtensionRejectedError.
+   * Define a visibility como visibilityTimeout mais o tempo já gasto desde o receive. Na AWS isso só segura a
+   * mensagem um pouco mais depois de um crash, mas no LocalStack é obrigatório, já que ele expira o receipt handle
+   * em tempo do receive + última visibility definida, então uma extensão simples faria o DeleteMessage final falhar
+   * com "The receipt handle has expired". Mensagem cuja chamada final já começou é pulada, e recusa que correu junto
+   * com ela também (a mensagem já foi, nada a reportar); qualquer outra entrada recusada vai para o onError como
+   * VisibilityExtensionRejectedError.
    */
   private async extendVisibility(candidates: Received[]): Promise<void> {
     const messages = candidates.filter((message) => !this.leaving.has(message));

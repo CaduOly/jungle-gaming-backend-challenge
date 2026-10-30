@@ -2,10 +2,10 @@ import { TransientInfrastructureError } from '../../error/transient-infrastructu
 import type { IMessageHandler, InboundMessage, MessageOutcome } from './message-handler.port';
 
 /**
- * Bounds one attempt. A database that stops answering (paused, partitioned) would otherwise hold the attempt
- * forever, and the consumer would never probe readiness nor open its breaker. Past the timeout the attempt is a
- * transient failure: the consumer checks readiness, which does not count the failure while PostgreSQL is down.
- * The abandoned attempt may still commit later; the retry then finds the inbox processed and replays.
+ * Limita uma tentativa. Sem isso um banco que para de responder (pausado, particionado) seguraria a tentativa para
+ * sempre, e o consumer nunca checaria readiness nem abriria o breaker. Passou do timeout a tentativa é falha
+ * transiente, o consumer checa readiness, que não conta a falha enquanto o PostgreSQL está fora.
+ * A tentativa abandonada ainda pode commitar depois, aí o retry encontra o inbox processado e faz replay.
  */
 export class TimeoutMessageHandler implements IMessageHandler {
   constructor(

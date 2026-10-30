@@ -6,17 +6,17 @@ export type PublishOutboxRound = IUseCase<void, PublishOutboxBatchOutput>;
 
 export interface OutboxPublisherWorkerOptions {
   readonly pollIntervalMs: number;
-  /** Output of every finished round; the hook the metrics decorator plugs into. */
+  /** Saída de toda rodada terminada, é o hook onde o decorator de métricas se pluga. */
   readonly onRound?: (output: PublishOutboxBatchOutput) => unknown;
-  /** A round that threw (database down, for instance). The loop keeps going after the poll interval. */
+  /** Rodada que lançou erro (banco fora, por exemplo). O loop continua depois do poll interval. */
   readonly onError?: (error: unknown) => unknown;
 }
 
 /**
- * Polls the outbox, one round at a time. A round that published something is followed right away by the
- * next one, to drain a backlog; an empty or failing round waits for the poll interval. `createRound` is
- * called per round so every round gets a fresh EntityManager fork. After `stop()` resolves the worker can be
- * started again; starting it while a stop is still waiting for its round throws.
+ * Faz polling do outbox, uma rodada por vez. Rodada que publicou alguma coisa é seguida na hora pela próxima, para
+ * drenar backlog, e rodada vazia ou com falha espera o poll interval. O `createRound` é chamado por rodada para cada
+ * uma ganhar um fork novo do EntityManager. Depois que o `stop()` resolve o worker pode ser iniciado de novo, mas
+ * iniciar enquanto um stop ainda espera a rodada dele lança erro.
  */
 export class OutboxPublisherWorker {
   private readonly loop: PollingLoop<PublishOutboxBatchOutput>;
@@ -46,7 +46,7 @@ export class OutboxPublisherWorker {
     return this.createRound().execute();
   }
 
-  /** Stops polling and resolves once the round in flight, if any, has finished. */
+  /** Para o polling e resolve quando a rodada em andamento, se tiver, terminar. */
   stop(): Promise<void> {
     return this.loop.stop();
   }

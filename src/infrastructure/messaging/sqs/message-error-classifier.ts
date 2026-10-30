@@ -10,9 +10,9 @@ import { DeadLetterReason, MessageOutcome } from './message-handler.port';
 export interface ClassifiedError {
   readonly outcome: MessageOutcome;
   /**
-   * Infrastructure trouble, for the outcome observers (metrics). It does not feed the circuit breaker by
-   * itself: after every failed attempt the consumer probes readiness, and that probe is what feeds it, so a
-   * lock timeout on one hot wallet never pauses the whole consumer.
+   * Problema de infraestrutura, para os observers de outcome (métricas). Sozinho não alimenta o circuit breaker:
+   * depois de toda tentativa que falha o consumer faz o probe de readiness, e é esse probe que alimenta, então um
+   * lock timeout numa wallet quente nunca pausa o consumer inteiro.
    */
   readonly transient: boolean;
 }
@@ -25,9 +25,10 @@ const deadLetter = (reason: DeadLetterReason, error: unknown): ClassifiedError =
 });
 
 /**
- * business rule → ack (the rejection is the answer); transient infrastructure → retry with backoff;
- * permanent (bad message, inbox hash mismatch, integrity guard, any other domain invariant) → DLQ.
- * Anything unrecognised is retried too, and dead-lettered as retries_exhausted once the retries run out.
+ * regra de negócio → ack (a rejeição é a resposta); infraestrutura transiente → retry com backoff;
+ * permanente (mensagem ruim, hash do inbox divergente, guarda de integridade, qualquer outra invariante do domínio)
+ * → DLQ. Qualquer coisa não reconhecida também tem retry, e vai para a DLQ como retries_exhausted quando os retries
+ * acabam.
  */
 export const classifyMessageError = (error: unknown): ClassifiedError => {
   if (error instanceof BusinessRuleError || error instanceof InboxMessageAlreadyProcessedError) {

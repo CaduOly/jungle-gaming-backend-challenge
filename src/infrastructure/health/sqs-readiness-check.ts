@@ -1,7 +1,7 @@
 import { GetQueueAttributesCommand, type SQSClient } from '@aws-sdk/client-sqs';
 import type { IReadinessCheck } from './readiness-check.port';
 
-/** GetQueueAttributes on the queue the instance depends on: reachable, authorized and the queue exists. */
+/** GetQueueAttributes na fila que a instância depende: acessível, autorizada e a fila existe. */
 export class SqsReadinessCheck implements IReadinessCheck {
   readonly name = 'sqs';
 

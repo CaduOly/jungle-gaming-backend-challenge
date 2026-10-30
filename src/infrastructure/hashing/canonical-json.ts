@@ -6,10 +6,10 @@ const isPlainObject = (value: object): boolean => {
 const byCodeUnit = ([a]: [string, unknown], [b]: [string, unknown]): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
- * JSON with the keys of every object sorted and no whitespace, so equal data always gives the same text.
- * A property holding `undefined` is left out, exactly as JSON.stringify does: `{ a: undefined }` and `{}` are the
- * same document. Anything JSON cannot represent faithfully (bigint, non-finite numbers, functions, class
- * instances such as Date or Money) throws instead of being silently coerced into something else.
+ * JSON com as chaves de todo objeto ordenadas e sem espaço, então dado igual sempre gera o mesmo texto.
+ * Propriedade com `undefined` fica de fora, exatamente como o JSON.stringify faz: `{ a: undefined }` e `{}` são o
+ * mesmo documento. Qualquer coisa que o JSON não representa fielmente (bigint, número não finito, função, instância
+ * de classe como Date ou Money) lança erro em vez de ser convertida em silêncio para outra coisa.
  */
 export const canonicalJson = (value: unknown): string => {
   if (value === null) return 'null';
