@@ -9,7 +9,7 @@ O enunciado completo está em [`docs/CHALLENGE.md`](docs/CHALLENGE.md), e as dec
 | Item | Versão |
 | --- | --- |
 | Runtime | Bun 1.4 (imagem `oven/bun:1.4.4-alpine`) |
-| Linguagem | TypeScript strict |
+| Linguagem | TypeScript 7.0 (strict, compilador nativo) |
 | HTTP | NestJS 12, isolado em `src/infrastructure/framework/nest` |
 | ORM | MikroORM 7 (PostgreSQL) |
 | Banco | PostgreSQL 17.6 |

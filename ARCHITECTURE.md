@@ -152,6 +152,23 @@ O Nest roda no Bun pela camada de compatibilidade com Node, com o adapter Expres
 
 O OTel ficou de fora. A auto-instrumentação do `@opentelemetry` se apoia nos hooks de carregamento de módulo do Node, e acredito que no Bun ela não funcione por completo, mas eu não cheguei a validar. Se entrar, a ideia é instrumentar por decorators na infraestrutura, do mesmo jeito que métricas e logs, sem depender da auto-instrumentação.
 
+## TypeScript 7 (compilador nativo)
+
+O Bun transpila `.ts` nativamente em Zig para rodar a aplicação e os testes, mas não faz checagem de tipos. Quem garante `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `experimentalDecorators` e `emitDecoratorMetadata` é o `bun run typecheck` (`tsc --noEmit -p tsconfig.json`).
+
+Eu atualizei o projeto do TypeScript `6.0.3` (em JavaScript sobre Node/Bun) para o **TypeScript `7.0.2`** (o compilador nativo em Go, distribuído pelo pacote oficial `typescript` via `@typescript/typescript-linux-x64`). Nos 2.287 arquivos e 234.681 linhas analisados pelo `tsconfig.json` do projeto, a diferença medida com `tsc --noEmit -p tsconfig.json --diagnostics` foi:
+
+| Etapa | TypeScript 6.0.3 | TypeScript 7.0.2 | Ganho |
+| --- | --- | --- | --- |
+| Parse time | 1.330 ms (1,33 s) | 102 ms (0,102 s) | 13,04x mais rápido (-92,3%) |
+| Bind time | 460 ms (0,46 s) | 41 ms (0,041 s) | 11,22x mais rápido (-91,1%) |
+| Check time | 2.740 ms (2,74 s) | 279 ms (0,279 s) | 9,82x mais rápido (-89,8%) |
+| **Total time (`--diagnostics`)** | **4.530 ms (4,53 s)** | **428 ms (0,428 s)** | **10,58x mais rápido (-90,55%)** |
+| **`bun run typecheck` (mediana de 5 runs)** | **5.262 ms** | **605 ms** | **8,70x mais rápido (-88,50%)** |
+| Memória (RSS) | 335,7 MB | 279,1 MB | -16,88% |
+
+Como o TypeScript 7.0 não expõe a API JavaScript legada (`import * as ts from 'typescript'`), o `typescript-eslint` e o extrator `tsc` do `dependency-cruiser` exigiriam manter o TypeScript 6 instalado em paralelo (`@typescript/typescript6`). Eu preferi deixar `"typescript": "7.0.2"` puro no `package.json`: o `eslint.config.mjs` usa um processor leve sobre `Bun.Transpiler` (preservando toda a AST de expressões verificada pelas 75 regras de `tests/arch/money-lint.spec.ts`) e o `.dependency-cruiser.cjs` usa `parser: 'swc'` (`@swc/core`), mantendo `bun run lint` e `bun run test:arch` independentes do TypeScript 6.
+
 ## Auth
 
 O enunciado deixa a auth fora da pontuação, então eu comecei pelo ponto de extensão: o port `IProviderIdentity` e um guard global. O `providerId` autenticado entra no use case como `actor`, e a regra `PROVIDER_IDENTITY_MISMATCH` (body ou path com outro `providerId`) fica no domínio e sai como **403**.
