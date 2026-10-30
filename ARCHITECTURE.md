@@ -210,10 +210,10 @@ Cheguei a testar um lint sem o TypeScript 6, rodando o ESLint sobre o JavaScript
 
 O enunciado deixa a auth fora da pontuação, então eu comecei pelo ponto de extensão: o port `IProviderIdentity` e um guard global. O `providerId` autenticado entra no use case como `actor`, e a regra `PROVIDER_IDENTITY_MISMATCH` (body ou path com outro `providerId`) fica no domínio e sai como **403**.
 
-`AUTH_MODE=noop` -> `DevProviderIdentity`, o padrão. Aceita `Authorization: Bearer dev:<providerId>` e não prova nada. Serve para desenvolvimento e para os testes.
-`AUTH_MODE=jwks` -> `JwksProviderIdentity`, com `jose`. Verifica a assinatura contra o JWKS do Keycloak, `iss`, `aud` e `exp`/`nbf`, e tira o provedor da claim `provider_id`. Cada provedor é um client confidencial `client_credentials` no realm `wagering`. Toda recusa é o mesmo 401 para quem chamou, e o motivo só vai para o log. Se o JWKS não puder ser buscado, o IdP está fora, o que não diz nada sobre o token, então é 503 e não 401.
+`AUTH_MODE=noop` -> `DevProviderIdentity`, atalho de dev que precisa ser pedido explicitamente. Aceita `Authorization: Bearer dev:<providerId>` e não prova nada. Serve para desenvolvimento e para os testes.
+`AUTH_MODE=jwks` -> `JwksProviderIdentity`, com `jose`, o padrão. Verifica a assinatura contra o JWKS do Keycloak, `iss`, `aud` e `exp`/`nbf`, e tira o provedor da claim `provider_id`. Cada provedor é um client confidencial `client_credentials` no realm `wagering`. Toda recusa é o mesmo 401 para quem chamou, e o motivo só vai para o log. Se o JWKS não puder ser buscado, o IdP está fora, o que não diz nada sobre o token, então é 503 e não 401.
 
-O Keycloak sobe junto no `docker compose up`, mas a API só passa a exigir os tokens dele com `AUTH_MODE=jwks`. O padrão é `noop`, para o avaliador testar pelo Swagger sem precisar emitir token, e a carga não sobe o Keycloak. Health, `/metrics`, `/docs` e `/i18n` ficam abertos.
+O Keycloak sobe junto no `docker compose up` e a API exige os tokens dele desde o início, como em produção. Sem `AUTH_MODE` a aplicação cai em `jwks`, então esquecer a variável fecha a API em vez de abrir. O `noop` fica para dev (`AUTH_MODE=noop` no `.env`), para os testes de regra de negócio e para a carga, que mede o caminho do dinheiro e não sobe o Keycloak. A autenticação real tem a suíte própria, `bun run test:auth`. Health, `/metrics`, `/docs` e `/i18n` ficam abertos.
 
 O `PROVIDER_IDENTITY_MISMATCH` **não é persistido**. Se fosse, um provedor mal-intencionado gravaria uma linha no namespace `(provider_id, idempotency_key)` de outro provedor, e a requisição legítima depois esbarraria num replay ou num 409 que ela não causou.
 

@@ -8,9 +8,15 @@ const JWKS = {
 };
 
 describe('readAuthConfig', () => {
-  it('defaults to the no-op identity', () => {
-    expect(readAuthConfig({})).toEqual({ mode: 'noop' });
-    expect(readAuthConfig({ AUTH_MODE: ' ' })).toEqual({ mode: 'noop' });
+  it('defaults to JWKS, so a missing AUTH_MODE never opens the API', () => {
+    const { AUTH_MODE: _, ...settings } = JWKS;
+    expect(readAuthConfig(settings)).toMatchObject({ mode: 'jwks' });
+    expect(readAuthConfig({ ...settings, AUTH_MODE: ' ' })).toMatchObject({ mode: 'jwks' });
+    expect(() => readAuthConfig({})).toThrow('AUTH_JWKS_URL');
+  });
+
+  it('only uses the no-op identity when asked for', () => {
+    expect(readAuthConfig({ AUTH_MODE: 'noop' })).toEqual({ mode: 'noop' });
   });
 
   it('reads the JWKS settings, with the API as the default audience', () => {

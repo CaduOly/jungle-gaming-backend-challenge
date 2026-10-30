@@ -25,11 +25,12 @@ const url = (env: Env, name: string): string => {
 };
 
 /**
- * AUTH_MODE=noop (default): DevProviderIdentity, token fake que não prova nada (desenvolvimento e testes).
- * AUTH_MODE=jwks: token de verdade do IdP, verificado contra AUTH_JWKS_URL, AUTH_ISSUER e AUTH_AUDIENCE.
+ * AUTH_MODE=jwks (default): token de verdade do IdP, verificado contra AUTH_JWKS_URL, AUTH_ISSUER e AUTH_AUDIENCE.
+ * AUTH_MODE=noop: DevProviderIdentity, token fake que não prova nada. Só existe para dev e testes e tem que ser pedido
+ * explicitamente, assim esquecer a variável nunca abre a API.
  */
 export const readAuthConfig = (env: Env): AuthConfig => {
-  const mode = env.AUTH_MODE?.trim() || 'noop';
+  const mode = env.AUTH_MODE?.trim() || 'jwks';
   if (mode === 'noop') return { mode };
   if (mode !== 'jwks') throw new Error(`Invalid AUTH_MODE: "${mode}" (expected noop or jwks)`);
   return {

@@ -22,7 +22,7 @@
     "test:sweep": "bun run tests/support/sweep-test-resources.ts",
     "test:auth": "bun test --timeout 30000 ./tests/auth",
     "test:load": "bun run tests/load/run.ts",
-    "infra:up": "docker compose up -d --wait postgres localstack",
+    "infra:up": "docker compose up -d --wait postgres localstack keycloak",
     "infra:down": "docker compose down",
     "start:in-memory": "bun run tests/e2e/support/serve-in-memory.ts"
   },

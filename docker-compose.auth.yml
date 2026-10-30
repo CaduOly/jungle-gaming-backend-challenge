@@ -1,6 +1,5 @@
 # Keycloak. Sobe junto no `docker compose up`. Um client confidencial por game provider (client_credentials), e
-# cada token carrega a claim `provider_id` e a audience `wagering-api`. Para a API exigir esses tokens:
-#   AUTH_MODE=jwks docker compose up -d --build
+# cada token carrega a claim `provider_id` e a audience `wagering-api`. A API exige esses tokens por padrão.
 # O KC_HOSTNAME fixa o issuer na URL que os providers usam, então um token pego do host e um pego dentro da rede
 # têm o mesmo `iss`.
 

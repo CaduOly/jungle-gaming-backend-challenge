@@ -7,6 +7,8 @@
 # O banco e as filas são criados a cada execução pelo runner e passados nas variáveis LOAD_*.
 
 x-load-env: &load-env
+  # A carga mede o caminho do dinheiro, não o IdP: o Keycloak não sobe aqui e as réplicas aceitam o token de dev.
+  AUTH_MODE: noop
   DATABASE_URL: ${LOAD_DATABASE_URL:?set by tests/load/run.ts}
   SQS_COMMANDS_QUEUE_NAME: ${LOAD_COMMANDS_QUEUE:?set by tests/load/run.ts}
   SQS_COMMANDS_DLQ_NAME: ${LOAD_COMMANDS_DLQ:?set by tests/load/run.ts}

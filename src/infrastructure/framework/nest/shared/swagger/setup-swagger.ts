@@ -11,7 +11,7 @@ export const createOpenApiDocument = (app: INestApplication): OpenAPIObject =>
           '{ code, message, data, timestamp, detailsMessage[] }; detailsMessage[].message is an i18n key (see GET /i18n).',
       )
       .setVersion('1.0.0')
-      .addBearerAuth({ type: 'http', scheme: 'bearer', description: 'Development: "dev:<providerId>".' })
+      .addBearerAuth({ type: 'http', scheme: 'bearer', description: 'Keycloak client_credentials access token (realm wagering). With AUTH_MODE=noop: "dev:<providerId>".' })
       .build(),
   );
 

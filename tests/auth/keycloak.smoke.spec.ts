@@ -23,7 +23,7 @@ const fetchToken = async (providerId: string, secret = `${providerId}-secret`): 
   return ((await response.json()) as { access_token: string }).access_token;
 };
 
-describe('Keycloak (auth profile)', () => {
+describe('Keycloak', () => {
   let http: InMemoryHttpApp;
   let call: ReturnType<typeof client>;
   const identity = JwksProviderIdentity.remote({ jwksUrl: JWKS_URL, issuer: REALM_URL, audience: 'wagering-api' });
@@ -31,7 +31,7 @@ describe('Keycloak (auth profile)', () => {
   beforeAll(async () => {
     const discovery = await fetch(`${REALM_URL}/.well-known/openid-configuration`).catch(() => undefined);
     if (discovery?.ok !== true) {
-      throw new Error(`Keycloak is not reachable at ${KEYCLOAK_URL}; start it with the auth profile first`);
+      throw new Error(`Keycloak is not reachable at ${KEYCLOAK_URL}; start it with docker compose up first`);
     }
     http = await startInMemoryHttpApp({
       env: { AUTH_MODE: 'jwks', AUTH_JWKS_URL: JWKS_URL, AUTH_ISSUER: REALM_URL },
