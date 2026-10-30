@@ -16,10 +16,10 @@ import { InMemoryWalletRepository } from '../../support/fakes/in-memory-wallet-r
 export const databaseDown = (): TransientInfrastructureError =>
   new TransientInfrastructureError('connection refused', '08006', { cause: undefined });
 
-/** A unit of work that can be made to fail, as a database outage (or a bug) would. */
+/** Uma unit of work que dá para fazer falhar, como uma queda do banco (ou um bug) faria. */
 export class SwitchableUnitOfWork implements IUnitOfWork<TxRepositories> {
   failure: unknown = undefined;
-  /** Never settles, as a query to a paused database does not. */
+  /** Nunca termina, assim como uma query num banco pausado. */
   hanging = false;
 
   constructor(private readonly inner: IUnitOfWork<TxRepositories>) {}
@@ -39,12 +39,12 @@ export interface InMemoryHttpApp {
   close(): Promise<void>;
 }
 
-/** The real HTTP wiring (guards, pipes, filter, Swagger) over the in-memory fakes, listening on a free port. */
+/** O wiring HTTP real (guards, pipes, filter, Swagger) em cima dos fakes em memória, ouvindo numa porta livre. */
 export interface InMemoryHttpAppOptions {
   readonly env?: Record<string, string>;
-  /** None by default: over the fakes there is no dependency to check, so the instance is always ready. */
+  /** Nenhuma por padrão: em cima dos fakes não tem dependência para checar, então a instância está sempre pronta. */
   readonly readinessChecks?: readonly IReadinessCheck[];
-  /** The logger and metrics to assert on; a silent logger and a fresh registry otherwise. */
+  /** O logger e as métricas para verificar; senão um logger silencioso e um registry novo. */
   readonly observability?: Observability;
   readonly instanceId?: string;
   readonly readinessDetails?: () => Record<string, unknown>;

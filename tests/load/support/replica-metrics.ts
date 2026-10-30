@@ -1,7 +1,7 @@
 import { parseExposition, sumSamples, type Samples } from './prometheus';
 import { run } from './shell';
 
-/** Scrapes /metrics inside every replica (nginx would hand each scrape to a random one) and sums them. */
+/** Faz scrape do /metrics dentro de cada réplica (o nginx mandaria cada scrape para uma qualquer) e soma tudo. */
 export const scrapeReplicas = async (containers: readonly string[]): Promise<Samples> => {
   const scrapes = await Promise.all(
     containers.map(async (container) => {
@@ -26,7 +26,7 @@ const parseMemory = (usage: string): number => {
   return Number.parseFloat(match[1] ?? '') * (MEMORY_UNITS[match[2] ?? ''] ?? Number.NaN);
 };
 
-/** Samples `docker stats` until `stop()`; the caller reads the averages per container. */
+/** Amostra o `docker stats` até o `stop()`; quem chama lê as médias por container. */
 export const sampleUsage = (containers: readonly string[], intervalMs = 3_000) => {
   const usage = new Map<string, ContainerUsage>();
   let running = true;

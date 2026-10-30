@@ -6,7 +6,7 @@ export interface LatencySummary {
   readonly max: number;
 }
 
-/** Nearest-rank percentile over an ascending array. */
+/** Percentil nearest-rank sobre um array em ordem crescente. */
 export const percentile = (sorted: readonly number[], p: number): number => {
   if (sorted.length === 0) return Number.NaN;
   const rank = Math.ceil((p / 100) * sorted.length);

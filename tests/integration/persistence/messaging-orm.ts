@@ -7,7 +7,7 @@ import { createTestDatabase, type TestDatabase } from '../../support/test-databa
 export interface OrmDatabase {
   readonly database: TestDatabase;
   readonly orm: MikroORM;
-  /** An extra ORM with its own pool, to run work on truly separate connections. */
+  /** Um ORM extra com pool próprio, para rodar trabalho em conexões separadas de verdade. */
   connect(): Promise<MikroORM>;
   close(): Promise<void>;
 }
@@ -33,7 +33,7 @@ export const createOrmDatabase = async (): Promise<OrmDatabase> => {
   };
 };
 
-/** Lazily creates one migrated database per suite and empties the messaging tables before each test. */
+/** Cria sob demanda um banco migrado por suíte e esvazia as tabelas de messaging antes de cada teste. */
 export const messagingTables = () => {
   let current: Promise<OrmDatabase> | undefined;
   return {

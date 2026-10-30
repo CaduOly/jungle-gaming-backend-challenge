@@ -2,9 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { Cluster, until } from '../multi-instance/support/cluster';
 
 /**
- * `docker pause` freezes the shared PostgreSQL container: every suite using it stalls while this one runs. That is
- * why it lives apart, under `bun run test:chaos`, and must never run alongside other suites. The container name
- * comes from POSTGRES_CONTAINER (default: the compose project's jungle-wagering-postgres-1).
+ * `docker pause` congela o container de PostgreSQL compartilhado: toda suíte que usa ele trava enquanto esta roda.
+ * Por isso ela fica separada, em `bun run test:chaos`, e nunca pode rodar junto com outras suítes. O nome do
+ * container vem de POSTGRES_CONTAINER (padrão: o jungle-wagering-postgres-1 do project do compose).
  */
 const CONTAINER = process.env.POSTGRES_CONTAINER ?? 'jungle-wagering-postgres-1';
 

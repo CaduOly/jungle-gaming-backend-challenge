@@ -91,7 +91,7 @@ describe('observability over HTTP', () => {
     expect(series(text, 'processing_duration_seconds_count', 'operation="process_wager_transaction",outcome="processed"')).toBe(1);
     expect(series(text, 'processing_duration_seconds_count', 'operation="process_wager_transaction",outcome="replay"')).toBe(1);
     expect(series(text, 'processing_duration_seconds_count', 'operation="process_wager_transaction",outcome="rejected"')).toBe(1);
-    // The HTTP replay is answered by the lock-free pre-check: only the two decisions lock the wallet.
+    // O replay HTTP é respondido pelo pre-check sem lock: só as duas decisões dão lock na wallet.
     const lockWaits = /^lock_wait_seconds_count (\d+)$/m.exec(text)?.[1];
     expect(Number.parseInt(lockWaits ?? '0', 10)).toBe(2);
   });

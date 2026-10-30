@@ -9,9 +9,9 @@ import { createMikroOrmConfig } from '../../../src/infrastructure/persistence/mi
 import { createWagerCommandConsumer } from '../../../src/infrastructure/wagering/wager-command-consumer.factory';
 
 /**
- * The real commands consumer in a process of its own, for the crash test. It reports on stdout, one JSON line per
- * event: `processed` when the use case committed a decision (before the ack, where crash_after_commit_before_ack
- * kills the process).
+ * O consumer de comandos real num processo próprio, para o teste de crash. Ele reporta no stdout, uma linha JSON
+ * por evento: `processed` quando o use case commitou uma decisão (antes do ack, onde o crash_after_commit_before_ack
+ * mata o processo).
  */
 const env = process.env;
 const database = readDatabaseConfig(env);

@@ -8,9 +8,9 @@ import { SqsConsumerLoop } from '../../../src/infrastructure/messaging/sqs/sqs-c
 import { installGracefulShutdown } from '../../../src/infrastructure/process/graceful-shutdown';
 
 /**
- * A standalone consumer for the SIGTERM and crash tests. It reports on stdout, one JSON line per event:
- * `started` when a message reaches the handler (before slow_handler holds it) and `handled` when the
- * handler is about to return ack.
+ * Um consumer avulso para os testes de SIGTERM e de crash. Ele reporta no stdout, uma linha JSON por evento:
+ * `started` quando uma mensagem chega no handler (antes do slow_handler segurar ela) e `handled` quando o
+ * handler está para retornar o ack.
  */
 const env = process.env;
 const sqs = readSqsConfig(env);

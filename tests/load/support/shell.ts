@@ -7,7 +7,7 @@ export interface ShellResult {
 export interface ShellOptions {
   readonly env?: Record<string, string | undefined>;
   readonly cwd?: string;
-  /** Streams the output to the terminal instead of capturing it. */
+  /** Manda a saída direto para o terminal em vez de capturar. */
   readonly inherit?: boolean;
   readonly allowFailure?: boolean;
 }

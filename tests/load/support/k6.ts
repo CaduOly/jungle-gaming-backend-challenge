@@ -29,7 +29,7 @@ export interface HttpScenarioResult {
   readonly droppedIterations: number;
   readonly latencyMs: Omit<LatencySummary, 'count'> & { readonly avg: number };
   readonly latencyByOpMs: Record<string, Omit<LatencySummary, 'count'> & { readonly count: number }>;
-  /** `op status` -> requests, e.g. `fresh 200`, `conflict 409`. */
+  /** `op status` -> requisições, por exemplo `fresh 200`, `conflict 409`. */
   readonly statuses: Record<string, number>;
   readonly replayMismatches: number;
 }

@@ -1,10 +1,10 @@
-# Override of docker-compose.app.yml for `bun run test:load` (tests/load/run.ts). The runner starts it under a
-# project of its own (jungle-load-<suffix>), so nothing here clashes with an app stack that is already running:
-#   - the image gets its own tag;
-#   - nginx and the k6 container live on the project's `load` network only, so `app` resolves to these replicas
-#     and never to the replicas of another project on the shared infrastructure network;
-#   - nginx publishes an ephemeral loopback port (the runner reads it with `docker compose port`).
-# The database and the queues are created per run by the runner and passed in LOAD_* variables.
+# Override do docker-compose.app.yml para o `bun run test:load` (tests/load/run.ts). O runner sobe ele num
+# project próprio (jungle-load-<suffix>), então nada aqui bate com uma stack da aplicação que já esteja rodando:
+#   - a imagem tem tag própria;
+#   - o nginx e o container do k6 ficam só na rede `load` do project, então `app` resolve para estas réplicas
+#     e nunca para as réplicas de outro project na rede de infraestrutura compartilhada;
+#   - o nginx publica uma porta efêmera no loopback (o runner lê ela com `docker compose port`).
+# O banco e as filas são criados a cada execução pelo runner e passados nas variáveis LOAD_*.
 
 x-load-env: &load-env
   DATABASE_URL: ${LOAD_DATABASE_URL:?set by tests/load/run.ts}

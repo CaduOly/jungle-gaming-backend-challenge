@@ -7,7 +7,7 @@ import { InMemoryWalletRepository } from '../../support/fakes/in-memory-wallet-r
 import { SystemClock } from '../../../src/infrastructure/clock/system-clock';
 import { CLOCK } from '../../../src/infrastructure/framework/nest/shared/di/tokens';
 
-/** Local API over the in-memory fakes (no PostgreSQL yet): `bun run start:in-memory`, then open /docs. */
+/** API local em cima dos fakes em memória (sem PostgreSQL ainda): `bun run start:in-memory`, depois abra /docs. */
 const fake = createFakeWageringApp();
 const app = await createHttpApp({
   persistence: {

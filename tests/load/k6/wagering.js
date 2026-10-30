@@ -4,13 +4,13 @@ import exec from 'k6/execution';
 import { Counter } from 'k6/metrics';
 
 /*
- * One HTTP scenario per run, picked by SCENARIO:
- *   distributed  every wallet of the seed, a fresh transaction per iteration;
- *   hot          the first wallet only, every iteration fights for the same row lock;
- *   mix          like distributed, plus REPLAY_PERCENT replays of an earlier request (same key and payload) and
- *                CONFLICT_PERCENT conflicts (same key, another amount).
- * Both phases use constant-arrival-rate: `warmup` (WARMUP_RATE for WARMUP) and then `main` (RATE for DURATION).
- * Only the `main` phase goes into the report; every request carries an `op` tag (fresh, replay or conflict).
+ * Um cenário HTTP por execução, escolhido por SCENARIO:
+ *   distributed  toda wallet do seed, uma transação nova por iteração;
+ *   hot          só a primeira wallet, toda iteração briga pelo mesmo lock de linha;
+ *   mix          igual ao distributed, mais REPLAY_PERCENT de replays de uma requisição anterior (mesma key e
+ *                payload) e CONFLICT_PERCENT de conflitos (mesma key, outro valor).
+ * As duas fases usam constant-arrival-rate: `warmup` (WARMUP_RATE por WARMUP) e depois `main` (RATE por DURATION).
+ * Só a fase `main` entra no relatório; toda requisição leva uma tag `op` (fresh, replay ou conflict).
  */
 const SCENARIO = __ENV.SCENARIO || 'distributed';
 const BASE_URL = __ENV.BASE_URL || 'http://nginx';
@@ -28,7 +28,7 @@ const wallets = new SharedArray('wallets', () => JSON.parse(open(__ENV.WALLETS_F
 const STATUSES = [0, 200, 202, 400, 401, 404, 409, 413, 422, 429, 500, 502, 503, 504];
 const OPS = ['fresh', 'replay', 'conflict'];
 
-/** k6 only breaks a metric down by tag in the summary when a threshold names the submetric; `max>=0` always holds. */
+/** O k6 só quebra uma métrica por tag no summary quando um threshold cita a submétrica; `max>=0` sempre passa. */
 const submetrics = () => {
   const always = ['max>=0'];
   const thresholds = {

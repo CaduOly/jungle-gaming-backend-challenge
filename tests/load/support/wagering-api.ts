@@ -11,7 +11,7 @@ const headers = {
   Authorization: `Bearer dev:${LOAD_PROVIDER}`,
 };
 
-/** Runs `work` over `items` with at most `concurrency` in flight. */
+/** Roda `work` sobre `items` com no máximo `concurrency` em paralelo. */
 export const pool = async <T, R>(items: readonly T[], concurrency: number, work: (item: T) => Promise<R>): Promise<R[]> => {
   const results: R[] = new Array<R>(items.length);
   let next = 0;
