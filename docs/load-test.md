@@ -4,14 +4,14 @@ Este documento registra a metodologia e os resultados reais da suíte de carga (
 
 ## Ambiente e Limites
 
-Os dados abaixo foram colhidos automaticamente pelo runner na execução `2026-10-29T23:35:11.711Z`:
+Os dados abaixo foram colhidos automaticamente pelo runner na execução `2026-10-30T03:42:10.169Z`:
 
 | Item | Valor |
 | --- | --- |
-| CPU do host | AMD Ryzen 5 5500 (12 threads) |
+| CPU do host | Intel Core Ultra 7 155U (14 threads) |
 | RAM do host | 15 GiB |
-| Kernel | Linux 7.0.0-28-generic |
-| Docker / Compose | 29.1.3 / 2.40.3+ds1-0ubuntu1~24.04.1 |
+| Kernel | Linux 7.0.0-38-generic |
+| Docker / Compose | 29.9.2 / 5.6.1 |
 | Runtime | Bun 1.4.4 (`oven/bun:1.4.4-alpine` nos containers) |
 | Banco de dados | PostgreSQL 17.6 |
 | Broker SQS | `localstack/localstack:4.4.0` |
@@ -54,32 +54,32 @@ Apostas e liquidações (`BET` e `WIN`) distribuídas uniformemente entre 1.000 
 
 | Taxa ofertada (req/s) | Requisições | Throughput (req/s) | Iterações descartadas | p50 (ms) | p95 (ms) | p99 (ms) | Máx (ms) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 300 | 18.001 | 300 | 0 | 9,2 | 18,5 | 48,3 | 164,0 |
+| 300 | 18.000 | 300 | 0 | 8,2 | 12,9 | 25,1 | 112,2 |
 
 | Operação e status | Requisições |
 | --- | --- |
-| `fresh 200` | 18.000 |
+| `fresh 200` | 17.999 |
 | `fresh 502` | 1 |
 
-- **Respostas fora do esperado**: 1 (`502` pontual do nginx na troca de conexão upstream em 18.001 requisições, equivalente a 0,0055%).
+- **Respostas fora do esperado**: 1 (`502` pontual do nginx na troca de conexão upstream em 18.000 requisições, equivalente a 0,0056%).
 - **Replays com resposta divergente**: 0.
 
 | `lock_wait` (amostras) | `lock_wait` p50 (ms) | p95 (ms) | p99 (ms) | Lock timeouts | Deadlocks | Replays (métrica) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 18.301 | 2,5 | 4,8 | 5,0 | 0 | 0 | 0 |
+| 18.300 | 2,5 | 4,8 | 5,0 | 0 | 0 | 0 |
 
 | Outbox (eventos) | Lag SQL p50 (ms) | p95 (ms) | p99 (ms) | Máx (ms) | Não publicados ao fim | Lag métrica p95 (ms) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 33.511 | 18.198 | 24.089 | 24.158 | 24.272 | 0 | 28.603,1 |
+| 33.281 | 12.755 | 19.524 | 19.568 | 19.668 | 0 | 28.264,3 |
 
 | Container | CPU média (%) | CPU pico (%) | RAM média (MiB) |
 | --- | --- | --- | --- |
-| `app-1` | 44,5 | 71,4 | 131 |
-| `app-2` | 44,9 | 72,3 | 131 |
-| `app-3` | 44,5 | 69,8 | 131 |
-| `nginx` | 5,3 | 7,5 | 13 |
-| `postgres` | 142,1 | 203,8 | 161 |
-| `localstack` | 78,2 | 142,1 | 157 |
+| `app-1` | 45,5 | 70,0 | 131 |
+| `app-2` | 46,0 | 71,4 | 131 |
+| `app-3` | 47,0 | 70,2 | 131 |
+| `nginx` | 4,6 | 6,2 | 15 |
+| `postgres` | 151,0 | 207,3 | 174 |
+| `localstack` | 85,7 | 153,0 | 159 |
 
 ---
 
@@ -89,7 +89,7 @@ Todas as 100 req/s batendo na **mesma wallet**, forçando serialização total n
 
 | Taxa ofertada (req/s) | Requisições | Throughput (req/s) | Iterações descartadas | p50 (ms) | p95 (ms) | p99 (ms) | Máx (ms) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 100 | 6.001 | 100 | 0 | 6,7 | 8,6 | 15,5 | 245,1 |
+| 100 | 6.001 | 100 | 0 | 6,4 | 8,4 | 10,4 | 34,3 |
 
 | Operação e status | Requisições |
 | --- | --- |
@@ -104,59 +104,58 @@ Todas as 100 req/s batendo na **mesma wallet**, forçando serialização total n
 
 | Outbox (eventos) | Lag SQL p50 (ms) | p95 (ms) | p99 (ms) | Máx (ms) | Não publicados ao fim | Lag métrica p95 (ms) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 11.117 | 12.784 | 22.026,6 | 22.671,8 | 22.859 | 0 | 28.291,5 |
+| 11.117 | 4.522 | 7.010 | 7.095,8 | 7.119 | 0 | 9.380,2 |
 
 | Container | CPU média (%) | CPU pico (%) | RAM média (MiB) |
 | --- | --- | --- | --- |
-| `app-1` | 15,2 | 23,4 | 128 |
-| `app-2` | 15,0 | 34,6 | 123 |
-| `app-3` | 15,5 | 25,1 | 125 |
-| `nginx` | 1,7 | 2,2 | 12 |
-| `postgres` | 51,5 | 63,6 | 178 |
-| `localstack` | 37,0 | 59,0 | 225 |
+| `app-1` | 15,1 | 24,7 | 122 |
+| `app-2` | 15,5 | 24,8 | 125 |
+| `app-3` | 15,0 | 25,4 | 123 |
+| `nginx` | 1,6 | 2,1 | 14 |
+| `postgres` | 53,9 | 69,3 | 180 |
+| `localstack` | 36,9 | 78,3 | 223 |
 
 ---
 
 ### 3. Mix com Replays e Conflitos (200 wallets)
 
-Carga mista a 300 req/s sobre 200 wallets, combinando submissões inéditas (~88,5%), replays idempotentes com mesmo `Idempotency-Key` e mesmo payload (~9,7%) e conflitos de idempotência com mesma `Idempotency-Key` e payload adulterado (~1,8%).
+Carga mista a 300 req/s sobre 200 wallets, combinando submissões inéditas (~88,1%), replays idempotentes com mesmo `Idempotency-Key` e mesmo payload (~9,9%) e conflitos de idempotência com mesma `Idempotency-Key` e payload adulterado (~2,0%).
 
 | Taxa ofertada (req/s) | Requisições | Throughput (req/s) | Iterações descartadas | p50 (ms) | p95 (ms) | p99 (ms) | Máx (ms) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 300 | 18.000 | 300 | 0 | 8,2 | 12,5 | 21,8 | 113,1 |
+| 300 | 18.001 | 300 | 0 | 7,7 | 12,2 | 25,6 | 86,5 |
 
 | Operação e status | Requisições |
 | --- | --- |
-| `fresh 200` | 15.921 |
-| `replay 200` | 1.746 |
-| `conflict 409` | 332 |
-| `fresh 502` | 1 |
+| `fresh 200` | 15.853 |
+| `replay 200` | 1.781 |
+| `conflict 409` | 367 |
 
-- **Respostas fora do esperado**: 1 (`502` pontual em 18.000 requisições).
-- **Replays com resposta divergente**: 0 (todos os 1.746 replays devolveram exatamente o `transactionId`, `status` e `balance` observados na decisão original, com `idempotentReplay: true`).
+- **Respostas fora do esperado**: 0.
+- **Replays com resposta divergente**: 0 (todos os 1.781 replays devolveram exatamente o `transactionId`, `status` e `balance` observados na decisão original, com `idempotentReplay: true`).
 
 | Operação | Requisições | p50 (ms) | p95 (ms) | p99 (ms) |
 | --- | --- | --- | --- | --- |
-| `fresh` | 15.922 | 8,4 | 12,9 | 23,0 |
-| `replay` | 1.746 | 2,9 | 5,3 | 8,7 |
-| `conflict` | 332 | 2,9 | 5,2 | 9,5 |
+| `fresh` | 15.853 | 7,9 | 12,5 | 28,3 |
+| `replay` | 1.781 | 3,2 | 5,1 | 8,5 |
+| `conflict` | 367 | 3,1 | 4,9 | 8,8 |
 
 | `lock_wait` (amostras) | `lock_wait` p50 (ms) | p95 (ms) | p99 (ms) | Lock timeouts | Deadlocks | Replays (métrica) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 16.197 | 2,5 | 4,8 | 5,0 | 0 | 0 | 1.766 |
+| 16.121 | 2,5 | 4,8 | 5,0 | 0 | 0 | 1.809 |
 
 | Outbox (eventos) | Lag SQL p50 (ms) | p95 (ms) | p99 (ms) | Máx (ms) | Não publicados ao fim | Lag métrica p95 (ms) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 29.421 | 4.526 | 6.841 | 6.994 | 7.092 | 0 | 9.392,1 |
+| 29.362 | 3.877 | 8.178 | 8.381 | 8.547 | 0 | 9.369,8 |
 
 | Container | CPU média (%) | CPU pico (%) | RAM média (MiB) |
 | --- | --- | --- | --- |
-| `app-1` | 43,5 | 78,5 | 136 |
-| `app-2` | 39,2 | 60,7 | 135 |
-| `app-3` | 40,1 | 71,7 | 136 |
-| `nginx` | 4,9 | 6,7 | 13 |
-| `postgres` | 122,1 | 199,7 | 223 |
-| `localstack` | 93,4 | 159,4 | 272 |
+| `app-1` | 43,9 | 69,6 | 135 |
+| `app-2` | 41,7 | 59,6 | 138 |
+| `app-3` | 41,0 | 56,4 | 135 |
+| `nginx` | 4,7 | 6,5 | 15 |
+| `postgres` | 122,0 | 221,8 | 246 |
+| `localstack` | 96,8 | 154,1 | 267 |
 
 ---
 
@@ -166,7 +165,7 @@ Envio direto para a fila FIFO `wager-transactions-<suffix>.fifo` a 100 cmd/s (lo
 
 | Taxa ofertada (cmd/s) | Enviados | Aplicados | Faltando | Throughput (cmd/s) | p50 (ms) | p95 (ms) | p99 (ms) | Máx (ms) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 100 | 6.000 | 6.000 | 0 | 100,2 | 7,0 | 11,0 | 54,0 | 283,0 |
+| 100 | 6.000 | 6.000 | 0 | 100,2 | 7,0 | 12,0 | 20,0 | 222,0 |
 
 - **Status finais**: `PROCESSED` 6.000 (100%).
 - **Falhas de envio**: 0.
@@ -177,16 +176,16 @@ Envio direto para a fila FIFO `wager-transactions-<suffix>.fifo` a 100 cmd/s (lo
 
 | Outbox (eventos) | Lag SQL p50 (ms) | p95 (ms) | p99 (ms) | Máx (ms) | Não publicados ao fim | Lag métrica p95 (ms) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 10.794 | 101,5 | 242,0 | 313,1 | 533,0 | 0 | 259,2 |
+| 10.826 | 96,0 | 235,0 | 269,0 | 455,0 | 0 | 242,0 |
 
 | Container | CPU média (%) | CPU pico (%) | RAM média (MiB) |
 | --- | --- | --- | --- |
-| `app-1` | 10,9 | 20,3 | 137 |
-| `app-2` | 10,7 | 18,6 | 131 |
-| `app-3` | 11,6 | 19,6 | 136 |
-| `nginx` | 0,0 | 0,0 | 10 |
-| `postgres` | 43,1 | 94,5 | 277 |
-| `localstack` | 48,3 | 77,2 | 342 |
+| `app-1` | 12,4 | 19,1 | 135 |
+| `app-2` | 11,7 | 23,2 | 136 |
+| `app-3` | 9,9 | 14,9 | 136 |
+| `nginx` | 0,0 | 0,1 | 12 |
+| `postgres` | 36,1 | 55,4 | 289 |
+| `localstack` | 54,4 | 100,8 | 333 |
 
 ---
 
@@ -203,26 +202,26 @@ Ao término dos 4 cenários (~48.000 transações na fase de medição mais o wa
 
 ### 1. Distribuído vs. Hot Wallet (`SELECT ... FOR UPDATE`)
 
-À primeira vista parece contraintuitivo que o cenário **Hot Wallet** (100 req/s numa única carteira) tenha apresentado `p50` de **6,7 ms** e `p95` de **8,6 ms**, menores que os **9,2 ms** (`p50`) e **18,5 ms** (`p95`) do cenário **Distribuído** (300 req/s em 1.000 carteiras). A explicação vem de dois fatores:
+À primeira vista parece contraintuitivo que o cenário **Hot Wallet** (100 req/s numa única carteira) tenha apresentado `p50` de **6,4 ms** e `p95` de **8,4 ms**, menores que os **8,2 ms** (`p50`) e **12,9 ms** (`p95`) do cenário **Distribuído** (300 req/s em 1.000 carteiras). A explicação vem de dois fatores:
 
-1. **Taxa global de commits e I/O no PostgreSQL**: a 100 req/s o banco faz 3× menos `fsync` de WAL e as réplicas rodam a ~15% de CPU (contra ~45% de CPU por réplica e 142% no Postgres a 300 req/s). Como a seção crítica dentro da transação SQL é curta (~2,5 ms de `SELECT ... FOR UPDATE` + `INSERT` em `wager_transactions`, `wallet_ledger_entries` e `outbox_messages` + `UPDATE` em `wallets`), a 100 req/s o intervalo médio de chegada é de 10 ms — maior que o tempo de serviço da transação. Por isso quase não se forma fila no lock da linha (`lock_wait p95 = 4,8 ms`, `0 lock timeouts`).
-2. **Cauda máxima (`máx = 245,1 ms` na Hot Wallet vs. `164,0 ms` no Distribuído)**: quando rajadas pontuais enfileiram várias requisições simultâneas na mesma linha, a última da fila espera a soma das transações anteriores, o que aparece no pico máximo de 245,1 ms sem chegar perto do `DB_LOCK_TIMEOUT_MS` (2.000 ms).
+1. **Taxa global de commits e I/O no PostgreSQL**: a 100 req/s o banco faz 3× menos `fsync` de WAL e as réplicas rodam a ~15% de CPU (contra ~46% de CPU por réplica e 151% no Postgres a 300 req/s). Como a seção crítica dentro da transação SQL é curta (~2,5 ms de `SELECT ... FOR UPDATE` + `INSERT` em `wager_transactions`, `wallet_ledger_entries` e `outbox_messages` + `UPDATE` em `wallets`), a 100 req/s o intervalo médio de chegada é de 10 ms — maior que o tempo de serviço da transação. Por isso quase não se forma fila no lock da linha (`lock_wait p95 = 4,8 ms`, `0 lock timeouts`).
+2. **Cauda (`p99 = 10,4 ms` e `máx = 34,3 ms` na Hot Wallet vs. `p99 = 25,1 ms` e `máx = 112,2 ms` no Distribuído)**: nesta execução a cauda da Hot Wallet também ficou abaixo da do Distribuído. Mesmo serializando todas as requisições na mesma linha, a pior espera ficou em 34,3 ms, muito longe do `DB_LOCK_TIMEOUT_MS` (2.000 ms); a 100 req/s as eventuais filas no lock são curtas e drenam rápido. No Distribuído, onde não há disputa pela mesma linha, a cauda acompanha a carga global maior (Postgres com pico de 207,3% de CPU), e não a contenção de lock.
 
 ### 2. O efeito do pre-check sem lock nos replays e conflitos (Cenário Mix)
 
-No cenário **Mix**, as submissões inéditas (`fresh`) tiveram `p50 = 8,4 ms` e `p95 = 12,9 ms`, enquanto os **replays** (`p50 = 2,9 ms`, `p95 = 5,3 ms`) e os **conflitos 409** (`p50 = 2,9 ms`, `p95 = 5,2 ms`) responderam em menos da metade do tempo.
+No cenário **Mix**, as submissões inéditas (`fresh`) tiveram `p50 = 7,9 ms` e `p95 = 12,5 ms`, enquanto os **replays** (`p50 = 3,2 ms`, `p95 = 5,1 ms`) e os **conflitos 409** (`p50 = 3,1 ms`, `p95 = 4,9 ms`) responderam em menos da metade do tempo.
 
-Isso comprova na prática a decisão descrita em `ARCHITECTURE.md`: antes de abrir a transação de escrita e disputar o `SELECT ... FOR UPDATE` da wallet, o use case faz uma leitura simples por `(provider_id, idempotency_key)`. Quando a transação original já está commitada num estado terminal (`PROCESSED` ou `REJECTED`), o replay ou o conflito `409 IDEMPOTENCY_CONFLICT` é resolvido imediatamente em ~3 ms sem tocar no lock da carteira e sem gerar escrita no banco. Isso também aparece no número de amostras de `lock_wait`: para 18.000 requisições no período de medição (+ 300 do warm-up), houve apenas **16.197** aquisições de lock (exatamente as submissões inéditas), poupando a carteira dos 1.746 replays e 332 conflitos.
+Isso comprova na prática a decisão descrita em `ARCHITECTURE.md`: antes de abrir a transação de escrita e disputar o `SELECT ... FOR UPDATE` da wallet, o use case faz uma leitura simples por `(provider_id, idempotency_key)`. Quando a transação original já está commitada num estado terminal (`PROCESSED` ou `REJECTED`), o replay ou o conflito `409 IDEMPOTENCY_CONFLICT` é resolvido imediatamente em ~3 ms sem tocar no lock da carteira e sem gerar escrita no banco. Isso também aparece no número de amostras de `lock_wait`: para 18.001 requisições no período de medição (+ 300 do warm-up), houve **16.121** aquisições de lock. Esse número cobre as 15.853 submissões inéditas medidas mais as do aquecimento (o contador Prometheus não separa as fases), e fica bem abaixo do total de requisições: os 1.781 replays e 367 conflitos não passaram pelo lock da carteira.
 
 ### 3. O gargalo real: vazão de publicação da Outbox no LocalStack
 
 O dado mais revelador do teste está na tabela de **outbox**:
 
-- A **100 cmd/s** (cenário SQS, gerando ~180 eventos/s na outbox, já que cada `BET` gera `WagerTransactionProcessed` e `WalletBalanceChanged`), o lag de publicação da outbox ficou em **`p50 = 101,5 ms` e `p95 = 242 ms`** — praticamente o intervalo de polling do worker (`OUTBOX_POLL_INTERVAL_MS = 200 ms`).
-- Já a **300 req/s** (cenários Distribuído e Mix, gerando ~500 a 560 eventos/s na outbox), o lag SQL subiu para **`18,2 s` (`p50`) / `24,1 s` (`p95`)** no Distribuído e **`4,5 s` (`p50`) / `6,8 s` (`p95`)** no Mix, embora **todos os eventos tenham sido entregues ao final (`não publicados ao fim = 0`)**.
+- A **100 cmd/s** (cenário SQS, em que cada `BET` gera `WagerTransactionProcessed` e `WalletBalanceChanged`), o lag de publicação da outbox ficou em **`p50 = 96 ms` e `p95 = 235 ms`** — praticamente o intervalo de polling do worker (`OUTBOX_POLL_INTERVAL_MS = 200 ms`).
+- Já a **300 req/s** (cenários Distribuído e Mix), o lag SQL subiu para **`12,8 s` (`p50`) / `19,5 s` (`p95`)** no Distribuído e **`3,9 s` (`p50`) / `8,2 s` (`p95`)** no Mix, embora **todos os eventos tenham sido entregues ao final (`não publicados ao fim = 0`)**.
 
-O motivo é mecânico: o `OutboxPublisherWorker` publica os eventos da fila `wagering-events.fifo` sequencialmente por lote (`OUTBOX_BATCH_SIZE = 10`, um `SendMessageCommand` por evento no LocalStack). Com 3 réplicas publicando em paralelo contra o LocalStack em container único (que bateu 142%–159% de CPU), a vazão máxima de chamadas `SendMessage` individuais fica em torno de ~380–420 eventos/s. Quando a entrada gera 550 eventos/s, a tabela `outbox_messages` acumula uma fila que é drenada assim que a rajada termina, **sem impactar a latência HTTP do cliente (`p95 = 18,5 ms`)**. Esse resultado valida o desacoplamento via Transactional Outbox: a escrita síncrona não sofre com a latência do broker, e para escalar a vazão da outbox acima de 500 eventos/s bastaria trocar o envio unitário por `SendMessageBatch` (até 10 mensagens por round-trip HTTP ao SQS) ou aumentar `OUTBOX_BATCH_SIZE`.
+O motivo é mecânico: o `OutboxPublisherWorker` publica os eventos da fila `wagering-events.fifo` sequencialmente por lote (`OUTBOX_BATCH_SIZE = 10`, um `SendMessageCommand` por evento no LocalStack). Com 3 réplicas publicando em paralelo contra o LocalStack em container único (que bateu 153%–154% de CPU de pico nos cenários a 300 req/s), a vazão de chamadas `SendMessage` individuais fica abaixo da taxa de geração de eventos, e a tabela `outbox_messages` acumula uma fila que é drenada assim que a rajada termina, **sem impactar a latência HTTP do cliente (`p95 = 12,9 ms` no Distribuído)**. Esse resultado valida o desacoplamento via Transactional Outbox: a escrita síncrona não sofre com a latência do broker, e para escalar a vazão da outbox bastaria trocar o envio unitário por `SendMessageBatch` (até 10 mensagens por round-trip HTTP ao SQS) ou aumentar `OUTBOX_BATCH_SIZE`.
 
 ### 4. Latência ponta a ponta no Caminho SQS
 
-Com 100 wallets (100 `MessageGroupId` distintos na fila FIFO), as 3 réplicas consumiram em paralelo com long polling (`WaitTimeSeconds = 20`, `MaxNumberOfMessages = 10`) e mantiveram a fila limpa durante todo o minuto de medição: **6.000 de 6.000 mensagens processadas**, throughput de **100,2 cmd/s**, `p50` de **7 ms** e `p95` de **11 ms** entre o envio e o commit no banco, com apenas ~11% de CPU em cada réplica.
+Com 100 wallets (100 `MessageGroupId` distintos na fila FIFO), as 3 réplicas consumiram em paralelo com long polling (`WaitTimeSeconds = 20`, `MaxNumberOfMessages = 10`) e mantiveram a fila limpa durante todo o minuto de medição: **6.000 de 6.000 mensagens processadas**, throughput de **100,2 cmd/s**, `p50` de **7 ms** e `p95` de **12 ms** entre o envio e o commit no banco, com ~10–12% de CPU em cada réplica.
