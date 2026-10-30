@@ -72,7 +72,7 @@ A leitura literal do enunciado deixaria uma BET receber um REFUND e depois um RO
 
 O ROLLBACK de um REFUND é permitido, porque a referência é outra linha. A consequência é que a BET volta a ficar debitada e não pode ser reembolsada de novo, já que o slot de reversão dela já foi usado pelo REFUND. Eu prefiro essa consequência, que é explícita e testada, do que abrir um caminho para crédito duplo.
 
-A referência fora de ordem (o ROLLBACK chega antes da BET) vira `PENDING_REFERENCE`, e o worker tenta de novo com backoff exponencial e jitter (base 2s, teto 60s, 8 tentativas, uns 5 minutos). Esgotado, vira `REJECTED / REFERENCE_NOT_FOUND`. Se a referência existe mas está `REJECTED` ou `FAILED`, a dependente é rejeitada na hora com `REFERENCE_NOT_PROCESSED`. A referência também precisa ser do mesmo provedor, jogador, wallet, rodada e moeda, e o `FOREIGN KEY (reference_transaction_id, wallet_id)` impede no banco que um ROLLBACK da wallet B ocupe o slot de reversão de uma BET da wallet A.
+A referência fora de ordem (o ROLLBACK chega antes da BET) vira `PENDING_REFERENCE`, e o worker tenta de novo com backoff exponencial e jitter (base 2s, teto 60s, 8 tentativas, uns 5 minutos). Esgotado, vira `REJECTED / REFERENCE_NOT_FOUND`. Se a referência existe mas está `REJECTED` ou `FAILED`, a dependente é rejeitada na hora com `REFERENCE_NOT_PROCESSED`. A referência também precisa ser do mesmo provedor, jogador, wallet, rodada e moeda, e no banco o `FOREIGN KEY (reference_transaction_id, wallet_id)` impede que um ROLLBACK da wallet B ocupe o slot de reversão de uma BET da wallet A, enquanto o trigger `wager_transactions_guard` garante que `reference_external_transaction_id` e `provider_id` batem com a linha apontada por `reference_transaction_id`, que um `REFUND` `PROCESSED` só aponta para `BET` `PROCESSED` e que um `ROLLBACK` `PROCESSED` só aponta para `BET`, `WIN` ou `REFUND` `PROCESSED`.
 
 ## Idempotência
 
@@ -180,7 +180,7 @@ O Keycloak fica no profile `auth` para não pesar nos testes e na carga. Health,
 
 O `PROVIDER_IDENTITY_MISMATCH` **não é persistido**. Se fosse, um provedor mal-intencionado gravaria uma linha no namespace `(provider_id, idempotency_key)` de outro provedor, e a requisição legítima depois esbarraria num replay ou num 409 que ela não causou.
 
-No SQS a fila é tratada como canal interno confiável, então o `actor` é o `providerId` da própria mensagem e o mismatch não acontece por esse canal. Isso é um desvio do enunciado, que pede que a identidade da mensagem passe pelas mesmas validações. Fechar isso pediria uma identidade por fila (uma fila por provedor) ou uma assinatura na mensagem.
+No SQS o consumer lê o `actorProviderId` dos atributos da mensagem (`MessageAttributes.providerId` / `ProviderId`) ou do envelope (`actorProviderId`), aplicando a mesma validação `PROVIDER_IDENTITY_MISMATCH` do use case (com ack sem persistir nada quando diverge de `data.providerId`). Quando a mensagem vem sem esse atributo no canal interno confiável, o handler faz fallback para `data.providerId`.
 
 ## O que não é persistido, e as colunas geradas
 
@@ -212,7 +212,7 @@ NTP -> o claim do worker de pendências usa o `IClock` da instância e não o `n
 O OTel, que era diferencial opcional, ficou de fora.
 `BALANCE_LIMIT_EXCEEDED` é um `FailureCode` a mais, para o crédito acima do máximo do `Money` ser rejeição e não erro 500.
 As respostas HTTP vêm dentro do envelope. O payload do enunciado está inteiro em `data`.
-No SQS o `providerId` da mensagem é o `actor`, então o `PROVIDER_IDENTITY_MISMATCH` não é verificado por esse canal.
+No SQS a identidade do provedor vem de `MessageAttributes.providerId` (ou `actorProviderId` no envelope) e faz fallback para `data.providerId` quando a mensagem é publicada sem atributo no canal interno.
 O head-of-line da outbox troca vazão por ordem: uma mensagem que não publica segura os eventos seguintes daquela wallet até sair.
 A DLQ não tem redrive automático. Uma mensagem que caiu lá por falha permanente de infraestrutura pode ser válida, e o reenvio é manual, depois de entender a causa (esse caso sai no log como `error`, com o `sqlState`).
 O `ApproximateReceiveCount` não é usado como limite, então um consumer que morre repetidamente antes de resolver a mesma mensagem só manda ela para a DLQ pelo redrive, depois de 100 entregas.

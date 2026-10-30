@@ -277,22 +277,126 @@ describe('wager_transactions schema', () => {
         'wager_transactions_processed_reversal_resolved',
       );
     });
+
+    it('rejects a resolved reference whose external_transaction_id or provider_id does not match the target row', async () => {
+      const betId = await insertTransaction(client, walletId, { external_transaction_id: 'bet-real-ext' });
+      await expectSqlError(
+        insertTx({
+          kind: 'REFUND',
+          reference_external_transaction_id: 'wrong-ext',
+          reference_transaction_id: betId,
+        }),
+        '23514',
+      );
+      await expectSqlError(
+        insertTx({
+          provider_id: 'provider-other',
+          kind: 'REFUND',
+          reference_external_transaction_id: 'bet-real-ext',
+          reference_transaction_id: betId,
+        }),
+        '23514',
+      );
+    });
+
+    it('rejects a PROCESSED REFUND pointing to a non-BET or non-PROCESSED target', async () => {
+      const betId = await insertTransaction(client, walletId, { external_transaction_id: 'bet-for-win' });
+      const winId = await insertTransaction(client, walletId, {
+        kind: 'WIN',
+        external_transaction_id: 'win-target',
+        reference_external_transaction_id: 'bet-for-win',
+        reference_transaction_id: betId,
+      });
+      await expectSqlError(
+        insertTx({
+          kind: 'REFUND',
+          reference_external_transaction_id: 'win-target',
+          reference_transaction_id: winId,
+        }),
+        '23514',
+      );
+
+      const rejectedBetId = await insertTransaction(client, walletId, {
+        kind: 'BET',
+        status: 'REJECTED',
+        failure_code: 'INSUFFICIENT_FUNDS',
+        processed_at: null,
+        external_transaction_id: 'bet-rejected-target',
+      });
+      await expectSqlError(
+        insertTx({
+          kind: 'REFUND',
+          reference_external_transaction_id: 'bet-rejected-target',
+          reference_transaction_id: rejectedBetId,
+        }),
+        '23514',
+      );
+    });
+
+    it('rejects a PROCESSED ROLLBACK pointing to OPENING, LOSS, ROLLBACK or a non-PROCESSED target', async () => {
+      const lossId = await insertTransaction(client, walletId, {
+        kind: 'LOSS',
+        amount: '0.00',
+        external_transaction_id: 'loss-target',
+      });
+      await expectSqlError(
+        insertTx({
+          kind: 'ROLLBACK',
+          reference_external_transaction_id: 'loss-target',
+          reference_transaction_id: lossId,
+        }),
+        '23514',
+      );
+
+      const betId = await insertTransaction(client, walletId, { external_transaction_id: 'bet-for-rb' });
+      const rollbackId = await insertTransaction(client, walletId, {
+        kind: 'ROLLBACK',
+        external_transaction_id: 'rb-target',
+        reference_external_transaction_id: 'bet-for-rb',
+        reference_transaction_id: betId,
+      });
+      await expectSqlError(
+        insertTx({
+          kind: 'ROLLBACK',
+          reference_external_transaction_id: 'rb-target',
+          reference_transaction_id: rollbackId,
+        }),
+        '23514',
+      );
+
+      const rejectedWinId = await insertTransaction(client, walletId, {
+        kind: 'WIN',
+        status: 'REJECTED',
+        failure_code: 'REFERENCE_NOT_PROCESSED',
+        processed_at: null,
+        external_transaction_id: 'win-rejected-target',
+      });
+      await expectSqlError(
+        insertTx({
+          kind: 'ROLLBACK',
+          reference_external_transaction_id: 'win-rejected-target',
+          reference_transaction_id: rejectedWinId,
+        }),
+        '23514',
+      );
+    });
   });
 
   describe('transitions (trigger)', () => {
-    const pendingReference = () =>
+    const pendingReference = (referenceExternalId = `missing-${uuidv7()}`) =>
       insertTransaction(client, walletId, {
         kind: 'ROLLBACK',
         status: 'PENDING_REFERENCE',
-        reference_external_transaction_id: `missing-${uuidv7()}`,
+        reference_external_transaction_id: referenceExternalId,
         processed_at: null,
         observed_balance: null,
         next_attempt_at: '2026-07-29T15:00:02.000Z',
       });
 
     it('lets PENDING_REFERENCE be retried and then PROCESSED', async () => {
-      const id = await pendingReference();
-      const referenceId = await insertTransaction(client, walletId);
+      const refExtId = `missing-${uuidv7()}`;
+      const id = await pendingReference(refExtId);
+      const referenceId = await insertTransaction(client, walletId, { external_transaction_id: refExtId });
       await client.query(
         "UPDATE wager_transactions SET attempts = 1, next_attempt_at = '2026-07-29T15:00:06Z', locked_until = now() WHERE id = $1",
         [id],

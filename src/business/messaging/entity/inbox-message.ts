@@ -32,6 +32,10 @@ export class InboxMessage {
     return new InboxMessage(props.consumerName, props.messageId, props.payloadHash, copy(props.receivedAt));
   }
 
+  static receive(props: CreateInboxMessageProps): InboxMessage {
+    return InboxMessage.create(props);
+  }
+
   static rehydrate(state: InboxMessageState): InboxMessage {
     return new InboxMessage(
       state.consumerName,

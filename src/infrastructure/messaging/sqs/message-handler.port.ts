@@ -34,6 +34,7 @@ export interface InboundMessage {
   readonly receiveCount: number;
   readonly messageGroupId?: string;
   readonly sentAt?: Date;
+  readonly actorProviderId?: string;
 }
 
 /**

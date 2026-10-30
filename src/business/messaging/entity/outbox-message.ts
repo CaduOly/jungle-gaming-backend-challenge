@@ -55,6 +55,10 @@ export class OutboxMessage {
     );
   }
 
+  static enqueue(event: IntegrationEvent<unknown>): OutboxMessage {
+    return OutboxMessage.fromEvent(event);
+  }
+
   static rehydrate(state: OutboxMessageState): OutboxMessage {
     return new OutboxMessage(
       state.id,

@@ -46,9 +46,10 @@ export class WagerCommandHandler implements IMessageHandler {
 
   async handle(message: InboundMessage): Promise<MessageOutcome> {
     const command = parseWagerCommand(message.body);
+    const providerId = message.actorProviderId ?? command.actorProviderId ?? command.submission.providerId;
     try {
       const output = await this.processWager.execute({
-        actor: { providerId: command.submission.providerId },
+        actor: { providerId },
         idempotencyKey: command.idempotencyKey,
         payload: command.submission,
         source: { channel: 'SQS', consumerName: this.consumerName, messageId: command.messageId },

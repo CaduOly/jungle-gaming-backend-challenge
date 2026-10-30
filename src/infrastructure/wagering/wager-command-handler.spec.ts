@@ -84,6 +84,18 @@ describe('WagerCommandHandler', () => {
     expect(app.db.wagers.all().filter((transaction) => transaction.kind === 'BET')).toEqual([]);
   });
 
+  it('acks a provider identity mismatch (via message attribute or envelope actorProviderId) without persisting anything', async () => {
+    expect(await handler.handle({ ...inbound(command(wallet)), actorProviderId: 'provider-b' })).toEqual(MessageOutcome.ack());
+    expect(balance()).toBe('100.00');
+    expect(app.db.inbox.size()).toBe(0);
+    expect(app.db.wagers.all().filter((transaction) => transaction.kind === 'BET')).toEqual([]);
+
+    expect(await handler.handle(inbound({ ...command(wallet), actorProviderId: 'provider-b' }))).toEqual(MessageOutcome.ack());
+    expect(balance()).toBe('100.00');
+    expect(app.db.inbox.size()).toBe(0);
+    expect(app.db.wagers.all().filter((transaction) => transaction.kind === 'BET')).toEqual([]);
+  });
+
   it('acks an idempotency conflict (the same key with another payload) and persists nothing new', async () => {
     await handler.handle(inbound(command(wallet)));
     const other = command(wallet, { externalTransactionId: 'tx-2' }, 'msg-2');

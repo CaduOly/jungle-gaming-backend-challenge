@@ -9,10 +9,11 @@ export interface WagerCommand {
   readonly messageId: string;
   readonly occurredAt: string;
   readonly idempotencyKey: string;
+  readonly actorProviderId?: string;
   readonly submission: WagerSubmission;
 }
 
-const ENVELOPE_KEYS = new Set(['messageId', 'type', 'occurredAt', 'data']);
+const ENVELOPE_KEYS = new Set(['messageId', 'type', 'occurredAt', 'actorProviderId', 'data']);
 const DATA_KEYS = new Set([
   'providerId',
   'externalTransactionId',
@@ -57,6 +58,10 @@ export const parseWagerCommand = (body: unknown): WagerCommand => {
   if (!ISO_INSTANT.test(occurredAt) || Number.isNaN(Date.parse(occurredAt))) {
     throw invalid('$.occurredAt must be an ISO-8601 instant');
   }
+  const actorProviderId = envelope.actorProviderId;
+  if (actorProviderId !== undefined && (typeof actorProviderId !== 'string' || actorProviderId.trim() === '')) {
+    throw invalid('$.actorProviderId must be a non-blank string');
+  }
   const data = objectAt(envelope.data, '$.data', DATA_KEYS);
   const money = objectAt(data.money, '$.data.money', MONEY_KEYS);
   const reference = data.referenceExternalTransactionId;
@@ -71,6 +76,7 @@ export const parseWagerCommand = (body: unknown): WagerCommand => {
     messageId,
     occurredAt,
     idempotencyKey: stringAt(data, 'idempotencyKey', '$.data'),
+    ...(actorProviderId === undefined ? {} : { actorProviderId: actorProviderId.trim() }),
     submission: {
       providerId: stringAt(data, 'providerId', '$.data'),
       externalTransactionId: stringAt(data, 'externalTransactionId', '$.data'),

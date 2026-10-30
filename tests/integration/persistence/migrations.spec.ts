@@ -10,8 +10,9 @@ const MIGRATIONS = [
   'Migration20261028000000OutboxHeadOfLine',
   'Migration20261028000100BalanceLimitExceeded',
   'Migration20261028000200OutboxCommitSequence',
+  'Migration20261029000000ReferenceSchemaGuards',
 ] as const;
-const [WAGERING, MESSAGING, HEAD_OF_LINE, BALANCE_LIMIT, COMMIT_SEQUENCE] = MIGRATIONS;
+const [WAGERING, MESSAGING, HEAD_OF_LINE, BALANCE_LIMIT, COMMIT_SEQUENCE, REFERENCE_GUARDS] = MIGRATIONS;
 const TABLES = ['inbox_messages', 'outbox_messages', 'wager_transactions', 'wallet_ledger_entries', 'wallets'];
 
 const SCHEMA_FINGERPRINT_SQL = `
@@ -61,6 +62,8 @@ describe('schema migrations', () => {
     expect(await tables()).toEqual(TABLES);
     const first = await fingerprint();
     expect((await migrateUp(database.url)).applied).toEqual([]);
+
+    expect((await migrateDown(database.url)).applied).toEqual([REFERENCE_GUARDS]);
 
     expect((await migrateDown(database.url)).applied).toEqual([COMMIT_SEQUENCE]);
     expect(await fingerprint()).not.toContainEqual(expect.stringContaining('outbox_messages.seq'));

@@ -272,6 +272,7 @@ export class SqsConsumerLoop {
           WaitTimeSeconds: config.waitTimeSeconds,
           VisibilityTimeout: config.visibilityTimeoutSeconds,
           MessageSystemAttributeNames: ['ApproximateReceiveCount', 'MessageGroupId', 'SentTimestamp'],
+          MessageAttributeNames: ['providerId', 'ProviderId'],
         }),
         { abortSignal: this.receiveAbort.signal },
       );
@@ -343,6 +344,10 @@ export class SqsConsumerLoop {
     }
 
     const sentAt = parseDecimalInteger(message.sqs.Attributes?.SentTimestamp);
+    const actorProviderId = (
+      message.sqs.MessageAttributes?.providerId?.StringValue ??
+      message.sqs.MessageAttributes?.ProviderId?.StringValue
+    )?.trim();
     const inbound: InboundMessage = {
       body,
       rawBody,
@@ -350,6 +355,7 @@ export class SqsConsumerLoop {
       receiveCount: message.receiveCount,
       ...(message.groupId === undefined ? {} : { messageGroupId: message.groupId }),
       ...(sentAt === undefined ? {} : { sentAt: new Date(sentAt) }),
+      ...(actorProviderId === undefined || actorProviderId === '' ? {} : { actorProviderId }),
     };
     const { maxInProcessAttempts } = this.deps.config;
     let failures = 0;
