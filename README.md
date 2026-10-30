@@ -1,131 +1,218 @@
-# Distributed Wagering Processor
+# Jungle Wagering
 
-Este serviço é a carteira de um cassino online. Os jogos ficam com os provedores (estúdios de slot, mesa ao vivo etc.), e a cada rodada o provedor avisa o que aconteceu com o dinheiro do jogador: `BET` debita, `WIN` credita, `LOSS` só registra, `REFUND` devolve uma aposta e `ROLLBACK` desfaz uma operação anterior. O aviso chega por HTTP (`POST /wagering/transactions`) ou pela fila `wager-transactions.fifo`, os dois canais caem no mesmo use case, e o serviço mantém o saldo, um ledger imutável e publica os eventos de integração em `wagering-events.fifo` por um transactional outbox.
+A carteira de um cassino online. Os jogos ficam com os provedores, e a cada rodada o provedor avisa o que aconteceu com o dinheiro do jogador: `BET` debita, `WIN` credita, `LOSS` só registra, `REFUND` devolve uma aposta e `ROLLBACK` desfaz uma operação anterior. O aviso chega por HTTP (`POST /wagering/transactions`) ou pela fila `wager-transactions.fifo`, os dois canais caem no mesmo use case, e o serviço mantém o saldo, um ledger imutável e publica os eventos em `wagering-events.fifo` por um transactional outbox.
 
-O enunciado completo está em [`docs/CHALLENGE.md`](docs/CHALLENGE.md), e as decisões, trade-offs e limitações estão em [`ARCHITECTURE.md`](ARCHITECTURE.md).
+O enunciado está em [`docs/CHALLENGE.md`](docs/CHALLENGE.md), e as decisões, trade-offs e limitações estão em [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-## Stack
+## Pré-requisitos
 
-| Item | Versão |
-| --- | --- |
-| Runtime | Bun 1.4 (imagem `oven/bun:1.4.4-alpine`) |
-| Linguagem | TypeScript strict: checagem de tipos no compilador nativo 7.0 e lint com o parser do 6.0 (ver `ARCHITECTURE.md`) |
-| HTTP | NestJS 12, isolado em `src/infrastructure/framework/nest` |
-| ORM | MikroORM 7 (PostgreSQL) |
-| Banco | PostgreSQL 17.6 |
-| Fila | SQS FIFO, local no LocalStack 4.4.0 |
-| Auth | no-op por padrão, Keycloak 26.3 + `jose` (JWKS) no profile `auth` |
-| Observabilidade | pino (logs JSON), prom-client, Prometheus 3.5 e Grafana 12.1 |
-| Carga | k6 + nginx na frente de 3 réplicas |
-| Arquitetura | dependency-cruiser (`bun run test:arch`) |
+| Ferramenta | Versão | Para quê |
+| --- | --- | --- |
+| Docker + plugin `compose` | Compose v2 com suporte a `include` (2.20 ou mais novo) | Infra, réplicas, nginx, Prometheus, Grafana e Keycloak |
+| Bun | 1.4 | Rodar a aplicação fora do Docker, as migrations e os testes |
+| AWS CLI ou `awslocal` | qualquer v2 | Só para mandar mensagem na fila à mão |
+| k6 | qualquer recente | Só para `bun run test:load` |
 
-## Setup
-
-Precisa de Docker com o plugin `compose` e do Bun instalado.
+## Subir em 3 comandos
 
 ```bash
-bun install
 cp .env.example .env
+bun run infra:up
+docker compose -f docker-compose.app.yml up -d --build --wait
 ```
 
-O `.env.example` traz todos os parâmetros com o valor padrão e um comentário de cada um. As portas do host são configuráveis (`POSTGRES_HOST_PORT=55432`, `LOCALSTACK_HOST_PORT=4566`, `APP_HOST_PORT=8080`, `GRAFANA_HOST_PORT=3001`, `PROMETHEUS_HOST_PORT=9090`, `KEYCLOAK_HOST_PORT=8081`) para não brigar com outro stack na máquina.
+O primeiro sobe o PostgreSQL (porta `55432`) e o LocalStack (porta `4566`) com as filas criadas. O segundo builda a imagem, roda o `migrate` uma vez, sobe **3 réplicas** da aplicação, o nginx na frente, o Prometheus e o Grafana. Quando o `--wait` volta, está tudo de pé.
 
-## Comandos
-
-### Infra (PostgreSQL + LocalStack)
+O serviço `migrate` pede o build com `network: host`, porque o `bun install` precisa do DNS do host para achar o registry do npm. Se o seu Docker não liberar esse privilégio (erro de `network.host` no build), builde a imagem à parte e suba sem build:
 
 ```bash
-bun run infra:up      # docker compose up -d --wait postgres localstack
+docker build --network host -t jungle-wagering-app:local .
+docker compose -f docker-compose.app.yml up -d --no-build --wait
+```
+
+Para desligar:
+
+```bash
+docker compose -f docker-compose.app.yml down
 bun run infra:down
 ```
 
-O LocalStack sobe com o `infra/localstack/init-sqs.sh`, que cria as filas FIFO `wager-transactions.fifo` e `wagering-events.fifo`, cada uma com a sua DLQ (`wager-transactions-dlq.fifo` e `wagering-events-dlq.fifo`) e redrive. O healthcheck só fica verde quando o init terminou com sucesso e as filas existem com o `RedrivePolicy` certo.
+## Onde acessar
 
-### Migrations
+| URL | Para que serve | Credencial |
+| --- | --- | --- |
+| <http://localhost:8080> | API, pelo nginx, balanceando entre as 3 réplicas. Cada resposta traz o header `X-Instance-Id` | `Authorization: Bearer dev:provider-a` |
+| <http://localhost:8080/docs> | Swagger UI | Botão **Authorize** com o valor `dev:provider-a` |
+| <http://localhost:8080/docs-json> | Spec OpenAPI 3 | aberto |
+| <http://localhost:8080/i18n> | Catálogo de códigos e chaves de mensagem | aberto |
+| <http://localhost:8080/health/live> e `/health/ready` | Liveness e readiness (PostgreSQL e SQS) | aberto |
+| <http://localhost:8080/metrics> | Métricas Prometheus da réplica que respondeu | aberto |
+| <http://localhost:3001/d/jungle-wagering> | Dashboard "Jungle Wagering" no Grafana | anônimo para ver, `admin`/`admin` para editar |
+| <http://localhost:9090> | Prometheus, raspando o `/metrics` de cada réplica | aberto |
+| <http://localhost:8081> | Keycloak, só no profile `auth` | `admin`/`admin` no console |
+| `localhost:55432` | PostgreSQL | `wagering`/`wagering`, banco `wagering` |
+| <http://localhost:4566> | LocalStack (SQS) | qualquer chave estática, por exemplo `test`/`test` |
+
+As portas do host saem do `.env` (`APP_HOST_PORT`, `GRAFANA_HOST_PORT`, `PROMETHEUS_HOST_PORT`, `KEYCLOAK_HOST_PORT`, `POSTGRES_HOST_PORT`, `LOCALSTACK_HOST_PORT`), então dá para trocar qualquer uma se já estiver ocupada.
+
+## Primeira chamada
+
+Os exemplos usam o token de desenvolvimento do `provider-a`. Deixe as variáveis prontas:
 
 ```bash
-bun run migrate         # up
-bun run migrate:down    # desfaz a última
+API=http://localhost:8080
+AUTH='Authorization: Bearer dev:provider-a'
+PLAYER=0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1
 ```
 
-A aplicação não roda migration sozinha, então isso vem antes da primeira réplica subir. No `docker-compose.app.yml` existe o serviço `migrate`, que roda uma vez antes das réplicas.
-
-### Aplicação local
+### 1. Criar a wallet com 100.00
 
 ```bash
-bun run start
+curl -s -X POST $API/wallets -H "$AUTH" -H 'Content-Type: application/json' \
+  -d "{\"playerId\":\"$PLAYER\",\"initialBalance\":{\"amount\":\"100.00\",\"currency\":\"BRL\"}}"
 ```
 
-Sobe em `http://localhost:3000` com todos os papéis (`APP_ROLES=api,consumer,outbox,pending-worker`).
-
-### Aplicação com 3 réplicas + nginx
-
-```bash
-bun run infra:up
-docker compose -f docker-compose.app.yml up -d --build
+```json
+{"code":201,"message":"CREATED","data":{"id":"01a18a9e-ffea-73f7-a2ae-fd4e30359a7c","playerId":"0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1","balance":{"amount":"100.00","currency":"BRL"},"version":1},"timestamp":1793327038446,"detailsMessage":[]}
 ```
 
-O `docker-compose.app.yml` entra na rede do stack de infra (`jungle-wagering_default`), roda o `migrate`, sobe o serviço `app` com **3 réplicas** (1 CPU e 512 MB cada, `stop_grace_period: 30s`) e o nginx na frente, em `http://localhost:8080`. A mesma imagem roda todos os papéis, e cada réplica responde com o header `X-Instance-Id`.
+Guarde o `data.id`: `WALLET=01a18a9e-ffea-73f7-a2ae-fd4e30359a7c`. Uma segunda wallet para o mesmo jogador e moeda volta `409`.
 
-### Observabilidade
-
-O `docker-compose.app.yml` já inclui o `docker-compose.observability.yml`, então o Prometheus e o Grafana sobem junto com as réplicas:
-
-- Grafana: `http://localhost:3001`, com o datasource e o dashboard `wagering` provisionados (viewer anônimo, `admin`/`admin` para editar);
-- Prometheus: `http://localhost:9090`, raspando o `/metrics` de cada réplica.
-
-Para subir só os dois por cima de um stack que já está de pé:
+### 2. Apostar 25.00
 
 ```bash
-docker compose -f docker-compose.observability.yml up -d
-```
-
-### Auth (profile `auth`)
-
-Por padrão a API roda com `AUTH_MODE=noop`, que aceita `Authorization: Bearer dev:<providerId>` e não prova nada sobre quem chamou. Para usar o Keycloak de verdade:
-
-```bash
-AUTH_MODE=jwks docker compose -f docker-compose.app.yml --profile auth up -d --build
-```
-
-O Keycloak sobe em `http://localhost:8081` com o realm `wagering` e um client confidencial por provedor (`provider-a` e `provider-b`, segredo `<client>-secret`), cada token carregando a claim `provider_id` e a audience `wagering-api`.
-
-```bash
-curl -s -X POST http://localhost:8081/realms/wagering/protocol/openid-connect/token \
-  -d grant_type=client_credentials -d client_id=provider-a -d client_secret=provider-a-secret
-```
-
-### Exemplo rápido
-
-```bash
-curl -s -X POST http://localhost:8080/wallets \
-  -H 'Authorization: Bearer dev:provider-a' -H 'Content-Type: application/json' \
-  -d '{"playerId":"0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1","initialBalance":{"amount":"100.00","currency":"BRL"}}'
-
-curl -s -X POST http://localhost:8080/wagering/transactions \
-  -H 'Authorization: Bearer dev:provider-a' -H 'Content-Type: application/json' \
+curl -s -X POST $API/wagering/transactions -H "$AUTH" -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: provider-a:tx-1' \
-  -d '{"providerId":"provider-a","externalTransactionId":"tx-1","playerId":"0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1","walletId":"<id da wallet>","roundId":"round-1","gameId":"fortune-chimp","kind":"BET","money":{"amount":"25.00","currency":"BRL"}}'
+  -d "{\"providerId\":\"provider-a\",\"externalTransactionId\":\"tx-1\",\"playerId\":\"$PLAYER\",\"walletId\":\"$WALLET\",\"roundId\":\"round-1\",\"gameId\":\"fortune-chimp\",\"kind\":\"BET\",\"money\":{\"amount\":\"25.00\",\"currency\":\"BRL\"}}"
 ```
 
-Dinheiro sempre entra e sai como string com duas casas (`"25.00"`). Número JSON, `"25.5"` ou `"1e2"` voltam 400.
+```json
+{"code":200,"message":"SUCCESS","data":{"transactionId":"01a18a9f-00b5-7088-bb95-3ed4b4dc1352","status":"PROCESSED","balance":{"amount":"75.00","currency":"BRL"},"idempotentReplay":false},"timestamp":1793327038651,"detailsMessage":[]}
+```
 
-## Links
+### 3. Repetir a mesma chamada (replay idempotente)
 
-- `GET /docs`: Swagger UI, com a spec OpenAPI 3 em `GET /docs-json`. Toda rota documenta o sucesso e todos os erros possíveis.
-- `GET /i18n`: catálogo completo das chaves de mensagem, para o front montar as traduções. É aberto.
-- `GET /health/live` e `GET /health/ready`: abertos, sem envelope. O ready confere PostgreSQL e SQS.
-- `GET /metrics`: formato Prometheus.
-- [`docs/http-contract.md`](docs/http-contract.md): envelope, catálogo i18n e a tabela erro → status.
-- [`docs/load-test.md`](docs/load-test.md): relatório da carga.
-- [`docs/test-infra.md`](docs/test-infra.md): isolamento das suítes no stack compartilhado e o sweep.
-- [`docs/spikes/localstack.md`](docs/spikes/localstack.md): validação do LocalStack sem token e do redrive FIFO.
+Mesmo comando, mesma `Idempotency-Key`, mesmo corpo. O saldo não muda e a resposta é a decisão original com `idempotentReplay: true`:
+
+```json
+{"code":200,"message":"SUCCESS","data":{"transactionId":"01a18a9f-00b5-7088-bb95-3ed4b4dc1352","status":"PROCESSED","balance":{"amount":"75.00","currency":"BRL"},"idempotentReplay":true},"timestamp":1793327038664,"detailsMessage":[]}
+```
+
+Mesma key com outro corpo (por exemplo `30.00`) volta `409` com `IDEMPOTENCY_CONFLICT`.
+
+### 4. Consultar o saldo e o extrato
+
+```bash
+curl -s $API/wallets/$WALLET -H "$AUTH"
+curl -s "$API/wallets/$WALLET/ledger?limit=50" -H "$AUTH"
+```
+
+```json
+{"code":200,"message":"SUCCESS","data":{"id":"01a18a9e-ffea-73f7-a2ae-fd4e30359a7c","playerId":"0192f28f-5dc0-7d58-bdb2-814ad6a0f4a1","balance":{"amount":"75.00","currency":"BRL"},"version":2},"timestamp":1793327038675,"detailsMessage":[]}
+```
+
+O extrato vem em `data.entries`, do mais antigo para o mais novo, e a próxima página sai em `data.nextCursor` (`null` quando acabou).
+
+### 5. Reconciliar
+
+```bash
+curl -s -X POST $API/wallets/$WALLET/reconciliation -H "$AUTH"
+```
+
+```json
+{"code":200,"message":"SUCCESS","data":{"walletId":"01a18a9e-ffea-73f7-a2ae-fd4e30359a7c","storedBalance":{"amount":"75.00","currency":"BRL"},"calculatedBalance":{"amount":"75.00","currency":"BRL"},"difference":{"amount":"0.00","currency":"BRL"},"consistent":true,"checkedEntries":2},"timestamp":1793327038691,"detailsMessage":[]}
+```
+
+A reconciliação só relata, nunca corrige.
+
+**Corrida de verdade.** Numa wallet nova com 100.00, duas BETs de 80.00 em paralelo (keys diferentes) dão uma `200` e uma `422` com `INSUFFICIENT_FUNDS`, o saldo fica em 20.00 e a reconciliação volta `consistent: true`.
+
+Dinheiro sempre entra e sai como string com duas casas (`"25.00"`). Número JSON, `"25.5"` ou `"1e2"` voltam `400`. O envelope, o catálogo i18n e a tabela erro → status estão em [`docs/http-contract.md`](docs/http-contract.md).
+
+## Autenticação
+
+**Dev (padrão).** Com `AUTH_MODE=noop` a API aceita `Authorization: Bearer dev:<providerId>`. Não prova nada sobre quem chamou, serve para desenvolvimento. O provedor do token é quem está agindo: se o `providerId` do corpo ou do caminho for outro, a resposta é `403 PROVIDER_IDENTITY_MISMATCH`.
+
+No Swagger, o esquema é `http`/`bearer`, então o Swagger UI coloca o prefixo `Bearer` sozinho. No **Authorize** informe só `dev:provider-a`, sem o prefixo.
+
+**Keycloak (profile `auth`).** Suba as réplicas validando JWT pelo JWKS do Keycloak:
+
+```bash
+AUTH_MODE=jwks docker compose -f docker-compose.app.yml --profile auth up -d --build --wait
+```
+
+O Keycloak sobe em <http://localhost:8081> com o realm `wagering` e um client confidencial por provedor (`provider-a` e `provider-b`, segredo `<client>-secret`). Cada token traz a claim `provider_id` e a audience `wagering-api`.
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8081/realms/wagering/protocol/openid-connect/token \
+  -d grant_type=client_credentials -d client_id=provider-a -d client_secret=provider-a-secret | jq -r .access_token)
+
+curl -s $API/wallets/$WALLET -H "Authorization: Bearer $TOKEN"
+```
+
+Nesse modo o token `dev:` volta `401`. Para voltar ao modo dev, suba de novo sem o `AUTH_MODE=jwks`.
+
+## Enviar pela fila SQS
+
+A fila de comandos é `wager-transactions.fifo`. O corpo é um envelope `WagerTransactionRequested` com o mesmo payload da API em `data`, mais o `idempotencyKey`. Chave fora do contrato, tipo errado ou `kind: OPENING` mandam a mensagem para a `wager-transactions-dlq.fifo`. Use o `walletId` como `MessageGroupId` para manter a ordem por wallet. O provedor que age vem do atributo `providerId` da mensagem e, sem ele, do `actorProviderId` do envelope ou do `data.providerId`.
+
+```bash
+export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=us-east-1
+QUEUE=$(aws --endpoint-url http://localhost:4566 sqs get-queue-url \
+  --queue-name wager-transactions.fifo --query QueueUrl --output text)
+
+aws --endpoint-url http://localhost:4566 sqs send-message --queue-url "$QUEUE" \
+  --message-group-id "$WALLET" --message-deduplication-id tx-sqs-1 \
+  --message-attributes '{"providerId":{"DataType":"String","StringValue":"provider-a"}}' \
+  --message-body "{\"messageId\":\"tx-sqs-1\",\"type\":\"WagerTransactionRequested\",\"occurredAt\":\"2026-10-29T12:00:00Z\",\"data\":{\"providerId\":\"provider-a\",\"externalTransactionId\":\"tx-sqs-1\",\"idempotencyKey\":\"provider-a:tx-sqs-1\",\"playerId\":\"$PLAYER\",\"walletId\":\"$WALLET\",\"roundId\":\"round-2\",\"gameId\":\"fortune-chimp\",\"kind\":\"BET\",\"money\":{\"amount\":\"5.00\",\"currency\":\"BRL\"}}}"
+
+curl -s $API/providers/provider-a/wagering/transactions/tx-sqs-1 -H "$AUTH"
+```
+
+Com o `awslocal` é o mesmo comando sem o `--endpoint-url`. A consulta pelo id externo devolve a transação com `status: PROCESSED` e o saldo depois dela. HTTP e fila dividem a idempotência, então a mesma operação mandada pelos dois canais tem um efeito só.
+
+## Observabilidade
+
+**Health.** `GET /health/live` responde `200 {"status":"ok"}` enquanto o processo está de pé. `GET /health/ready` confere o PostgreSQL (`SELECT 1`) e o SQS (`GetQueueAttributes`) e volta `503` com o nome de quem caiu. Os dois são abertos e respondem sem envelope.
+
+**Logs.** JSON pelo pino, um por linha, com `correlationId`, `messageId`, `transactionId`, `walletId` e `providerId` quando existem. Payload financeiro completo e token não vão para o log. Para ver: `docker compose -f docker-compose.app.yml logs -f app`.
+
+**Métricas.** `GET /metrics` no formato Prometheus. As principais:
+
+| Métrica | O que mede |
+| --- | --- |
+| `wager_transactions_total` | transações decididas, por `status` e `kind` |
+| `idempotent_duplicates_total` | replays e duplicatas detectadas |
+| `retries_total` | retentativas (consumer, outbox, worker de pendências) |
+| `dlq_messages_total` | mensagens mandadas para a DLQ, com o motivo |
+| `lock_conflicts_total` e `lock_wait_seconds` | lock timeout, deadlock e espera pelo lock da wallet |
+| `outbox_lag_seconds` | tempo entre o commit do evento e a publicação |
+| `processing_duration_seconds` | latência de processamento |
+| `reconciliation_divergences_total` | divergências achadas na reconciliação |
+| `circuit_breaker_open` | breaker aberto por réplica |
+
+O dashboard "Jungle Wagering" do Grafana (<http://localhost:3001/d/jungle-wagering>) já vem com esses painéis.
+
+## Teste de carga
+
+`bun run test:load` sobe o k6 contra o nginx e as 3 réplicas, nos cenários distribuído, hot wallet, mix com duplicatas e caminho SQS, e reconcilia todas as wallets no fim. O relatório em [`docs/load-test.md`](docs/load-test.md) traz o ambiente, a metodologia, o throughput, p50/p95/p99, a taxa de erro, os conflitos de lock e o outbox lag. Precisa do k6 e do stack de pé.
+
+## Rodar fora do Docker
+
+```bash
+bun install
+bun run infra:up
+bun run migrate         # a aplicação não roda migration sozinha
+bun run start           # http://localhost:3000, com todos os papéis
+```
+
+`bun run migrate:down` desfaz a última migration. Os papéis do processo saem de `APP_ROLES` (`api`, `consumer`, `outbox`, `pending-worker`).
 
 ## Testes
 
-Todas as suítes que falam com banco ou fila rodam contra o PostgreSQL e o LocalStack **reais** do `bun run infra:up`, nunca contra mock. Cada execução cria o próprio banco `wagering_test_<uuidv7>` e as próprias filas `wager-transactions[-dlq]-<uuidv7>.fifo` e `wagering-events[-dlq]-<uuidv7>.fifo`, então dá para rodar em paralelo com outra pessoa usando o mesmo stack.
+Todas as suítes que falam com banco ou fila rodam contra o PostgreSQL e o LocalStack **reais** do `bun run infra:up`, nunca contra mock. Cada execução cria o próprio banco `wagering_test_<uuidv7>` e as próprias filas `wager-transactions[-dlq]-<uuidv7>.fifo` e `wagering-events[-dlq]-<uuidv7>.fifo`, então dá para rodar em paralelo com outra pessoa no mesmo stack.
 
-| Comando | O que roda |
+| Comando | O que prova |
 | --- | --- |
 | `bun run lint` | ESLint, incluindo o bloqueio de `parseFloat`, `Number(` e `toFixed` no código de dinheiro |
 | `bun run typecheck` | `tsc --noEmit` com o TypeScript 7 nativo |
@@ -134,10 +221,90 @@ Todas as suítes que falam com banco ou fila rodam contra o PostgreSQL e o Local
 | `bun run test:integration` | schema, triggers, repositórios, UoW, outbox, consumer SQS, worker de pendências e redrive, no PG e no LocalStack |
 | `bun run test:concurrency` | races (2 × 80.00 sobre 100.00, 50 BETs paralelas, mesma key em wallets diferentes, worker de pendências), com `--rerun-each ${RERUN_EACH:-20}` |
 | `bun run test:multi` | 3 processos da aplicação de verdade, carga mista, `kill -9` em todos, restart e reconciliação de todas as wallets |
-| `bun run test:chaos` | `docker pause` no PostgreSQL compartilhado com 3 réplicas rodando: 503 + `Retry-After`, `/health/ready` fora, breaker abrindo e a fila processada quando o banco volta |
+| `bun run test:chaos` | `docker pause` no PostgreSQL com 3 réplicas rodando: 503 + `Retry-After`, `/health/ready` fora, breaker abrindo e a fila processada quando o banco volta |
 | `bun run test:load` | k6 contra nginx + 3 réplicas, nos cenários distribuído, hot wallet, mix com duplicatas e caminho SQS, com reconciliação no fim |
 | `bun run test:auth` | smoke do Keycloak: um `provider_id` por client, segredo errado recusado no IdP, token adulterado e token `dev:` em 401 |
 
-O `test:chaos` pausa o container do PostgreSQL que todo mundo usa, então ele **roda sozinho**, nunca junto com outra suíte nem com outra pessoa testando no mesmo stack. O `test:auth` precisa do Keycloak de pé (`docker compose -f docker-compose.auth.yml --profile auth up -d --wait`).
+### O que cada teste obrigatório cobre
 
-Se um processo de teste morrer antes do cleanup, sobram bancos e filas, e o `bun run test:sweep` limpa o que tem mais de 30 minutos (`--help` mostra as opções). O sweep só olha a idade, então com alguém rodando uma suíte longa no mesmo stack vale passar um `--older-than-minutes` maior que a duração dela.
+| Teste do enunciado (§13) | Suíte | Arquivo |
+| --- | --- | --- |
+| `Money`: escala, arredondamento, entradas inválidas | `test` | `src/business/shared/value-object/money.spec.ts` |
+| Invariantes da `Wallet` | `test` | `src/business/wallet/entity/wallet.spec.ts` |
+| Regras de BET, WIN, LOSS, REFUND, ROLLBACK | `test` | `src/business/wagering/domain-service/wager-rules.spec.ts`, `reversal.policy.spec.ts`, `process-wager-transaction.spec.ts` |
+| Conflito de moeda | `test`, `test:integration` | `money.spec.ts`, `reference-resolver.spec.ts`, `tests/integration/wagering/real-flow.spec.ts` |
+| Idempotency key com payload divergente | `test`, `test:integration` | `src/business/wagering/domain-service/idempotency-check.spec.ts`, `real-flow.spec.ts` |
+| Migrations e constraints | `test:integration` | `tests/integration/persistence/migrations.spec.ts`, `*-schema.spec.ts` |
+| Atomicidade wallet, ledger, inbox e outbox | `test:integration` | `tests/integration/persistence/unit-of-work.spec.ts`, `tests/integration/wagering/real-flow.spec.ts` (falha injetada no ledger, na outbox e antes do commit) |
+| Inbox e redelivery | `test:integration` | `tests/integration/wagering/sqs-wagering.spec.ts`, `tests/integration/persistence/messaging-concurrency.spec.ts` |
+| Publishers concorrentes sobre a mesma outbox | `test:integration` | `tests/integration/messaging/outbox-publisher.spec.ts`, `messaging-concurrency.spec.ts` |
+| Retry e DLQ | `test:integration` | `tests/integration/messaging/sqs-consumer.spec.ts`, `tests/integration/infra/sqs-redrive.spec.ts` |
+| Recuperação após reinicialização | `test:integration`, `test:multi` | `outbox-publisher.spec.ts` (SIGKILL entre publish e mark), `tests/multi-instance/restart.spec.ts` |
+| 1. Mesma aposta 50 vezes em paralelo | `test:concurrency` | `tests/concurrency/wagering/wager-races.spec.ts` |
+| 2. Disputa de saldo na mesma wallet (2 × 80.00) | `test:concurrency` | `wager-races.spec.ts` |
+| 3. Wallets distintas em paralelo | `test:concurrency` | `wager-races.spec.ts` |
+| 4. ≥ 3 processos simultâneos | `test:multi` | `tests/multi-instance/mixed-load.spec.ts` |
+| 5. Worker morto depois do commit e antes do ack | `test:integration` | `sqs-wagering.spec.ts`, `sqs-consumer.spec.ts` (`crash_after_commit_before_ack`) |
+| 6. Dois publishers sobre a mesma outbox | `test:integration` | `outbox-publisher.spec.ts` (3 workers em pools separados) |
+| 7. ROLLBACK ou REFUND antes da referência | `test:integration`, `test:concurrency` | `real-flow.spec.ts`, `tests/concurrency/wagering/pending-worker-races.spec.ts` |
+| 8. Reinício com consistência final | `test:multi` | `restart.spec.ts` (`kill -9` em todas as réplicas e reconciliação) |
+
+A invariante `wallet.balance == saldo reconstruído pelo ledger` é conferida pela reconciliação de todas as wallets no fim do `test:multi` e do `test:load`, e pelo `tests/support/assert-wallet-consistency.ts` nos testes de repositório. Nas races do `test:concurrency` a conferência é o saldo final e a contagem de lançamentos no ledger.
+
+O `test:chaos` pausa o container do PostgreSQL que todo mundo usa, então ele **roda sozinho**, nunca junto com outra suíte nem com outra pessoa no mesmo stack. O `test:auth` precisa do Keycloak de pé (`docker compose -f docker-compose.auth.yml --profile auth up -d --wait`).
+
+Se um processo de teste morrer antes do cleanup, sobram bancos e filas, e o `bun run test:sweep` limpa o que tem mais de 30 minutos (`--help` mostra as opções). O sweep só olha a idade, então com alguém rodando uma suíte longa no mesmo stack passe um `--older-than-minutes` maior que a duração dela.
+
+## Configuração
+
+O `.env.example` traz todos os parâmetros com o valor padrão e um comentário de cada um. Os principais:
+
+| Variável | Padrão | O que faz |
+| --- | --- | --- |
+| `DATABASE_URL` | `postgres://wagering:wagering@localhost:55432/wagering` | Conexão com o PostgreSQL |
+| `APP_ROLES` | `api,consumer,outbox,pending-worker` | Papéis do processo (vazio = todos) |
+| `PORT` | `3000` | Porta HTTP do processo |
+| `AUTH_MODE` | `noop` | `noop` aceita `dev:<providerId>`, `jwks` valida JWT do Keycloak |
+| `SQS_ENDPOINT` | `http://localhost:${LOCALSTACK_HOST_PORT}` | Endpoint do SQS |
+| `SQS_COMMANDS_QUEUE_NAME` | `wager-transactions.fifo` | Fila de comandos |
+| `SQS_EVENTS_QUEUE_NAME` | `wagering-events.fifo` | Fila de eventos |
+| `HTTP_REQUEST_TIMEOUT_MS` | `10000` | Teto de uma requisição, depois vira 503 + `Retry-After` |
+| `DB_LOCK_TIMEOUT_MS` | `2000` | `lock_timeout` de cada unit of work |
+| `LOG_LEVEL` | `info` | Nível do pino |
+
+## Troubleshooting
+
+| Sintoma | Causa e saída |
+| --- | --- |
+| Build falha com erro de `network.host` ou o `bun install` não resolve o registry | O compose pede o build com rede do host. Builde à parte com `docker build --network host -t jungle-wagering-app:local .` e suba com `up -d --no-build --wait` |
+| `network jungle-wagering_default not found` | O `docker-compose.app.yml` entra na rede do stack de infra. Rode `bun run infra:up` antes |
+| `port is already allocated` | Outra coisa usa a porta. Troque a porta no `.env` (`APP_HOST_PORT`, `GRAFANA_HOST_PORT`, `POSTGRES_HOST_PORT` etc.) e suba de novo |
+| `/health/ready` com `sqs: down` ou o consumer reclamando de fila inexistente | O LocalStack não guarda estado, e um container antigo pode ter filas com nome antigo. Recrie: `docker compose up -d --force-recreate --wait localstack`. O init cria as filas de novo e o healthcheck só fica verde com elas no lugar |
+| Token `dev:` volta 401 | As réplicas estão com `AUTH_MODE=jwks`. Use um token do Keycloak ou suba de novo sem essa variável |
+| Mensagem da fila não aparece | Confira a `wager-transactions-dlq.fifo`: chave fora do contrato ou `kind: OPENING` vão direto para lá |
+| Sobram bancos `wagering_test_*` e filas de teste | `bun run test:sweep` |
+
+## Decisões documentadas
+
+O enunciado pede que algumas escolhas fiquem justificadas. Onde está cada uma:
+
+| Item do enunciado | Onde |
+| --- | --- |
+| §2 Auth: decisão, desenho e ponto de extensão | [`ARCHITECTURE.md` › Auth](ARCHITECTURE.md#auth) |
+| §4 ORM, mapeamento do `Money` e estratégia transacional | [`ARCHITECTURE.md` › Persistência](ARCHITECTURE.md#persistência-mikroorm-money-e-a-transação) e [Dinheiro](ARCHITECTURE.md#dinheiro-bigint-e-nada-de-arredondamento) |
+| §6 Transições válidas da `WagerTransaction` | [`ARCHITECTURE.md` › Transições e replay](ARCHITECTURE.md#wagertransaction-transições-e-replay) |
+| §7 Interpretações adicionais das regras | [`ARCHITECTURE.md` › Referências](ARCHITECTURE.md#referências-refund--rollback) e [Desvios do enunciado](ARCHITECTURE.md#desvios-do-enunciado-e-limitações-conhecidas) |
+| §7.2 Taxonomia do `failureCode` | [`ARCHITECTURE.md` › Taxonomia do `failureCode`](ARCHITECTURE.md#taxonomia-do-failurecode) |
+| §8 Estratégia de concorrência | [`ARCHITECTURE.md` › Concorrência](ARCHITECTURE.md#concorrência) |
+| §9 Algoritmo do `payloadHash` | [`ARCHITECTURE.md` › O hash](ARCHITECTURE.md#o-hash) |
+| §9 Mapeamento de status HTTP | [`docs/http-contract.md`](docs/http-contract.md#mapeamento-erro--status) |
+| §14 Teste de carga | [`docs/load-test.md`](docs/load-test.md) |
+
+## Documentação
+
+- [`ARCHITECTURE.md`](ARCHITECTURE.md): decisões, trade-offs e limitações.
+- [`docs/http-contract.md`](docs/http-contract.md): envelope, catálogo i18n, tabela erro → status, health e Swagger.
+- [`docs/load-test.md`](docs/load-test.md): relatório da carga.
+- [`docs/test-infra.md`](docs/test-infra.md): isolamento das suítes no stack compartilhado e o sweep.
+- [`docs/spikes/localstack.md`](docs/spikes/localstack.md): validação do LocalStack sem token e do redrive FIFO.
+- [`docs/CHALLENGE.md`](docs/CHALLENGE.md): o enunciado.
