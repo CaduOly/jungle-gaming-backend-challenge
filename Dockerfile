@@ -1,4 +1,4 @@
-# One image for every role: APP_ROLES picks what a container runs; `bun run migrate` is its one-shot job.
+# Uma imagem para todos os papéis: APP_ROLES escolhe o que o container roda; `bun run migrate` é o job one-shot dela.
 FROM oven/bun:1.4.4-alpine AS deps
 WORKDIR /app
 COPY package.json bun.lock ./

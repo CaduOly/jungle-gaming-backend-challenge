@@ -1,7 +1,7 @@
-# Prometheus and Grafana over the application stack (docker-compose.app.yml): they join the same network, Prometheus
-# scrapes every replica of `app` and Grafana comes up with the datasource and the dashboard provisioned.
+# Prometheus e Grafana em cima da stack da aplicação (docker-compose.app.yml): entram na mesma rede, o Prometheus
+# faz scrape de toda réplica do `app` e o Grafana sobe com o datasource e o dashboard já provisionados.
 #   docker compose -f docker-compose.observability.yml up -d
-# Grafana: http://localhost:${GRAFANA_HOST_PORT:-3001} (anonymous viewer; admin/admin to edit).
+# Grafana: http://localhost:${GRAFANA_HOST_PORT:-3001} (viewer anônimo; admin/admin para editar).
 name: jungle-wagering-observability
 
 services:
