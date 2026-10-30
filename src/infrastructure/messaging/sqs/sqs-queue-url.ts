@@ -1,7 +1,7 @@
 import { GetQueueUrlCommand, type SQSClient } from '@aws-sdk/client-sqs';
 import type { SqsQueueRef } from '../../config/sqs-config';
 
-/** Resolves a queue name with GetQueueUrl once; a failed lookup is not cached, so the next call retries. */
+/** Resolve o nome da fila com GetQueueUrl uma vez, lookup que falhou não vai para o cache, então a próxima chamada tenta de novo. */
 export class SqsQueueUrl {
   private resolved: Promise<string> | undefined;
 

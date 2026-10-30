@@ -5,7 +5,7 @@ type Env = Readonly<Record<string, string | undefined>>;
 export type SqsQueueRef = { readonly url: string } | { readonly name: string };
 
 export interface SqsConfig {
-  /** Absent in AWS (the SDK resolves it from the region); LocalStack in development and tests. */
+  /** Ausente na AWS (o SDK resolve pela region), LocalStack em desenvolvimento e testes. */
   readonly endpoint?: string;
   readonly region: string;
   readonly credentials?: { readonly accessKeyId: string; readonly secretAccessKey: string };
@@ -49,7 +49,7 @@ const readQueue = (env: Env, prefix: string, label: string, fallback: string): S
   return url === undefined ? { name } : { url };
 };
 
-/** Every SQS_*_URL wins over its SQS_*_NAME, which is resolved with GetQueueUrl on first use. */
+/** Todo SQS_*_URL tem prioridade sobre o SQS_*_NAME correspondente, que é resolvido com GetQueueUrl no primeiro uso. */
 export const readSqsConfig = (env: Env): SqsConfig => {
   const maxAttempts = readIntegerEnv(env, 'SQS_MAX_ATTEMPTS', 3);
   if (maxAttempts === 0) throw new Error('Invalid SQS_MAX_ATTEMPTS: must be at least 1');

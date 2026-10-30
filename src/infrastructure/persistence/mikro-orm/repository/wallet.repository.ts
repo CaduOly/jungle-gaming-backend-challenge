@@ -12,8 +12,8 @@ import type { RunResult } from './run-result';
 const PLAYER_CURRENCY_UNIQUE = 'wallets_player_currency_unique';
 
 /**
- * Native SQL only: the wallet is never tracked by the identity map, so there is no dirty check and the single
- * write path is `update`, which moves the version forward by exactly one under the row lock.
+ * Só SQL nativo: a wallet nunca é rastreada pelo identity map, então não tem dirty check e o único caminho de
+ * escrita é o `update`, que avança a version em exatamente um com o row lock.
  */
 export class WalletRepository implements IWalletRepository {
   constructor(private readonly em: EntityManager) {}

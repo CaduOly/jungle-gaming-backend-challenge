@@ -19,8 +19,8 @@ export const METRIC_NAMES = [
 ] as const;
 
 /**
- * Every metric of the service, in a registry of its own (never the prom-client global one), so two apps in the
- * same process (the e2e suites) never share a counter. Callers go through the decorators and hooks, not here.
+ * Todas as métricas do serviço, num registry próprio (nunca o global do prom-client), assim duas apps no mesmo
+ * processo (as suites e2e) nunca compartilham counter. Quem usa passa pelos decorators e hooks, não por aqui.
  */
 export class WageringMetrics {
   readonly registry = new Registry();

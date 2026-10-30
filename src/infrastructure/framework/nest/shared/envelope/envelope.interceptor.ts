@@ -7,8 +7,8 @@ import { envelope } from './api-response';
 import { HttpResult } from './http-result';
 
 /**
- * Wraps every HttpResult in the envelope and sets its status. Anything else (health probes, /metrics, the
- * Swagger UI) passes through untouched, which keeps those endpoints raw.
+ * Embrulha todo HttpResult no envelope e define o status. Qualquer outra coisa (health probes, /metrics, a UI do
+ * Swagger) passa sem mexer, o que mantém esses endpoints crus.
  */
 @Injectable()
 export class EnvelopeInterceptor implements NestInterceptor {

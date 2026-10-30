@@ -7,10 +7,10 @@ import { forbiddenKeyDetails } from './forbidden-keys';
 import { validationDetails } from './validation-details';
 
 /**
- * Unknown fields are rejected (not silently dropped), and every field reports its first failed rule only.
- * No transform: primitives are never coerced ("2" stays a string for the dedicated param pipes, and a numeric
- * amount stays a number so it fails MUST_BE_STRING instead of becoming money). A body nested too deep is refused
- * before anything walks it recursively, and one with a prototype key before class-transformer sees it.
+ * Campo desconhecido é rejeitado (não descartado em silêncio), e cada campo reporta só a primeira regra que falhou.
+ * Sem transform: primitivo nunca é convertido ("2" continua string para os pipes de param dedicados, e um amount
+ * numérico continua number para falhar em MUST_BE_STRING em vez de virar money). Body aninhado demais é recusado
+ * antes de qualquer coisa percorrer ele recursivamente, e body com chave de prototype antes do class-transformer ver.
  */
 @Injectable()
 export class RequestValidationPipe extends ValidationPipe {

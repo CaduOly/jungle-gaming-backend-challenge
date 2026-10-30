@@ -7,7 +7,7 @@ import { findDetailMessage } from '../i18n/catalog';
 import { MoneyRequestDto } from './money-request.dto';
 
 const REQUEST_DTOS = [CreateWalletRequestDto, SubmitWagerTransactionRequestDto, MoneyRequestDto];
-/** Structural markers that never produce an error of their own. */
+/** Marcadores estruturais que nunca geram erro próprio. */
 const SILENT = new Set(['conditionalValidation', 'nestedValidation']);
 
 describe('validation messages', () => {

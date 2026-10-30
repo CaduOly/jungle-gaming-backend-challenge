@@ -1,6 +1,6 @@
 import type { DetailMessage } from './api-response';
 
-/** What a business controller returns: the interceptor turns it into the status and the envelope. */
+/** O que um controller de negócio retorna, o interceptor transforma isso no status e no envelope. */
 export class HttpResult<T> {
   constructor(
     readonly status: number,

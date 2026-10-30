@@ -2,7 +2,7 @@ import { error, type IDetailMessage } from './detail-message';
 
 const NS = 'VALIDATION';
 
-/** One entry per validation rule; DTO decorators carry them in `context`. */
+/** Uma entrada por regra de validação, os decorators dos DTOs carregam elas no `context`. */
 export class ValidationDetailMessage {
   static readonly REQUIRED: IDetailMessage = error(NS, 'REQUIRED');
   static readonly MUST_BE_STRING: IDetailMessage = error(NS, 'MUST_BE_STRING');
@@ -25,12 +25,12 @@ export class ValidationDetailMessage {
   static readonly IDEMPOTENCY_KEY_REQUIRED: IDetailMessage = error(NS, 'IDEMPOTENCY_KEY_REQUIRED');
   static readonly UNKNOWN_FIELD: IDetailMessage = error(NS, 'UNKNOWN_FIELD');
   static readonly MALFORMED_BODY: IDetailMessage = error(NS, 'MALFORMED_BODY');
-  /** `__proto__`, `constructor` or `prototype` anywhere in the body: refused before anything reads it. */
+  /** `__proto__`, `constructor` ou `prototype` em qualquer lugar do body: recusado antes de qualquer leitura. */
   static readonly FORBIDDEN_KEY: IDetailMessage = error(NS, 'FORBIDDEN_KEY');
-  /** A path with a broken percent-encoding, which cannot even be routed. */
+  /** Path com percent-encoding quebrado, que nem dá para rotear. */
   static readonly MALFORMED_PATH: IDetailMessage = error(NS, 'MALFORMED_PATH');
   static readonly PAYLOAD_TOO_LARGE: IDetailMessage = error(NS, 'PAYLOAD_TOO_LARGE');
   static readonly UNSUPPORTED_MEDIA_TYPE: IDetailMessage = error(NS, 'UNSUPPORTED_MEDIA_TYPE');
-  /** Rejected by the use case itself (a rule the DTO cannot express). */
+  /** Rejeitado pelo próprio use case (regra que o DTO não consegue expressar). */
   static readonly INVALID_REQUEST: IDetailMessage = error(NS, 'INVALID_REQUEST');
 }

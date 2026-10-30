@@ -13,9 +13,9 @@ const carriesBody = (request: Request): boolean => {
 };
 
 /**
- * Guards the routes that read a body: the API only reads JSON. A request that carries a body in any other media
- * type answers 415 instead of reaching validation with an empty body (which would read as "every field is missing").
- * Routes without a body (the GETs, the reconciliation) do not use it and ignore whatever body arrives.
+ * Protege as rotas que leem body, já que a API só lê JSON. Request com body em qualquer outro media type responde
+ * 415 em vez de chegar na validação com body vazio (que ia aparecer como "todos os campos faltando").
+ * Rotas sem body (os GETs, a reconciliação) não usam ele e ignoram qualquer body que chegar.
  */
 @Injectable()
 export class JsonContentTypeGuard implements CanActivate {

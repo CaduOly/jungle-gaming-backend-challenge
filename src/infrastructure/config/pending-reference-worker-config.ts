@@ -6,7 +6,7 @@ type Env = Readonly<Record<string, string | undefined>>;
 export interface PendingReferenceWorkerConfig {
   readonly batchSize: number;
   readonly leaseMs: number;
-  /** Wait after a round that did not fill its batch (nothing else is due yet) or that threw. */
+  /** Espera depois de uma rodada que não encheu o batch (não tem mais nada vencido) ou que lançou erro. */
   readonly pollIntervalMs: number;
   readonly backoff: {
     readonly baseMs: number;
@@ -15,7 +15,7 @@ export interface PendingReferenceWorkerConfig {
   };
 }
 
-/** base 2s, cap 60s, 8 attempts: about five minutes before REFERENCE_NOT_FOUND. */
+/** base 2s, cap 60s, 8 tentativas: uns cinco minutos até REFERENCE_NOT_FOUND. */
 export const DEFAULT_PENDING_REFERENCE_WORKER_CONFIG: PendingReferenceWorkerConfig = {
   batchSize: 10,
   leaseMs: 60_000,
@@ -30,9 +30,9 @@ const positive = (env: Env, name: string, fallback: number): number => {
 };
 
 /**
- * Each item of a round may wait out the lock timeout twice (wallet, then transaction), so the lease must outlive
- * that whole batch: otherwise another instance reclaims items this one has not reached yet. That only wastes work
- * (the use case skips an attempt that was already counted), but a lease that is always too short makes it the rule.
+ * Cada item da rodada pode esperar o lock timeout duas vezes (wallet, depois transação), então o lease tem que
+ * durar o batch inteiro, senão outra instância pega de volta itens que essa ainda nem chegou. Isso só desperdiça
+ * trabalho (o use case pula tentativa que já foi contada), mas com um lease sempre curto demais vira a regra.
  */
 export const validatePendingReferenceWorkerConfig = (
   config: PendingReferenceWorkerConfig,

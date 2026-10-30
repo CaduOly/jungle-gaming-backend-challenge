@@ -1,7 +1,7 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type { IReadinessCheck } from './readiness-check.port';
 
-/** `SELECT 1` on a pooled connection: proves the pool can hand out a connection and the server answers. */
+/** `SELECT 1` numa conexão do pool: prova que o pool consegue entregar conexão e que o servidor responde. */
 export class PostgresReadinessCheck implements IReadinessCheck {
   readonly name = 'postgres';
 

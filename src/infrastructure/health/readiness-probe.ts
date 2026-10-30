@@ -27,8 +27,8 @@ export const withTimeout = async (check: IReadinessCheck, timeoutMs: number): Pr
 };
 
 /**
- * Runs every check in parallel, each bounded by the timeout, so a hung dependency answers "down" in time for the
- * probe instead of hanging it. Ready only when all are up; with no checks at all it is ready.
+ * Roda todos os checks em paralelo, cada um limitado pelo timeout, assim uma dependência travada responde "down" a
+ * tempo do probe em vez de travar ele. Só fica ready quando todos estão up, e sem nenhum check fica ready.
  */
 export class ReadinessProbe {
   constructor(

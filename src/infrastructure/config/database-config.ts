@@ -4,7 +4,7 @@ import { readIntegerEnv } from './integer-env';
 export interface DatabaseConfig {
   readonly url: string;
   readonly lockTimeoutMs: number;
-  /** How long to wait for a pooled connection before failing with a transient error. */
+  /** Quanto tempo esperar uma conexão do pool antes de falhar com erro transiente. */
   readonly poolAcquireTimeoutMs: number;
 }
 

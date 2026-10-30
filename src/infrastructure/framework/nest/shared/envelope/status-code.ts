@@ -1,4 +1,4 @@
-/** `message` of the envelope: the name of the HTTP status in the Code catalog. */
+/** `message` do envelope: o nome do status HTTP no catálogo Code. */
 export const Code = {
   200: 'SUCCESS',
   201: 'CREATED',

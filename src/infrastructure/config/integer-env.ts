@@ -9,7 +9,7 @@ export const readIntegerEnv = (
   return Number.parseInt(raw, 10);
 };
 
-/** Plain non-negative decimal integer from untrusted text (query string, attribute), or undefined. */
+/** Inteiro decimal não negativo vindo de texto não confiável (query string, atributo), ou undefined. */
 export const parseDecimalInteger = (raw: string | undefined): number | undefined => {
   if (raw === undefined || !/^\d{1,15}$/.test(raw)) return undefined;
   return Number.parseInt(raw, 10);

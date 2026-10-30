@@ -3,7 +3,7 @@ import { METRIC_NAMES, WageringMetrics } from './wagering-metrics';
 
 const ROOT = `${import.meta.dir}/../../../..`;
 const SERIES_SUFFIX = /_(bucket|sum|count)$/;
-/** Labels Prometheus or the histograms add on their own. */
+/** Labels que o Prometheus ou os histograms adicionam sozinhos. */
 const IMPLICIT_LABELS = new Set(['le', 'instance', 'job']);
 
 interface Target {

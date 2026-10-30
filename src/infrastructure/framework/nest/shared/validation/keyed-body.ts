@@ -16,8 +16,8 @@ interface RawKeyedBody {
 }
 
 /**
- * Validates the body and the Idempotency-Key header in one go, so a request missing the key and carrying an invalid
- * body hears about both. The body goes through the same pipe as every other body.
+ * Valida o body e o header Idempotency-Key de uma vez, então uma request sem a key e com body inválido fica sabendo
+ * dos dois. O body passa pelo mesmo pipe que todo outro body.
  */
 @Injectable()
 class KeyedBodyPipe<T extends object> implements PipeTransform<RawKeyedBody, Promise<KeyedBody<T>>> {
@@ -45,6 +45,6 @@ const readKeyedBody = createParamDecorator(
   },
 );
 
-/** The request body as `metatype`, validated, with its mandatory Idempotency-Key. */
+/** O body da request como `metatype`, validado, com a Idempotency-Key obrigatória. */
 export const BodyWithIdempotencyKey = <T extends object>(metatype: Type<T>): ParameterDecorator =>
   readKeyedBody(new KeyedBodyPipe(metatype));

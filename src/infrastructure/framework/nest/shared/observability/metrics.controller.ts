@@ -5,7 +5,7 @@ import type { WageringMetrics } from '../../../../observability/metrics/wagering
 import { Public } from '../auth/public.decorator';
 import { METRICS } from '../di/tokens';
 
-/** Prometheus text format, raw and open, scraped from every replica. */
+/** Formato texto do Prometheus, cru e aberto, com scrape em toda réplica. */
 @ApiExcludeController()
 @Public()
 @Controller('metrics')

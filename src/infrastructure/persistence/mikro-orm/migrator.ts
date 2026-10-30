@@ -23,7 +23,7 @@ export const migrateUp = (databaseUrl: string): Promise<MigrationRun> =>
     return { direction: 'up', applied: applied.map((migration) => migration.name) };
   });
 
-/** Reverts the last migration, or every migration when `all` is set. */
+/** Reverte a última migration, ou todas quando `all` é passado. */
 export const migrateDown = (databaseUrl: string, options: { all?: boolean } = {}): Promise<MigrationRun> =>
   withOrm(databaseUrl, async (orm) => {
     const reverted = await orm.migrator.down(options.all ? { to: 0 } : undefined);

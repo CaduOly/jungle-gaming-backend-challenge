@@ -1,6 +1,6 @@
 export type DetailType = 'error' | 'warning';
 
-/** One catalog entry: `code` is what clients branch on, `message` the i18n key the front end translates. */
+/** Uma entrada do catálogo: `code` é o que o client usa para decidir, `message` é a chave i18n que o front traduz. */
 export interface IDetailMessage {
   readonly code: string;
   readonly message: string;

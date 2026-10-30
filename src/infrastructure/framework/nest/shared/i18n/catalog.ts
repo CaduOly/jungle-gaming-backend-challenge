@@ -16,7 +16,7 @@ export const DETAIL_MESSAGE_CATALOGS = {
 const isDetailMessage = (value: unknown): value is IDetailMessage =>
   typeof value === 'object' && value !== null && 'code' in value && 'message' in value && 'type' in value;
 
-/** Every entry of every catalog class, in declaration order (what GET /i18n returns). */
+/** Toda entrada de toda classe de catálogo, na ordem de declaração (o que o GET /i18n retorna). */
 export const allDetailMessages = (): IDetailMessage[] =>
   Object.values(DETAIL_MESSAGE_CATALOGS).flatMap((catalog) => Object.values(catalog).filter(isDetailMessage));
 
@@ -24,11 +24,11 @@ const byCode = new Map(allDetailMessages().map((entry) => [entry.code, entry]));
 
 export const findDetailMessage = (code: string): IDetailMessage | undefined => byCode.get(code);
 
-/** The domain knows no i18n key: a FailureCode becomes its catalog entry only here, at the HTTP edge. */
+/** O domínio não conhece chave i18n, um FailureCode só vira entrada do catálogo aqui, na borda HTTP. */
 export const detailForFailureCode = (code: FailureCode): IDetailMessage =>
   byCode.get(code) ?? InfraDetailMessage.INTERNAL_ERROR;
 
-/** Every InputRule the domain can name has its message; a new rule without one does not compile. */
+/** Todo InputRule que o domínio pode citar tem mensagem, regra nova sem mensagem não compila. */
 const INPUT_RULE_MESSAGES: Readonly<Record<InputRule, IDetailMessage>> = {
   BLANK: ValidationDetailMessage.BLANK,
   SURROUNDING_WHITESPACE: ValidationDetailMessage.SURROUNDING_WHITESPACE,

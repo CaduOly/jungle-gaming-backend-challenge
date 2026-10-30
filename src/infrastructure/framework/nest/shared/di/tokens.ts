@@ -1,4 +1,4 @@
-/** DI tokens: they exist only in the Nest layer; the business never sees them. */
+/** Tokens de DI: só existem na camada do Nest, o negócio nunca enxerga eles. */
 export const CLOCK = Symbol('CLOCK');
 export const ID_GENERATOR = Symbol('ID_GENERATOR');
 export const PAYLOAD_HASHER = Symbol('PAYLOAD_HASHER');
@@ -8,10 +8,10 @@ export const HTTP_CONFIG = Symbol('HTTP_CONFIG');
 export const READINESS_PROBE = Symbol('READINESS_PROBE');
 export const LOGGER = Symbol('LOGGER');
 export const METRICS = Symbol('METRICS');
-/** WAGERING_PERSISTENCE's unit of work behind ObservedUnitOfWork (lock wait and lock conflicts). */
+/** Unit of work do WAGERING_PERSISTENCE por trás do ObservedUnitOfWork (lock wait e conflitos de lock). */
 export const UNIT_OF_WORK = Symbol('UNIT_OF_WORK');
 export const READINESS_DETAILS = Symbol('READINESS_DETAILS');
-/** The swappable persistence: in-memory fakes in the e2e suites, PostgreSQL in the running app. */
+/** Persistência trocável: fakes in-memory nas suites e2e, PostgreSQL na app rodando. */
 export const WAGERING_PERSISTENCE = Symbol('WAGERING_PERSISTENCE');
 
 export const CREATE_WALLET = Symbol('CreateWallet');

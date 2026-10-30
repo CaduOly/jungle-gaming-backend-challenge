@@ -1,10 +1,10 @@
 import { Migration } from '@mikro-orm/migrations';
 
 /*
- * The outbox claim is head-of-line per aggregate: a message is eligible only when no older unpublished message
- * of the same aggregate exists (`NOT EXISTS … p.aggregate_id = o.aggregate_id AND p.published_at IS NULL AND
- * (p.occurred_at, p.event_id) < (o.occurred_at, o.event_id)`). This index answers that probe with one short
- * range scan per candidate, and only over unpublished rows.
+ * O claim do outbox é head-of-line por aggregate: uma mensagem só é elegível quando não existe mensagem mais antiga
+ * não publicada do mesmo aggregate (`NOT EXISTS … p.aggregate_id = o.aggregate_id AND p.published_at IS NULL AND
+ * (p.occurred_at, p.event_id) < (o.occurred_at, o.event_id)`). Esse índice responde essa checagem com um range
+ * scan curto por candidato, e só em cima das linhas não publicadas.
  */
 const UP = /* sql */ `
 CREATE INDEX outbox_messages_unpublished_by_aggregate

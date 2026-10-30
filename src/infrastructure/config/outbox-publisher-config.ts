@@ -6,7 +6,7 @@ export interface OutboxPublisherConfig {
   readonly leaseMs: number;
   readonly batchSize: number;
   readonly pollIntervalMs: number;
-  /** Upper bound for one publish; the factory enforces it whatever the publisher does. */
+  /** Limite de tempo de um publish, a factory garante isso independente do que o publisher faça. */
   readonly publishTimeoutMs: number;
   readonly backoff: {
     readonly baseMs: number;
@@ -30,9 +30,9 @@ const positive = (env: Env, name: string, fallback: number): number => {
 };
 
 /**
- * A round publishes its batch one message at a time, so the lease must outlive batchSize publishes at their
- * timeout: otherwise another instance reclaims (and republishes) messages this one is still working on.
- * The backoff values are validated again (cap bounds) by ExponentialBackoff itself.
+ * Uma rodada publica o batch uma mensagem por vez, então o lease tem que durar mais que batchSize publishes no
+ * timeout, senão outra instância pega de volta (e republica) mensagens que essa ainda está processando.
+ * Os valores de backoff são validados de novo (limites do cap) pelo próprio ExponentialBackoff.
  */
 export const validateOutboxPublisherConfig = (config: OutboxPublisherConfig): OutboxPublisherConfig => {
   const worstRoundMs = config.batchSize * config.publishTimeoutMs;

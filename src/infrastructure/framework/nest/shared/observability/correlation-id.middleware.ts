@@ -5,10 +5,10 @@ import type { AuthenticatedRequest } from '../auth/provider-auth.guard';
 
 export const CORRELATION_ID_HEADER = 'X-Correlation-Id';
 
-/** Anything else (too long, spaces, control characters) is replaced, never echoed back or logged. */
+/** Qualquer outra coisa (longo demais, espaço, caractere de controle) é substituída, nunca devolvida nem logada. */
 const VALID_CORRELATION_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 
-/** Probes and scrapes hit every replica every few seconds: their access lines go to debug. */
+/** Probes e scrapes batem em toda réplica a cada poucos segundos, então as linhas de acesso deles vão para debug. */
 const QUIET_PATHS = /^\/(health|metrics)(\/|$)/;
 
 export type CorrelatedRequest = AuthenticatedRequest & { correlationId?: string };
@@ -17,9 +17,9 @@ export const resolveCorrelationId = (received: string | undefined): string =>
   received !== undefined && VALID_CORRELATION_ID.test(received) ? received : Bun.randomUUIDv7();
 
 /**
- * First middleware of the app: takes `X-Correlation-Id` (or makes one), echoes it in the response, keeps it on the
- * request for the controllers (`input.correlationId`) and runs the rest of the request inside the log context.
- * One access line per request when the response is finished; the path has ids only, never a body.
+ * Primeiro middleware da app: pega o `X-Correlation-Id` (ou gera um), devolve ele na resposta, guarda na request
+ * para os controllers (`input.correlationId`) e roda o resto da request dentro do log context.
+ * Uma linha de acesso por request quando a resposta termina, o path só tem ids, nunca body.
  */
 export const correlationIdMiddleware =
   (logger: Logger) =>

@@ -17,7 +17,7 @@ export class DetailMessageDto {
   type!: 'error' | 'warning';
 }
 
-/** The envelope every business endpoint answers with; `data` is narrowed per endpoint by envelopeSchema(). */
+/** O envelope que todo endpoint de negócio responde, o `data` é especificado por endpoint pelo envelopeSchema(). */
 export class ApiResponseEnvelopeDto {
   @ApiProperty({ example: 200, description: 'Same number as the HTTP status.' })
   code!: number;

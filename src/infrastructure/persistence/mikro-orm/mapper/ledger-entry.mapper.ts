@@ -14,11 +14,11 @@ export interface LedgerEntryRow {
   readonly balance_after: unknown;
   readonly wallet_version: number;
   readonly created_at: unknown;
-  /** wager_transactions.kind: the ledger table has no entry type column, it is the kind of the transaction. */
+  /** wager_transactions.kind: a tabela do ledger não tem coluna de tipo da entrada, o tipo é o kind da transação. */
   readonly kind: string;
 }
 
-/** Selected from `wallet_ledger_entries l JOIN wager_transactions t ON t.id = l.transaction_id`. */
+/** Vem de `wallet_ledger_entries l JOIN wager_transactions t ON t.id = l.transaction_id`. */
 export const LEDGER_SELECT = `
   SELECT l.seq, l.wallet_id, l.transaction_id, l.direction, l.amount, l.currency, l.balance_before,
          l.balance_after, l.wallet_version, l.created_at, t.kind

@@ -11,13 +11,13 @@ export interface Observability {
 
 export interface ObservabilityOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
-  /** Overrides LOG_LEVEL (the e2e suites pass `silent`). */
+  /** Sobrescreve o LOG_LEVEL (as suites e2e passam `silent`). */
   readonly level?: string;
-  /** Where the JSON lines go; stdout by default. */
+  /** Para onde vão as linhas JSON, stdout por default. */
   readonly destination?: DestinationStream;
 }
 
-/** One logger and one metrics registry per process (or per app, in the e2e suites). */
+/** Um logger e um registry de métricas por processo (ou por app, nas suites e2e). */
 export const createObservability = ({ env = process.env, level, destination }: ObservabilityOptions = {}): Observability => {
   const logger = createLogger({
     level: level ?? env.LOG_LEVEL ?? 'info',

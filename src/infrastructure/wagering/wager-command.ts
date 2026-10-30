@@ -4,7 +4,7 @@ import { DeadLetterReason } from '../messaging/sqs/message-handler.port';
 
 export const WAGER_COMMAND_TYPE = 'WagerTransactionRequested';
 
-/** CHALLENGE.md §10: one wager submission sent by a provider through the commands queue. */
+/** CHALLENGE.md §10: um envio de aposta feito por um provider pela fila de comandos. */
 export interface WagerCommand {
   readonly messageId: string;
   readonly occurredAt: string;
@@ -45,9 +45,9 @@ const stringAt = (record: Record<string, unknown>, key: string, path: string): s
 };
 
 /**
- * Checks the shape of the message (types, required and unknown keys) and nothing more: the content (UUIDs, amounts,
- * kinds, lengths) is the use case's job, so HTTP and SQS reject the same things. Shape errors are permanent
- * (invalid_schema) and OPENING, a kind only the system may write, is a contract violation.
+ * Checa o formato da mensagem (tipos, chaves obrigatórias e desconhecidas) e mais nada: o conteúdo (UUIDs, amounts,
+ * kinds, tamanhos) é trabalho do use case, assim HTTP e SQS rejeitam as mesmas coisas. Erro de formato é permanente
+ * (invalid_schema) e OPENING, um kind que só o sistema pode gravar, é violação de contrato.
  */
 export const parseWagerCommand = (body: unknown): WagerCommand => {
   const envelope = objectAt(body, '$', ENVELOPE_KEYS);

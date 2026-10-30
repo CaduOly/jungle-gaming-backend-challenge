@@ -13,7 +13,7 @@ export interface ObservabilityTools {
   readonly metrics: WageringMetrics;
 }
 
-/** Logging outside, metrics inside: the log line's duration includes the time the metrics took. */
+/** Logging por fora, métricas por dentro, então a duração na linha de log inclui o tempo que as métricas levaram. */
 export const observeUseCase = <Input, Output>(
   inner: IUseCase<Input, Output>,
   tools: ObservabilityTools,

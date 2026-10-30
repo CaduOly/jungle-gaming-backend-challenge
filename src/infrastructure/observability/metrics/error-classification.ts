@@ -33,7 +33,7 @@ export const lockConflictOf = (error: unknown): LockConflictType | undefined => 
   return undefined;
 };
 
-/** A bounded label for a failure: never the message, which may carry ids or values. */
+/** Label com cardinalidade limitada para uma falha: nunca a mensagem, que pode carregar ids ou valores. */
 export const classifyError = (error: unknown): ErrorClass => {
   if (error instanceof InvalidRequestError) return 'invalid_request';
   if (error instanceof BusinessRuleError) return 'business_rule';
@@ -49,12 +49,12 @@ export const classifyError = (error: unknown): ErrorClass => {
 
 const EXPECTED: ReadonlySet<ErrorClass> = new Set(['invalid_request', 'business_rule', 'idempotency_conflict', 'domain']);
 
-/** A domain answer (400, 404, 409, 422) is the service working as designed; the rest is an incident. */
+/** Resposta de domínio (400, 404, 409, 422) é o serviço funcionando como foi desenhado, o resto é incidente. */
 export const isExpectedError = (errorClass: ErrorClass): boolean => EXPECTED.has(errorClass);
 
 /**
- * What a log line may say about a failure. A domain error is described by its name and codes only: its message
- * can carry values. An infrastructure error keeps its message, which holds no payload.
+ * O que uma linha de log pode dizer sobre uma falha. Erro de domínio é descrito só pelo nome e pelos códigos, já que
+ * a mensagem pode carregar valores. Erro de infraestrutura mantém a mensagem, que não tem payload.
  */
 export const describeError = (error: unknown): Record<string, unknown> => {
   const errorClass = classifyError(error);

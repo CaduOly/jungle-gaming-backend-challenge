@@ -2,7 +2,7 @@ import type { OutboxMessage } from '../../business/messaging/entity/outbox-messa
 import type { IMessagePublisher } from '../../business/messaging/port/message-publisher.port';
 import type { FaultInjector } from '../fault-injection/fault-injector';
 
-/** Dies right after a successful publish, before PublishOutboxBatch gets to mark the row as published. */
+/** Morre logo depois de um publish com sucesso, antes do PublishOutboxBatch marcar a linha como publicada. */
 export class FaultInjectingMessagePublisher implements IMessagePublisher {
   constructor(
     private readonly inner: IMessagePublisher,

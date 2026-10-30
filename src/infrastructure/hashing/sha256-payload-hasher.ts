@@ -9,8 +9,9 @@ import { canonicalJson } from './canonical-json';
 const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 
 /**
- * Hex sha256 of the canonical JSON. The payload arrives already normalized by the use case (Money as
- * `{ amount: "10.00", currency }`, absent reference as null), so equal requests hash equal whatever the key order.
+ * sha256 em hex do JSON canônico. O payload já chega normalizado pelo use case (Money como
+ * `{ amount: "10.00", currency }`, reference ausente como null), então requests iguais dão o mesmo hash
+ * independente da ordem das chaves.
  */
 export class Sha256PayloadHasher implements IPayloadHasher {
   hash(payload: WagerPayload): string {

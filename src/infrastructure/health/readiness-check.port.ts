@@ -1,4 +1,4 @@
-/** One dependency the instance cannot serve without. `check` resolves when it answers and rejects when it does not. */
+/** Uma dependência sem a qual a instância não consegue atender. `check` resolve quando ela responde e rejeita quando não. */
 export interface IReadinessCheck {
   readonly name: string;
   check(): Promise<void>;

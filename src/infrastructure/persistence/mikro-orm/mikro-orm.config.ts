@@ -5,7 +5,7 @@ import { migrationsList } from './migration';
 import { guardPool } from './pool-guard';
 
 export interface MikroOrmPoolOptions {
-  /** How long an acquire waits for a free connection before failing (transient), instead of hanging. */
+  /** Quanto tempo um acquire espera conexão livre antes de falhar (transiente), em vez de travar. */
   readonly acquireTimeoutMs?: number;
   readonly max?: number;
 }

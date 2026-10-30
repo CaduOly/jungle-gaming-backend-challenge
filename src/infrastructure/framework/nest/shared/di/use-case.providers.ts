@@ -43,8 +43,8 @@ import type { WageringPersistence } from './wagering-persistence';
 const tools = (logger: Logger, metrics: WageringMetrics): ObservabilityTools => ({ logger, metrics });
 
 /**
- * The use cases stay framework-free: Nest only builds them, from the ports bound to the tokens, and wraps each
- * one in the logging and metrics decorators. The writes go through the observed unit of work.
+ * Os use cases ficam sem framework: o Nest só monta eles a partir das ports ligadas aos tokens e embrulha cada um
+ * nos decorators de logging e métricas. As escritas passam pelo unit of work observado.
  */
 export const useCaseProviders: Provider[] = [
   {

@@ -39,7 +39,7 @@ export const outboxMessageFromRow = (row: OutboxMessageRow): OutboxMessage => {
   });
 };
 
-/** Insert parameters. A new row never carries a lease: claims are the only way to get one. */
+/** Parâmetros do insert. Linha nova nunca vem com lease, o claim é o único jeito de pegar um. */
 export const outboxMessageToInsertParams = (message: OutboxMessage): unknown[] => [
   message.id,
   message.aggregateType,

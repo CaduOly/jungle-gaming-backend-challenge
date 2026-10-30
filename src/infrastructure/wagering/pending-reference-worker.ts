@@ -8,19 +8,19 @@ import { PollingLoop } from '../worker/polling-loop';
 export type RetryPendingRound = IUseCase<RetryPendingReferencesInput | void, RetryPendingReferencesOutput>;
 
 export interface PendingReferenceWorkerOptions {
-  /** A round that claimed this many items may have left more due ones behind, so the next starts right away. */
+  /** Rodada que pegou essa quantidade de itens pode ter deixado mais vencidos para trás, então a próxima começa na hora. */
   readonly batchSize: number;
   readonly pollIntervalMs: number;
-  /** Output of every finished round; the hook the metrics decorator plugs into. */
+  /** Saída de toda rodada terminada, é o hook onde o decorator de métricas se pluga. */
   readonly onRound?: (output: RetryPendingReferencesOutput) => unknown;
-  /** A round that threw (the claim itself failed, database down for instance). The loop keeps going. */
+  /** Rodada que lançou erro (o próprio claim falhou, banco fora por exemplo). O loop continua. */
   readonly onError?: (error: unknown) => unknown;
 }
 
 /**
- * Runs RetryPendingReferences one round at a time. A full batch is followed right away by the next round to drain
- * the backlog; a partial or failing one waits for the poll interval, since nothing else is due yet. After `stop()`
- * resolves the worker can be started again; starting it while a stop is still waiting for its round throws.
+ * Roda o RetryPendingReferences uma rodada por vez. Batch cheio é seguido na hora pela próxima rodada para drenar
+ * o backlog, e batch parcial ou com falha espera o poll interval, já que não tem mais nada vencido. Depois que o
+ * `stop()` resolve o worker pode ser iniciado de novo, mas iniciar enquanto um stop ainda espera a rodada lança erro.
  */
 export class PendingReferenceWorker {
   private readonly loop: PollingLoop<RetryPendingReferencesOutput>;
@@ -51,8 +51,8 @@ export class PendingReferenceWorker {
   }
 
   /**
-   * Stops polling and resolves once the round in flight has finished the item it is on: the round checks between
-   * items, so the wait is one item (at worst its two lock waits), never a whole batch.
+   * Para o polling e resolve quando a rodada em andamento termina o item em que está, já que a rodada checa entre
+   * os itens, então a espera é de um item (no pior caso os dois lock waits dele), nunca de um batch inteiro.
    */
   stop(): Promise<void> {
     return this.loop.stop();

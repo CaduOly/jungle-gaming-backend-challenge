@@ -21,7 +21,7 @@ export interface HttpProblemOptions {
   readonly retryAfterSeconds: number;
 }
 
-/** Express answers a path with a broken percent-encoding (`/wallets/%E0%A4%A`) with this message, and only that. */
+/** O Express responde um path com percent-encoding quebrado (`/wallets/%E0%A4%A`) com essa mensagem, e só ela. */
 const isUndecodablePath = (error: HttpException): boolean => {
   const response = error.getResponse();
   const message = typeof response === 'object' && response !== null ? (response as { message?: unknown }).message : response;
@@ -42,9 +42,9 @@ const fromNestException = (error: HttpException): HttpProblem => {
 };
 
 /**
- * Error → status, following docs/http-contract.md. Order matters: the specific errors come before the
- * BusinessRuleError fallback (WALLET_NOT_FOUND and PROVIDER_IDENTITY_MISMATCH are business rule errors
- * but answer 404 and 403). Anything unrecognised is a 500 that carries no internal message.
+ * Erro → status, seguindo o docs/http-contract.md. A ordem importa: os erros específicos vêm antes do fallback de
+ * BusinessRuleError (WALLET_NOT_FOUND e PROVIDER_IDENTITY_MISMATCH são erros de regra de negócio, mas respondem
+ * 404 e 403). Qualquer coisa não reconhecida é 500 sem mensagem interna.
  */
 export const toHttpProblem = (error: unknown, options: HttpProblemOptions): HttpProblem => {
   if (error instanceof HttpProblem) return error;

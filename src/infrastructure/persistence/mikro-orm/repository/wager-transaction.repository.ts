@@ -19,9 +19,9 @@ import type { RunResult } from './run-result';
 const INSERT_PLACEHOLDERS = Array.from({ length: WAGER_INSERT_COLUMNS.split(',').length }, () => '?').join(', ');
 
 /**
- * Native SQL over wager_transactions. Inserts write the whole row; updates touch only the columns the trigger
- * lets change (status, decision, reference link, retry bookkeeping) and always release the claim lease.
- * `now` is always the application clock, never the database one.
+ * SQL nativo em cima de wager_transactions. O insert grava a linha inteira, o update só mexe nas colunas que a
+ * trigger deixa mudar (status, decisão, vínculo de reference, controle de retry) e sempre libera o lease do claim.
+ * `now` é sempre o clock da aplicação, nunca o do banco.
  */
 export class WagerTransactionRepository implements IWagerTransactionRepository {
   constructor(

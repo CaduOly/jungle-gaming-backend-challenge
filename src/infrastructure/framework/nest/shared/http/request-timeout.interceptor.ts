@@ -5,8 +5,8 @@ import { HTTP_CONFIG } from '../di/tokens';
 import type { HttpConfig } from '../http-config';
 
 /**
- * A request still running after HTTP_REQUEST_TIMEOUT_MS answers 503 + Retry-After. The work itself is not
- * cancelled: if it commits later, the provider's retry with the same Idempotency-Key gets the replay.
+ * Request que ainda está rodando depois de HTTP_REQUEST_TIMEOUT_MS responde 503 + Retry-After. O trabalho em si não
+ * é cancelado, se ele commitar depois o retry do provider com a mesma Idempotency-Key recebe o replay.
  */
 @Injectable()
 export class RequestTimeoutInterceptor implements NestInterceptor {

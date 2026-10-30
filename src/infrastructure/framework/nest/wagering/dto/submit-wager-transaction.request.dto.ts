@@ -63,7 +63,7 @@ export class SubmitWagerTransactionRequestDto {
   gameId!: string;
 
   @ApiProperty({ enum: SUBMITTABLE_KINDS, example: 'BET', description: 'OPENING is internal and rejected with 400.' })
-  // class-validator runs the constraints bottom-up: OPENING must get its own detail, not INVALID_KIND.
+  // O class-validator roda as constraints de baixo para cima, então OPENING tem que ter detail próprio e não INVALID_KIND.
   @IsDefined(withDetail(ValidationDetailMessage.REQUIRED))
   @IsIn(SUBMITTABLE_KINDS, withDetail(ValidationDetailMessage.INVALID_KIND))
   @IsNotIn(['OPENING'], withDetail(ValidationDetailMessage.KIND_NOT_SUBMITTABLE))

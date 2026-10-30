@@ -2,7 +2,7 @@ import type { IDetailMessage } from '../i18n/detail-message';
 import { codeName } from './status-code';
 
 export interface DetailMessage extends IDetailMessage {
-  /** Dotted path of the offending field (`money.amount`), when the problem is about one. */
+  /** Caminho com ponto do campo com problema (`money.amount`), quando o problema é de um campo. */
   readonly field?: string;
 }
 

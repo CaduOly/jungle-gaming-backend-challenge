@@ -9,9 +9,9 @@ const FAKE_TOKEN = /^Bearer dev:(.+)$/;
 const DEV_HEADER = /^Dev (.+)$/;
 
 /**
- * No-op identity for development and tests, the default of AUTH_MODE=noop; JwksProviderIdentity verifies real tokens.
- * Accepts `Authorization: Bearer dev:<providerId>` (a fake token) or the dev header `X-Provider-Id`,
- * which the guard forwards as `Dev <providerId>`. It proves nothing about the caller.
+ * Identidade no-op para desenvolvimento e testes, é o default de AUTH_MODE=noop; quem verifica token de verdade é o
+ * JwksProviderIdentity. Aceita `Authorization: Bearer dev:<providerId>` (token fake) ou o header de dev
+ * `X-Provider-Id`, que o guard repassa como `Dev <providerId>`. Não prova nada sobre quem chamou.
  */
 export class DevProviderIdentity implements IProviderIdentity {
   async authenticate(credentials: string | undefined): Promise<AuthenticatedProvider> {

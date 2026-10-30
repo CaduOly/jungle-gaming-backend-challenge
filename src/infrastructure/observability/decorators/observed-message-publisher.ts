@@ -4,8 +4,8 @@ import type { IClock } from '../../../business/shared/port/clock.port';
 import type { WageringMetrics } from '../metrics/wagering-metrics';
 
 /**
- * Observes outbox_lag_seconds when an event is actually published: the time since the commit that wrote it
- * (occurredAt is set in that same transaction). A failed publish observes nothing; it is counted as a retry.
+ * Observa o outbox_lag_seconds quando o evento é publicado de fato: o tempo desde o commit que gravou ele
+ * (o occurredAt é definido nessa mesma transação). Publish que falhou não observa nada, ele conta como retry.
  */
 export class ObservedMessagePublisher implements IMessagePublisher {
   constructor(

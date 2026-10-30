@@ -16,23 +16,23 @@ import { parseWagerCommand } from './wager-command';
 export const WAGER_COMMAND_CONSUMER = 'wager-transactions';
 
 export interface WagerCommandHandlerOptions {
-  /** Inbox namespace: (consumerName, messageId) is the dedupe key. */
+  /** Namespace do inbox: (consumerName, messageId) é a chave de dedup. */
   readonly consumerName?: string;
-  /** Alert hook: a permanent infrastructure failure dead-letters a command that may well be valid. */
+  /** Hook de alerta: uma falha permanente de infraestrutura manda para a DLQ um comando que pode muito bem ser válido. */
   readonly onPermanentFailure?: (error: PermanentInfrastructureError, message: InboundMessage) => unknown;
-  /** Hook for the metrics decorator: the decision of every processed command. */
+  /** Hook para o decorator de métricas: a decisão de todo comando processado. */
   readonly onProcessed?: (output: ProcessWagerTransactionOutput, message: InboundMessage) => unknown;
 }
 
 /**
- * The commands queue entry of ProcessWagerTransaction, the same use case as HTTP. On SQS the queue is trusted, so
- * the provider of the payload is the actor, and `data.idempotencyKey` plays the role of the Idempotency-Key header.
+ * Entrada do ProcessWagerTransaction pela fila de comandos, o mesmo use case do HTTP. No SQS a fila é confiável,
+ * então o provider do payload é o actor, e o `data.idempotencyKey` faz o papel do header Idempotency-Key.
  *
- * Outcomes: any decision (PROCESSED, REJECTED, PENDING_REFERENCE, a replay) and every business refusal (unknown
- * wallet, idempotency conflict) → ack, nothing to retry; malformed input → DLQ invalid_schema; the same messageId
- * with another payload → DLQ inbox_payload_mismatch; a lost race on a unique constraint → retry (the next attempt
- * reads the winner's decision); a permanent infrastructure failure → DLQ and alert. Transient infrastructure errors
- * are rethrown so the consumer counts them as transient and retries them with backoff.
+ * Outcomes: qualquer decisão (PROCESSED, REJECTED, PENDING_REFERENCE, um replay) e toda recusa de negócio (wallet
+ * desconhecida, conflito de idempotência) → ack, nada para retentar; input malformado → DLQ invalid_schema; mesmo
+ * messageId com outro payload → DLQ inbox_payload_mismatch; corrida perdida numa unique constraint → retry (a
+ * próxima tentativa lê a decisão de quem ganhou); falha permanente de infraestrutura → DLQ e alerta. Erros
+ * transientes de infraestrutura são relançados para o consumer contar como transiente e fazer retry com backoff.
  */
 export class WagerCommandHandler implements IMessageHandler {
   private readonly consumerName: string;
@@ -84,11 +84,11 @@ export class WagerCommandHandler implements IMessageHandler {
   }
 }
 
-/** An observer must never change the outcome, whether it throws or returns a rejected promise. */
+/** Um observer nunca pode mudar o outcome, seja lançando erro ou retornando promise rejeitada. */
 const notify = (callback: () => unknown): void => {
   try {
     Promise.resolve(callback()).catch(() => undefined);
   } catch {
-    // see above
+    // ver acima
   }
 };

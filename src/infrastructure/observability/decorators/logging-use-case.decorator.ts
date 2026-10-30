@@ -7,11 +7,11 @@ export type LogFields = Partial<Record<keyof LogContext, unknown>>;
 
 export interface UseCaseLoggingOptions<Input, Output> {
   readonly operation: string;
-  /** Identifiers known from the input (providerId, walletId, messageId…), bound for every line of the run. */
+  /** Identificadores conhecidos pelo input (providerId, walletId, messageId…), ligados a toda linha da execução. */
   readonly contextOf?: (input: Input) => LogFields;
   /**
-   * What the line may say about the result. It must not return money: the logger redacts the usual money
-   * fields anyway, but a summary is the place to keep them out in the first place.
+   * O que a linha pode dizer sobre o resultado. Não pode retornar dinheiro: o logger já faz redact dos campos de
+   * dinheiro comuns, mas o summary é o lugar de deixar eles de fora desde o começo.
    */
   readonly summaryOf?: (output: Output) => Record<string, unknown>;
 }
@@ -19,8 +19,8 @@ export interface UseCaseLoggingOptions<Input, Output> {
 const nowMs = (): number => performance.now();
 
 /**
- * One line per run: `<operation> completed` with the summary, or `<operation> failed` with the error class.
- * Domain answers (400/404/409/422) log at info, transient infrastructure at warn, anything else at error.
+ * Uma linha por execução: `<operation> completed` com o summary, ou `<operation> failed` com a classe do erro.
+ * Resposta de domínio (400/404/409/422) loga em info, infraestrutura transiente em warn, o resto em error.
  */
 export class LoggingUseCaseDecorator<Input, Output> implements IUseCase<Input, Output> {
   constructor(

@@ -12,25 +12,25 @@ export interface HttpAppOptions {
   readonly persistence: Provider;
   readonly overrides?: readonly Provider[];
   readonly env?: Readonly<Record<string, string | undefined>>;
-  /** Silences every log line (Nest's and the app's); ignored when `observability` is given. */
+  /** Silencia todas as linhas de log (do Nest e da app), ignorado quando `observability` é passado. */
   readonly logger?: false;
-  /** Logger and metrics to use; built from the env (LOG_LEVEL) when omitted. */
+  /** Logger e métricas a usar, montados a partir do env (LOG_LEVEL) quando omitidos. */
   readonly observability?: Observability;
   readonly readinessChecks?: AppModuleOptions['readinessChecks'];
   readonly readinessDetails?: AppModuleOptions['readinessDetails'];
-  /** Sent as X-Instance-Id on every answer, so a caller behind the balancer knows which replica served it. */
+  /** Vai como X-Instance-Id em toda resposta, assim quem chama por trás do balancer sabe qual réplica atendeu. */
   readonly instanceId?: string;
   /**
-   * Nest's own SIGTERM hooks (default). The process entry point turns them off: it owns the signals and closes
-   * the HTTP server together with the workers and the ORM.
+   * Hooks de SIGTERM do próprio Nest (default). O entry point do processo desliga eles, já que os sinais são dele e
+   * ele fecha o servidor HTTP junto com os workers e o ORM.
    */
   readonly shutdownHooks?: boolean;
 }
 
 /**
- * The one place that builds the HTTP app, so main.ts and the e2e suites run exactly the same wiring. Only
- * `application/json` bodies are parsed, the same media type the JsonContentTypeGuard lets through. The correlation
- * id middleware comes first, so even a 413 or a malformed body answers with `X-Correlation-Id`.
+ * Único lugar que monta a app HTTP, então o main.ts e as suites e2e rodam exatamente o mesmo wiring. Só body
+ * `application/json` é parseado, o mesmo media type que o JsonContentTypeGuard deixa passar. O middleware de
+ * correlation id vem primeiro, então até um 413 ou um body malformado responde com `X-Correlation-Id`.
  */
 export const createHttpApp = async (options: HttpAppOptions): Promise<INestApplication> => {
   const env = options.env ?? process.env;

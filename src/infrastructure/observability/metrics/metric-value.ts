@@ -2,8 +2,8 @@ import type { MetricValueWithName } from 'prom-client';
 import type { WageringMetrics } from './wagering-metrics';
 
 /**
- * The current value of a counter or gauge series, or the observation count of a histogram series. 0 when the
- * series was never touched. Read by the specs and by nothing in production.
+ * Valor atual de uma série de counter ou gauge, ou a contagem de observações de uma série de histogram. 0 quando a
+ * série nunca foi tocada. Só os specs leem, nada em produção.
  */
 export const metricValue = async (
   metrics: WageringMetrics,

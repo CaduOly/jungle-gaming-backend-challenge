@@ -3,18 +3,18 @@ import { classifyError } from '../metrics/error-classification';
 import type { WageringMetrics } from '../metrics/wagering-metrics';
 
 export interface UseCaseMetricsOptions<Output> {
-  /** Snake-case name of the use case, the `operation` label of processing_duration_seconds. */
+  /** Nome do use case em snake-case, é o label `operation` do processing_duration_seconds. */
   readonly operation: string;
-  /** The `outcome` label of a successful run; `ok` when omitted. */
+  /** O label `outcome` de uma execução com sucesso, `ok` quando omitido. */
   readonly outcomeOf?: (output: Output) => string;
-  /** Feeds the metrics only this use case's output can tell (status, replay, divergence). */
+  /** Alimenta as métricas que só o output desse use case consegue dizer (status, replay, divergência). */
   readonly record?: (output: Output, metrics: WageringMetrics) => void;
 }
 
 /**
- * Times the use case and labels the run with its outcome: the one the output tells, or the class of the error
- * thrown (lock_timeout, deadlock, transient, business_rule…). Nothing here can change what the use case returns
- * or throws: a failing recorder is swallowed.
+ * Mede o tempo do use case e coloca o outcome como label da execução: o que o output diz, ou a classe do erro
+ * lançado (lock_timeout, deadlock, transient, business_rule…). Nada aqui pode mudar o que o use case retorna ou
+ * lança, recorder que falha é engolido.
  */
 export class MetricsUseCaseDecorator<Input, Output> implements IUseCase<Input, Output> {
   constructor(
@@ -36,7 +36,7 @@ export class MetricsUseCaseDecorator<Input, Output> implements IUseCase<Input, O
       stopTimer({ outcome: this.options.outcomeOf?.(output) ?? 'ok' });
       this.options.record?.(output, this.metrics);
     } catch {
-      // A metric must never turn a decided transaction into an error.
+      // Métrica nunca pode transformar uma transação já decidida em erro.
     }
     return output;
   }

@@ -30,7 +30,7 @@ import {
   ApiSubmitWagerTransactionResponses,
 } from './wagering.swagger';
 
-/** PROCESSED → 200, PENDING_REFERENCE → 202, REJECTED → 422; a replay answers exactly as the original did. */
+/** PROCESSED → 200, PENDING_REFERENCE → 202, REJECTED → 422, um replay responde exatamente como o original. */
 const toResult = (output: ProcessWagerTransactionOutput) => {
   const data = {
     transactionId: output.transactionId,
@@ -85,7 +85,7 @@ export class WageringController {
     return toResult(output);
   }
 
-  /** Another provider's transaction answers 404, exactly like a missing one: the API never confirms it exists. */
+  /** Transação de outro provider responde 404 igual a uma que não existe, a API nunca confirma que ela existe. */
   @Get('wagering/transactions/:transactionId')
   @ApiGetWagerTransactionResponses()
   async get(
