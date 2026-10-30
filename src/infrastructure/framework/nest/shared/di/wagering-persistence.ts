@@ -4,8 +4,8 @@ import type { ILedgerReader } from '../../../../../business/wallet/port/ledger-r
 import type { IWalletRepository } from '../../../../../business/wallet/port/wallet.repository.port';
 
 /**
- * Everything the HTTP use cases need from storage, behind one provider (WAGERING_PERSISTENCE). The e2e
- * suites bind it to the in-memory fakes; the PostgreSQL adapters bind it to MikroORM.
+ * Tudo que os use cases HTTP precisam do storage, atrás de um provider só (WAGERING_PERSISTENCE). As suites e2e
+ * fazem o bind nos fakes in-memory, os adapters PostgreSQL fazem no MikroORM.
  */
 export interface WageringPersistence {
   readonly unitOfWork: IWageringUnitOfWork;

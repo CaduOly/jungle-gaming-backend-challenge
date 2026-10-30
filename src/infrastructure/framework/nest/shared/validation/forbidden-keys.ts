@@ -4,8 +4,9 @@ import { ValidationDetailMessage } from '../i18n/validation.detail-message';
 const FORBIDDEN_KEYS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
 
 /**
- * One detail per prototype key found anywhere in a parsed JSON body (JSON.parse keeps `__proto__` as an own
- * key). The body is refused before class-transformer or anything else copies it into a real object.
+ * Um detail por chave de prototype encontrada em qualquer lugar do body JSON parseado (o JSON.parse mantém
+ * `__proto__` como chave própria). O body é recusado antes do class-transformer ou qualquer outra coisa copiar ele
+ * para um objeto de verdade.
  */
 export const forbiddenKeyDetails = (value: unknown, parent = ''): DetailMessage[] => {
   if (typeof value !== 'object' || value === null) return [];

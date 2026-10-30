@@ -6,7 +6,7 @@ import { envelope } from '../envelope/api-response';
 import type { HttpConfig } from '../http-config';
 import { toHttpProblem } from './to-http-problem';
 
-/** Every error, from any route, leaves in the envelope. A 500 is logged with its stack but never exposes it. */
+/** Todo erro, de qualquer rota, sai no envelope. Um 500 é logado com a stack, mas nunca expõe ela. */
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);

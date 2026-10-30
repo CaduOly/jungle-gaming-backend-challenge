@@ -11,17 +11,17 @@ export interface HttpApiOptions {
   readonly readinessDetails: () => Record<string, unknown>;
   readonly instanceId: string;
   readonly env: Readonly<Record<string, string | undefined>>;
-  /** The replica's logger and registry: /metrics also shows what the workers of this process counted. */
+  /** Logger e registry da réplica, então o /metrics também mostra o que os workers desse processo contaram. */
   readonly observability: Observability;
 }
 
 export interface RunningHttpApi {
   readonly port: number;
-  /** Stops accepting connections and resolves once the requests in flight are answered. */
+  /** Para de aceitar conexão e resolve quando as requests em andamento forem respondidas. */
   close(): Promise<void>;
 }
 
-/** The API of one replica, listening on PORT. The process entry point owns the signals, so Nest's hooks stay off. */
+/** A API de uma réplica, ouvindo na PORT. Os sinais são do entry point do processo, então os hooks do Nest ficam desligados. */
 export const startHttpApi = async (options: HttpApiOptions): Promise<RunningHttpApi> => {
   const app = await createHttpApp({
     persistence: { provide: WAGERING_PERSISTENCE, useValue: options.persistence },

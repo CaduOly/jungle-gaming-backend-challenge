@@ -15,7 +15,7 @@ export const createOpenApiDocument = (app: INestApplication): OpenAPIObject =>
       .build(),
   );
 
-/** UI at /docs, OpenAPI 3 JSON at /docs-json; both open (outside the provider guard). */
+/** UI em /docs, JSON OpenAPI 3 em /docs-json, os dois abertos (fora do guard de provider). */
 export const setupSwagger = (app: INestApplication): OpenAPIObject => {
   const document = createOpenApiDocument(app);
   SwaggerModule.setup('docs', app, document, { jsonDocumentUrl: 'docs-json' });

@@ -18,16 +18,16 @@ import { RequestTimeoutInterceptor } from './http/request-timeout.interceptor';
 import { createValidationPipe } from './validation/validation.pipe';
 
 export interface AppModuleOptions {
-  /** Binds WAGERING_PERSISTENCE: the in-memory fakes in the e2e suites, PostgreSQL in the running app. */
+  /** Faz o bind de WAGERING_PERSISTENCE: fakes in-memory nas suites e2e, PostgreSQL na app rodando. */
   readonly persistence: Provider;
-  /** Replaces any core provider (clock, ids, identity…) by token; used by the tests. */
+  /** Substitui qualquer provider do core (clock, ids, identity…) pelo token, usado pelos testes. */
   readonly overrides?: readonly Provider[];
   readonly env?: Readonly<Record<string, string | undefined>>;
-  /** What /health/ready checks: PostgreSQL and SQS in production, nothing over the in-memory fakes. */
+  /** O que o /health/ready checa: PostgreSQL e SQS em produção, nada em cima dos fakes in-memory. */
   readonly readinessChecks?: readonly IReadinessCheck[];
-  /** The process logger and metrics registry, built once by createHttpApp and shared with the workers. */
+  /** Logger e registry de métricas do processo, montados uma vez pelo createHttpApp e compartilhados com os workers. */
   readonly observability: Observability;
-  /** Merged into the /health/ready body: instance id, roles and breaker state of the running process. */
+  /** Vai junto no body do /health/ready: instance id, roles e estado do breaker do processo rodando. */
   readonly readinessDetails?: () => Record<string, unknown>;
 }
 

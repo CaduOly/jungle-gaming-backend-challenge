@@ -1,9 +1,9 @@
-/** Deeper than any DTO of the API, and shallow enough for class-transformer and class-validator to recurse safely. */
+/** Mais fundo que qualquer DTO da API e raso o suficiente para class-transformer e class-validator fazerem recursão sem risco. */
 export const MAX_BODY_DEPTH = 32;
 
 /**
- * Whether a parsed JSON body nests objects or arrays more than `MAX_BODY_DEPTH` levels. The walk is iterative on
- * purpose: a recursive one would overflow the stack on the very bodies it exists to refuse.
+ * Se um body JSON já parseado aninha objetos ou arrays em mais de `MAX_BODY_DEPTH` níveis. A varredura é iterativa
+ * de propósito, uma recursiva estouraria a stack justamente nos bodies que ela existe para recusar.
  */
 export const exceedsBodyDepth = (value: unknown): boolean => {
   const pending: Array<{ readonly node: unknown; readonly depth: number }> = [{ node: value, depth: 1 }];

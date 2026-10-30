@@ -9,7 +9,7 @@ import { UuidV7IdGenerator } from '../../../../id/uuid-v7-id-generator';
 import { readHttpConfig } from '../http-config';
 import { CLOCK, HTTP_CONFIG, ID_GENERATOR, PAYLOAD_HASHER, PENDING_REFERENCE_BACKOFF, PROVIDER_IDENTITY } from './tokens';
 
-/** Production adapters; a test overrides any of them by providing the same token again. */
+/** Adapters de produção, um teste sobrescreve qualquer um deles passando o mesmo token de novo. */
 export const coreProviders = (env: Readonly<Record<string, string | undefined>>): Provider[] => [
   { provide: CLOCK, useClass: SystemClock },
   { provide: ID_GENERATOR, useClass: UuidV7IdGenerator },

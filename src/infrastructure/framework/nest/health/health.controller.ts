@@ -5,7 +5,7 @@ import type { ReadinessProbe, ReadinessReport } from '../../../health/readiness-
 import { Public } from '../shared/auth/public.decorator';
 import { READINESS_DETAILS, READINESS_PROBE } from '../shared/di/tokens';
 
-/** Raw (no envelope) and open: consumed by probes. */
+/** Cru (sem envelope) e aberto, quem consome são os probes. */
 @ApiExcludeController()
 @Public()
 @Controller('health')
@@ -20,7 +20,7 @@ export class HealthController {
     return { status: 'ok' };
   }
 
-  /** 200 while every dependency answers, 503 otherwise, so the balancer stops sending traffic to this instance. */
+  /** 200 enquanto toda dependência responde, senão 503, assim o balancer para de mandar tráfego para essa instância. */
   @Get('ready')
   async ready(@Res({ passthrough: true }) response: Response): Promise<ReadinessReport & Record<string, unknown>> {
     const report = await this.probe.run();

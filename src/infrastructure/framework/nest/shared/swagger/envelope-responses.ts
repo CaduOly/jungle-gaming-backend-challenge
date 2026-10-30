@@ -17,7 +17,7 @@ export interface NamedExample {
 export interface EnvelopeResponse {
   readonly status: number;
   readonly description: string;
-  /** Schema of `data`; omitted when `data` is null. */
+  /** Schema do `data`, omitido quando `data` é null. */
   readonly model?: Type<unknown>;
   readonly examples: Readonly<Record<string, NamedExample>>;
   readonly headers?: Record<string, { description: string; schema: { type: 'string' | 'integer' } }>;
@@ -36,7 +36,7 @@ export const problem = (summary: string, message: IDetailMessage, field?: string
   ...(data === undefined ? {} : { data }),
 });
 
-/** One response per status, each with its named examples, all wrapped in the envelope. */
+/** Uma resposta por status, cada uma com os exemplos nomeados, tudo dentro do envelope. */
 export const ApiEnvelopeResponses = (...responses: EnvelopeResponse[]): MethodDecorator => {
   const models = responses.flatMap((response) => (response.model === undefined ? [] : [response.model]));
   return applyDecorators(
@@ -84,7 +84,7 @@ export const internalErrorResponse: EnvelopeResponse = {
   examples: { internalError: problem('Unexpected failure', InfraDetailMessage.INTERNAL_ERROR) },
 };
 
-/** Every route that reads a body: it must be JSON and fit in the body parser limit. */
+/** Toda rota que lê body: tem que ser JSON e caber no limite do body parser. */
 export const bodyResponses: EnvelopeResponse[] = [
   {
     status: 413,

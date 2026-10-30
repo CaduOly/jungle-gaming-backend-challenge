@@ -8,7 +8,7 @@ const contextOf = (params: unknown[]): string | undefined => {
 
 const text = (message: unknown): string => (typeof message === 'string' ? message : JSON.stringify(message));
 
-/** Nest's own lines (bootstrap, routes, the filter's 500s) in the same JSON stream as the rest. */
+/** As linhas do próprio Nest (bootstrap, rotas, os 500 do filter) no mesmo stream JSON do resto. */
 export class PinoNestLogger implements LoggerService {
   constructor(private readonly logger: Logger) {}
 

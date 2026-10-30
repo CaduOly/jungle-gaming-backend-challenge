@@ -2,15 +2,15 @@ import { readIntegerEnv } from '../../../config/integer-env';
 
 export interface HttpConfig {
   readonly port: number;
-  /** Retry-After on a 503: how long a provider should wait before resending. */
+  /** Retry-After no 503: quanto tempo o provider deve esperar antes de reenviar. */
   readonly retryAfterSeconds: number;
-  /** Upper bound for each readiness check, so a hung dependency answers "down" before the probe gives up. */
+  /** Limite de cada readiness check, assim uma dependência travada responde "down" antes do probe desistir. */
   readonly readinessTimeoutMs: number;
-  /** Largest JSON body the parser reads (`512b`, `100kb`, `1mb`); anything above answers 413. */
+  /** Maior body JSON que o parser lê (`512b`, `100kb`, `1mb`), acima disso responde 413. */
   readonly bodyLimit: string;
   /**
-   * Upper bound for one request. Past it the answer is 503 + Retry-After, so a database that stops answering
-   * (paused, partitioned) never leaves a provider hanging; the retry is safe because every write is idempotent.
+   * Limite de uma request. Passou disso a resposta é 503 + Retry-After, então um banco que para de responder
+   * (pausado, particionado) nunca deixa o provider pendurado, e o retry é seguro já que toda escrita é idempotente.
    */
   readonly requestTimeoutMs: number;
 }

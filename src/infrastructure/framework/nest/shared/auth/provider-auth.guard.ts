@@ -14,9 +14,9 @@ export type AuthenticatedRequest = Request & { provider?: AuthenticatedProvider 
 export const DEV_PROVIDER_HEADER = 'X-Provider-Id';
 
 /**
- * Global guard. Hands the Authorization header (or, in development, `X-Provider-Id` as `Dev <id>`) to
- * IProviderIdentity and keeps the authenticated provider on the request; the controllers pass it to the
- * use cases as `actor`. A failed authentication raises, and the filter answers 401.
+ * Guard global. Passa o header Authorization (ou, em desenvolvimento, `X-Provider-Id` como `Dev <id>`) para o
+ * IProviderIdentity e guarda o provider autenticado na request, os controllers repassam ele para os use cases como
+ * `actor`. Autenticação que falha lança erro e o filter responde 401.
  */
 @Injectable()
 export class ProviderAuthGuard implements CanActivate {

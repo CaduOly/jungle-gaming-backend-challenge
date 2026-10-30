@@ -1,6 +1,6 @@
 import type { DetailMessage } from '../envelope/api-response';
 
-/** A failure that already knows its HTTP shape (raised by pipes, guards and controllers). */
+/** Falha que já sabe o formato HTTP dela (lançada por pipes, guards e controllers). */
 export class HttpProblem extends Error {
   constructor(
     readonly status: number,

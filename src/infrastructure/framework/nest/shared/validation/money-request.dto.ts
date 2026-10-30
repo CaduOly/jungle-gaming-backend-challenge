@@ -6,15 +6,15 @@ import { CURRENCY_PATTERN, MONEY_AMOUNT_PATTERN } from '../swagger/schemas';
 import { withDetail } from './with-detail';
 
 /**
- * Applied in this order, and class-validator runs them in the order they were applied. A custom rule needs a
- * non-empty default message: class-validator only attaches the context (the catalog entry) to a truthy one.
+ * Aplicados nessa ordem, e o class-validator roda na ordem em que foram aplicados. Regra custom precisa de mensagem
+ * default não vazia, já que o class-validator só anexa o context (a entrada do catálogo) quando ela é truthy.
  */
 const all = (...decorators: PropertyDecorator[]): PropertyDecorator => (target, key) =>
   decorators.forEach((decorator) => decorator(target, key));
 
 /**
- * The format rules are Money's own (isValidAmount / isValidCurrency), checked here field by field so a request
- * with a bad amount and a bad currency hears about both, next to every other invalid field.
+ * As regras de formato são as do próprio Money (isValidAmount / isValidCurrency), checadas aqui campo a campo para
+ * que uma request com amount e currency inválidos fique sabendo dos dois, junto com todo outro campo inválido.
  */
 export class MoneyRequestDto {
   @ApiProperty({ type: 'string', pattern: MONEY_AMOUNT_PATTERN, example: '25.00', description: 'Decimal string, never a number.' })

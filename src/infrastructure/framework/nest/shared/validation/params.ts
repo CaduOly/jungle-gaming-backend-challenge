@@ -9,7 +9,7 @@ const MAX_TEXT_LENGTH = 255;
 
 export const IDEMPOTENCY_KEY_HEADER = 'Idempotency-Key';
 
-/** A path id that must be a UUID; anything else is a 400 on that field, before any lookup. */
+/** Id no path que tem que ser UUID, qualquer outra coisa é 400 nesse campo antes de qualquer busca. */
 @Injectable()
 export class UuidParamPipe implements PipeTransform<unknown, string> {
   constructor(private readonly field: string) {}
@@ -22,7 +22,7 @@ export class UuidParamPipe implements PipeTransform<unknown, string> {
   }
 }
 
-/** A path segment that must be a non-blank string of at most 255 characters. */
+/** Segmento do path que tem que ser string não vazia com no máximo 255 caracteres. */
 @Injectable()
 export class TextParamPipe implements PipeTransform<unknown, string> {
   constructor(private readonly field: string) {}
@@ -36,7 +36,7 @@ export class TextParamPipe implements PipeTransform<unknown, string> {
   }
 }
 
-/** Optional positive integer query parameter within [1, max]. */
+/** Query parameter inteiro positivo opcional dentro de [1, max]. */
 @Injectable()
 export class LimitQueryPipe implements PipeTransform<unknown, number | undefined> {
   constructor(private readonly max: number) {}
@@ -51,7 +51,7 @@ export class LimitQueryPipe implements PipeTransform<unknown, number | undefined
   }
 }
 
-/** The Idempotency-Key header is mandatory and is the source of truth for idempotency. */
+/** O header Idempotency-Key é obrigatório e é a fonte da verdade da idempotência. */
 export const idempotencyKeyDetails = (value: string | undefined): DetailMessage[] => {
   if (value === undefined || value.trim() === '') {
     return [detail(ValidationDetailMessage.IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_HEADER)];
