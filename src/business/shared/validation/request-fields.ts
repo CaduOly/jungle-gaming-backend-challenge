@@ -6,8 +6,8 @@ export const MAX_TEXT_LENGTH = 255;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Surrounding whitespace is rejected, not trimmed: " tx-1" and "tx-1" would otherwise hash and store apart.
- * A NUL byte is rejected too: PostgreSQL text cannot hold it, so it would only fail later, at the write.
+ * Espaço nas pontas é rejeitado, não é feito trim, senão " tx-1" e "tx-1" teriam hash e registro diferentes.
+ * Byte NUL também é rejeitado, já que o text do PostgreSQL não aceita, então só ia falhar depois, na escrita.
  */
 export const requireText = (field: string, value: unknown): string => {
   if (typeof value !== 'string' || value.trim() === '' || value.length > MAX_TEXT_LENGTH) {
@@ -19,9 +19,9 @@ export const requireText = (field: string, value: unknown): string => {
 };
 
 /**
- * Wallet and player ids are uuid columns: anything else is refused here, before it reaches the schema. The result
- * is lower-cased, the form PostgreSQL returns, so the same id in another case hashes, compares and stores the same
- * whatever the channel (HTTP or SQS).
+ * Os ids de wallet e player são colunas uuid, então qualquer outra coisa é recusada aqui, antes de chegar no schema.
+ * O resultado sai em minúscula, que é como o PostgreSQL devolve, então o mesmo id em outra caixa gera o mesmo hash,
+ * compara e grava igual, seja qual for o canal (HTTP ou SQS).
  */
 export const requireUuid = (field: string, value: unknown): string => {
   if (typeof value !== 'string' || !UUID.test(value)) throw new InvalidRequestError(field, 'must be a UUID', InputRule.INVALID_UUID);

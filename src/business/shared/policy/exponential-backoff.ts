@@ -6,15 +6,15 @@ export interface ExponentialBackoffOptions {
   readonly baseMs: number;
   readonly capMs: number;
   readonly maxAttempts: number;
-  /** Uniform source in [0, 1). Injected so the jitter is deterministic under test. */
+  /** Fonte uniforme em [0, 1). É injetada para o jitter ser determinístico no teste. */
   readonly random: () => number;
 }
 
 const isPositiveInteger = (value: number): boolean => Number.isSafeInteger(value) && value > 0;
 
 /**
- * Equal jitter: the delay for attempt n is uniform in [w/2, w), where w = min(cap, base * 2^(n-1)).
- * Keeps retries spread across instances without ever collapsing to an immediate retry (minimum 1ms).
+ * Equal jitter: o delay da tentativa n é uniforme em [w/2, w), onde w = min(cap, base * 2^(n-1)).
+ * Mantém os retries espalhados entre instâncias sem nunca virar um retry imediato (mínimo de 1ms).
  */
 export class ExponentialBackoff {
   private readonly baseMs: number;

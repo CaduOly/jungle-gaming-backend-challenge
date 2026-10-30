@@ -13,7 +13,7 @@ export const FailureCode = {
   AMOUNT_MISMATCH: 'AMOUNT_MISMATCH',
   DUPLICATE_EXTERNAL_TRANSACTION: 'DUPLICATE_EXTERNAL_TRANSACTION',
   IDEMPOTENCY_CONFLICT: 'IDEMPOTENCY_CONFLICT',
-  /** A credit would take the balance past the Money maximum (999999999999999999.99). */
+  /** Um crédito levaria o saldo além do máximo de Money (999999999999999999.99). */
   BALANCE_LIMIT_EXCEEDED: 'BALANCE_LIMIT_EXCEEDED',
 } as const;
 

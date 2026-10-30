@@ -1,10 +1,10 @@
 import { DomainError } from './domain-error';
 import type { InputRule } from './input-rule';
 
-/** Malformed use case input (400): the request can only succeed if the caller changes it. */
+/** Input malformado no use case (400): a requisição só passa se quem chamou mudar ela. */
 export class InvalidRequestError extends DomainError {
   constructor(
-    /** Dotted path of the offending field, e.g. `money.amount`. */
+    /** Caminho com ponto do campo com problema, ex.: `money.amount`. */
     readonly field: string,
     readonly reason: string,
     readonly rule?: InputRule,
