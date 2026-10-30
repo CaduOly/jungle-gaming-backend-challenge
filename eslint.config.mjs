@@ -78,7 +78,7 @@ export const moneySafetyRules = {
   'no-restricted-syntax': ['error', ...moneyRestrictedSyntax],
 };
 
-/** The integer-env boundary may parse integers (parseInt / Number.parseInt) and nothing else is relaxed. */
+/** A fronteira de env inteiro pode fazer parse de inteiro (parseInt / Number.parseInt) e nada mais é relaxado. */
 export const integerEnvRules = {
   'no-restricted-globals': ['error', ...moneyRestrictedGlobals.filter((entry) => !isIntegerParsing(entry))],
   'no-restricted-properties': ['error', ...moneyRestrictedProperties.filter((entry) => !isIntegerParsing(entry))],
@@ -128,8 +128,8 @@ export const pureBusinessRules = {
 };
 
 /**
- * Production business code never negates a value: Money has no negative and counters do not need it. Specs may
- * (e.g. `-count` offsets in a test clock), so this rule is not part of the shared money rules.
+ * Código de negócio de produção nunca nega um valor: Money não tem negativo e contador não precisa. Spec pode
+ * (por exemplo offset `-count` num relógio de teste), então essa regra não entra nas regras de money compartilhadas.
  */
 const UNARY_MINUS_ON_VALUE = {
   selector: "UnaryExpression[operator='-']:not([argument.type='Literal'])",

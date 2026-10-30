@@ -13,7 +13,7 @@ const INFRA_ONLY_PACKAGES = [
   '@opentelemetry/[^/]+(/|$)',
 ].join('|');
 
-/** Top-level tests/support files that talk to the real Postgres and SQS. A new harness file must be listed here. */
+/** Arquivos de topo de tests/support que falam com o Postgres e o SQS de verdade. Um arquivo novo de harness tem de entrar aqui. */
 const INTEGRATION_HARNESS = `^tests/support/(${[
   'assert-wallet-consistency',
   'ensure-infra-up',
