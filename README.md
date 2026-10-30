@@ -171,6 +171,32 @@ curl -s $API/providers/provider-a/wagering/transactions/tx-sqs-1 -H "$AUTH"
 
 Com o `awslocal` é o mesmo comando sem o `--endpoint-url`. A consulta pelo id externo devolve a transação com `status: PROCESSED` e o saldo depois dela. HTTP e fila dividem a idempotência, então a mesma operação mandada pelos dois canais tem um efeito só.
 
+## Observabilidade
+
+**Health.** `GET /health/live` responde `200 {"status":"ok"}` enquanto o processo está de pé. `GET /health/ready` confere o PostgreSQL (`SELECT 1`) e o SQS (`GetQueueAttributes`) e volta `503` com o nome de quem caiu. Os dois são abertos e respondem sem envelope.
+
+**Logs.** JSON pelo pino, um por linha, com `correlationId`, `messageId`, `transactionId`, `walletId` e `providerId` quando existem. Payload financeiro completo e token não vão para o log. Para ver: `docker compose -f docker-compose.app.yml logs -f app`.
+
+**Métricas.** `GET /metrics` no formato Prometheus. As principais:
+
+| Métrica | O que mede |
+| --- | --- |
+| `wager_transactions_total` | transações decididas, por `status` e `kind` |
+| `idempotent_duplicates_total` | replays e duplicatas detectadas |
+| `retries_total` | retentativas (consumer, outbox, worker de pendências) |
+| `dlq_messages_total` | mensagens mandadas para a DLQ, com o motivo |
+| `lock_conflicts_total` e `lock_wait_seconds` | lock timeout, deadlock e espera pelo lock da wallet |
+| `outbox_lag_seconds` | tempo entre o commit do evento e a publicação |
+| `processing_duration_seconds` | latência de processamento |
+| `reconciliation_divergences_total` | divergências achadas na reconciliação |
+| `circuit_breaker_open` | breaker aberto por réplica |
+
+O dashboard "Jungle Wagering" do Grafana (<http://localhost:3001/d/jungle-wagering>) já vem com esses painéis.
+
+## Teste de carga
+
+`bun run test:load` sobe o k6 contra o nginx e as 3 réplicas, nos cenários distribuído, hot wallet, mix com duplicatas e caminho SQS, e reconcilia todas as wallets no fim. O relatório em [`docs/load-test.md`](docs/load-test.md) traz o ambiente, a metodologia, o throughput, p50/p95/p99, a taxa de erro, os conflitos de lock e o outbox lag. Precisa do k6 e do stack de pé.
+
 ## Rodar fora do Docker
 
 ```bash
@@ -198,6 +224,32 @@ Todas as suítes que falam com banco ou fila rodam contra o PostgreSQL e o Local
 | `bun run test:chaos` | `docker pause` no PostgreSQL com 3 réplicas rodando: 503 + `Retry-After`, `/health/ready` fora, breaker abrindo e a fila processada quando o banco volta |
 | `bun run test:load` | k6 contra nginx + 3 réplicas, nos cenários distribuído, hot wallet, mix com duplicatas e caminho SQS, com reconciliação no fim |
 | `bun run test:auth` | smoke do Keycloak: um `provider_id` por client, segredo errado recusado no IdP, token adulterado e token `dev:` em 401 |
+
+### O que cada teste obrigatório cobre
+
+| Teste do enunciado (§13) | Suíte | Arquivo |
+| --- | --- | --- |
+| `Money`: escala, arredondamento, entradas inválidas | `test` | `src/business/shared/value-object/money.spec.ts` |
+| Invariantes da `Wallet` | `test` | `src/business/wallet/entity/wallet.spec.ts` |
+| Regras de BET, WIN, LOSS, REFUND, ROLLBACK | `test` | `src/business/wagering/domain-service/wager-rules.spec.ts`, `reversal.policy.spec.ts`, `process-wager-transaction.spec.ts` |
+| Conflito de moeda | `test`, `test:integration` | `money.spec.ts`, `reference-resolver.spec.ts`, `tests/integration/wagering/real-flow.spec.ts` |
+| Idempotency key com payload divergente | `test`, `test:integration` | `src/business/wagering/domain-service/idempotency-check.spec.ts`, `real-flow.spec.ts` |
+| Migrations e constraints | `test:integration` | `tests/integration/persistence/migrations.spec.ts`, `*-schema.spec.ts` |
+| Atomicidade wallet, ledger, inbox e outbox | `test:integration` | `tests/integration/persistence/unit-of-work.spec.ts`, `tests/integration/wagering/real-flow.spec.ts` (falha injetada no ledger, na outbox e antes do commit) |
+| Inbox e redelivery | `test:integration` | `tests/integration/wagering/sqs-wagering.spec.ts`, `tests/integration/persistence/messaging-concurrency.spec.ts` |
+| Publishers concorrentes sobre a mesma outbox | `test:integration` | `tests/integration/messaging/outbox-publisher.spec.ts`, `messaging-concurrency.spec.ts` |
+| Retry e DLQ | `test:integration` | `tests/integration/messaging/sqs-consumer.spec.ts`, `tests/integration/infra/sqs-redrive.spec.ts` |
+| Recuperação após reinicialização | `test:integration`, `test:multi` | `outbox-publisher.spec.ts` (SIGKILL entre publish e mark), `tests/multi-instance/restart.spec.ts` |
+| 1. Mesma aposta 50 vezes em paralelo | `test:concurrency` | `tests/concurrency/wagering/wager-races.spec.ts` |
+| 2. Disputa de saldo na mesma wallet (2 × 80.00) | `test:concurrency` | `wager-races.spec.ts` |
+| 3. Wallets distintas em paralelo | `test:concurrency` | `wager-races.spec.ts` |
+| 4. ≥ 3 processos simultâneos | `test:multi` | `tests/multi-instance/mixed-load.spec.ts` |
+| 5. Worker morto depois do commit e antes do ack | `test:integration` | `sqs-wagering.spec.ts`, `sqs-consumer.spec.ts` (`crash_after_commit_before_ack`) |
+| 6. Dois publishers sobre a mesma outbox | `test:integration` | `outbox-publisher.spec.ts` (3 workers em pools separados) |
+| 7. ROLLBACK ou REFUND antes da referência | `test:integration`, `test:concurrency` | `real-flow.spec.ts`, `tests/concurrency/wagering/pending-worker-races.spec.ts` |
+| 8. Reinício com consistência final | `test:multi` | `restart.spec.ts` (`kill -9` em todas as réplicas e reconciliação) |
+
+A invariante `wallet.balance == saldo reconstruído pelo ledger` é conferida pela reconciliação de todas as wallets no fim do `test:multi` e do `test:load`, e pelo `tests/support/assert-wallet-consistency.ts` nos testes de repositório. Nas races do `test:concurrency` a conferência é o saldo final e a contagem de lançamentos no ledger.
 
 O `test:chaos` pausa o container do PostgreSQL que todo mundo usa, então ele **roda sozinho**, nunca junto com outra suíte nem com outra pessoa no mesmo stack. O `test:auth` precisa do Keycloak de pé (`docker compose -f docker-compose.auth.yml --profile auth up -d --wait`).
 
@@ -231,6 +283,22 @@ O `.env.example` traz todos os parâmetros com o valor padrão e um comentário 
 | Token `dev:` volta 401 | As réplicas estão com `AUTH_MODE=jwks`. Use um token do Keycloak ou suba de novo sem essa variável |
 | Mensagem da fila não aparece | Confira a `wager-transactions-dlq.fifo`: chave fora do contrato ou `kind: OPENING` vão direto para lá |
 | Sobram bancos `wagering_test_*` e filas de teste | `bun run test:sweep` |
+
+## Decisões documentadas
+
+O enunciado pede que algumas escolhas fiquem justificadas. Onde está cada uma:
+
+| Item do enunciado | Onde |
+| --- | --- |
+| §2 Auth: decisão, desenho e ponto de extensão | [`ARCHITECTURE.md` › Auth](ARCHITECTURE.md#auth) |
+| §4 ORM, mapeamento do `Money` e estratégia transacional | [`ARCHITECTURE.md` › Persistência](ARCHITECTURE.md#persistência-mikroorm-money-e-a-transação) e [Dinheiro](ARCHITECTURE.md#dinheiro-bigint-e-nada-de-arredondamento) |
+| §6 Transições válidas da `WagerTransaction` | [`ARCHITECTURE.md` › Transições e replay](ARCHITECTURE.md#wagertransaction-transições-e-replay) |
+| §7 Interpretações adicionais das regras | [`ARCHITECTURE.md` › Referências](ARCHITECTURE.md#referências-refund--rollback) e [Desvios do enunciado](ARCHITECTURE.md#desvios-do-enunciado-e-limitações-conhecidas) |
+| §7.2 Taxonomia do `failureCode` | [`ARCHITECTURE.md` › Taxonomia do `failureCode`](ARCHITECTURE.md#taxonomia-do-failurecode) |
+| §8 Estratégia de concorrência | [`ARCHITECTURE.md` › Concorrência](ARCHITECTURE.md#concorrência) |
+| §9 Algoritmo do `payloadHash` | [`ARCHITECTURE.md` › O hash](ARCHITECTURE.md#o-hash) |
+| §9 Mapeamento de status HTTP | [`docs/http-contract.md`](docs/http-contract.md#mapeamento-erro--status) |
+| §14 Teste de carga | [`docs/load-test.md`](docs/load-test.md) |
 
 ## Documentação
 

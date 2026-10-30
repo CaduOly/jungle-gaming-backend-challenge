@@ -23,6 +23,14 @@ A entrada aceita só string no formato `^(0|[1-9]\d{0,17})\.\d{2}$`, ou seja, ex
 
 O teto (`999999999999999999.99`) também vale para o resultado. Um crédito que passaria do máximo vira `REJECTED` com `BALANCE_LIMIT_EXCEEDED`, um código que não está no enunciado e que eu acrescentei para isso ser rejeição de negócio e não erro 500. A wallet calcula o saldo novo antes de mudar qualquer coisa, então ela fica exatamente como estava.
 
+## Persistência: MikroORM, `Money` e a transação
+
+Eu usei o MikroORM, a opção preferida do enunciado, mas só na parte que ele resolve bem: o `EntityManager` e o `em.fork().transactional()`, o pool, o driver PostgreSQL e o migrator (`bun run migrate`). Não existe entidade MikroORM (`entities: []` no `mikro-orm.config.ts`). As entidades de domínio ficam em `src/business` sem decorator nenhum, e os repositórios em `src/infrastructure/persistence/mikro-orm/repository` escrevem o SQL com `em.execute` e convertem linha para entidade nos mappers. O motivo é que as queries que importam são específicas: `SELECT … FOR UPDATE` na wallet, `UPDATE … WHERE version = ?`, `INSERT … ON CONFLICT DO NOTHING` no inbox e o claim da outbox com `FOR UPDATE SKIP LOCKED`. Com SQL explícito eu leio exatamente o que vai para o banco, e o domínio não depende do Identity Map nem do flush automático.
+
+`Money` -> no banco é `numeric(20,2)` com a moeda numa coluna `text` ao lado (`CHECK (currency ~ '^[A-Z]{3}$')`). O valor sai do PostgreSQL como string (o driver `pg` não converte `numeric` para `number`) e entra no `Money.from` pelo `toMoney` de `mapper/sql-values.ts`. Na escrita vai `money.amount`, que já é a string com duas casas. Em nenhum ponto o valor passa por `number`.
+
+Estratégia transacional -> o port `IUnitOfWork` tem uma implementação, `MikroOrmUnitOfWork`, que abre uma transação por `run` num fork novo do `EntityManager` e entrega a `work` os repositórios ligados a essa transação. Wallet, ledger, `wager_transactions`, inbox e outbox são gravados na mesma transação, então ou tudo commita ou nada. O modo `read-write` é READ COMMITTED com lock de linha (ver Concorrência), e o `snapshot-read` é REPEATABLE READ READ ONLY, usado pela reconciliação para ler wallet e ledger no mesmo snapshot. Erro de banco vira `TransientInfrastructureError` (lock timeout, deadlock, conexão) ou `PermanentInfrastructureError` (trigger de imutabilidade), e só o transitório é retentado.
+
 ## Concorrência
 
 ### READ COMMITTED + lock pessimista por wallet
@@ -73,6 +81,30 @@ A leitura literal do enunciado deixaria uma BET receber um REFUND e depois um RO
 O ROLLBACK de um REFUND é permitido, porque a referência é outra linha. A consequência é que a BET volta a ficar debitada e não pode ser reembolsada de novo, já que o slot de reversão dela já foi usado pelo REFUND. Eu prefiro essa consequência, que é explícita e testada, do que abrir um caminho para crédito duplo.
 
 A referência fora de ordem (o ROLLBACK chega antes da BET) vira `PENDING_REFERENCE`, e o worker tenta de novo com backoff exponencial e jitter (base 2s, teto 60s, 8 tentativas, uns 5 minutos). Esgotado, vira `REJECTED / REFERENCE_NOT_FOUND`. Se a referência existe mas está `REJECTED` ou `FAILED`, a dependente é rejeitada na hora com `REFERENCE_NOT_PROCESSED`. A referência também precisa ser do mesmo provedor, jogador, wallet, rodada e moeda, e no banco o `FOREIGN KEY (reference_transaction_id, wallet_id)` impede que um ROLLBACK da wallet B ocupe o slot de reversão de uma BET da wallet A, enquanto o trigger `wager_transactions_guard` garante que `reference_external_transaction_id` e `provider_id` batem com a linha apontada por `reference_transaction_id`, que um `REFUND` `PROCESSED` só aponta para `BET` `PROCESSED` e que um `ROLLBACK` `PROCESSED` só aponta para `BET`, `WIN` ou `REFUND` `PROCESSED`.
+
+## Taxonomia do `failureCode`
+
+O `FailureCode` (`src/business/shared/error/failure-code.ts`) é o código estável de toda recusa. O provedor decide pelo código, nunca pela mensagem:
+
+| Código | Status | Quando | O que o provedor faz |
+| --- | --- | --- | --- |
+| `INSUFFICIENT_FUNDS` | 422 | BET maior que o saldo | Desiste |
+| `REVERSAL_INSUFFICIENT_FUNDS` | 422 | ROLLBACK de WIN ou REFUND deixaria o saldo negativo. Separado do anterior porque é outra situação operacional | Desiste e investiga |
+| `CURRENCY_MISMATCH` | 422 | Moeda diferente da wallet ou da referência | Corrige o payload com outra operação |
+| `WALLET_PLAYER_MISMATCH` | 422 | A wallet é de outro jogador | Corrige o payload |
+| `REFERENCE_NOT_FOUND` | 422 | A referência não chegou dentro do backoff do worker (~5 minutos) | Desiste |
+| `REFERENCE_MISMATCH` | 422 | Referência de outro jogador, wallet, provedor, rodada ou moeda | Corrige o payload |
+| `INVALID_REFERENCE_KIND` | 422 | Tipo de referência fora da tabela de Referências | Corrige o payload |
+| `REFERENCE_NOT_PROCESSED` | 422 | A referência está `REJECTED` ou `FAILED` | Desiste |
+| `ALREADY_REVERSED` | 422 | A referência já teve um REFUND ou um ROLLBACK | Desiste |
+| `AMOUNT_MISMATCH` | 422 | Reversão com valor diferente do original | Corrige o payload |
+| `BALANCE_LIMIT_EXCEEDED` | 422 | O crédito passaria do máximo do `Money` | Desiste |
+| `WALLET_NOT_FOUND` | 404 | Wallet inexistente. Nada é gravado | Reenvia depois de criar a wallet |
+| `PROVIDER_IDENTITY_MISMATCH` | 403 | `providerId` do body ou do path diferente do autenticado. Nada é gravado | Corrige a credencial |
+| `IDEMPOTENCY_CONFLICT` | 409 | Mesma `Idempotency-Key` com outro payload | Não reenvia: outra operação pede outra key |
+| `DUPLICATE_EXTERNAL_TRANSACTION` | 409 | Mesmo `externalTransactionId` com outra key | Não reenvia |
+
+Os 422 ficam gravados e o replay devolve o mesmo código. Fora do `FailureCode` ficam a validação de entrada (400, com uma `InputRule` por campo) e a falha transitória (503 + `Retry-After`, `INFRA_UNAVAILABLE`), que é a única em que o provedor reenvia a mesma requisição. A tabela completa erro → status está em [`docs/http-contract.md`](docs/http-contract.md).
 
 ## Idempotência
 
